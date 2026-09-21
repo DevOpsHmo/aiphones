@@ -176,8 +176,8 @@ async function hydrateOrders(rows: OrderRow[]): Promise<Order[]> {
 }
 
 function formatLongDate(key: string) {
-  const [year, month, day] = key.split("-").map(Number);
-  const text = new Date(year, month - 1, day).toLocaleDateString("es-MX", {
+  const text = new Date(`${key}T12:00:00-07:00`).toLocaleDateString("es-MX", {
+    timeZone: "America/Hermosillo",
     day: "numeric",
     month: "long",
     year: "numeric"
@@ -219,8 +219,8 @@ function monthStartHermosilloIso() {
 }
 
 function formatDayHeading(key: string) {
-  const [year, month, day] = key.split("-").map(Number);
-  const text = new Date(year, month - 1, day).toLocaleDateString("es-MX", {
+  const text = new Date(`${key}T12:00:00-07:00`).toLocaleDateString("es-MX", {
+    timeZone: "America/Hermosillo",
     weekday: "long",
     day: "numeric",
     month: "long"
@@ -229,7 +229,8 @@ function formatDayHeading(key: string) {
 }
 
 function monthLabel(year: number, month: number) {
-  const text = new Date(year, month, 1).toLocaleDateString("es-MX", {
+  const text = new Date(Date.UTC(year, month, 1, 19)).toLocaleDateString("es-MX", {
+    timeZone: "America/Hermosillo",
     month: "long",
     year: "numeric"
   });
@@ -842,7 +843,7 @@ export default function DashboardPage() {
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [nowTick, setNowTick] = useState(() => Date.now());
+  const [nowTick, setNowTick] = useState(0);
   const [trashOpen, setTrashOpen] = useState(false);
   const [minutesResetLabel, setMinutesResetLabel] = useState("31 de octubre 2026");
   const [editingNumberId, setEditingNumberId] = useState<string | null>(null);
@@ -1514,6 +1515,7 @@ export default function DashboardPage() {
   }, [overlayOpen, view]);
 
   useEffect(() => {
+    setNowTick(Date.now());
     const timer = window.setInterval(() => setNowTick(Date.now()), 1000);
     const unlock = () => unlockDoorbell();
     window.addEventListener("pointerdown", unlock, { once: true });
@@ -1625,7 +1627,7 @@ export default function DashboardPage() {
 
         <div className="orders-daypicker">
           {view === "stats" ? (
-            <p className="orders-daypicker-trigger is-static">
+            <p className="orders-daypicker-trigger is-static" suppressHydrationWarning>
               {formatDayHeading(todayKey)}
             </p>
           ) : (
@@ -1633,6 +1635,7 @@ export default function DashboardPage() {
           <button
             type="button"
             className="orders-daypicker-trigger"
+            suppressHydrationWarning
             onClick={() => {
               const [year, month] = selectedDay.split("-").map(Number);
               setCalendarMonth({ year, month: month - 1 });
@@ -2044,7 +2047,7 @@ export default function DashboardPage() {
               </small>
               {!TIMER_HIDE_STATUSES.has(order.status) && (
               <p className="orders-card-elapsed">
-                {relativeTime(order.created_at, nowTick)}
+                {nowTick ? relativeTime(order.created_at, nowTick) : "\u00a0"}
               </p>
               )}
               <div className="orders-card-total">

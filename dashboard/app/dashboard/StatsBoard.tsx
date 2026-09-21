@@ -58,10 +58,14 @@ function calendarCells(year: number, month: number) {
 }
 
 function monthTitle(year: number, month: number) {
-  const text = new Date(year, month, 1).toLocaleDateString("es-MX", {
-    month: "long",
-    year: "numeric"
-  });
+  const text = new Date(Date.UTC(year, month, 1, 19)).toLocaleDateString(
+    "es-MX",
+    {
+      timeZone: "America/Hermosillo",
+      month: "long",
+      year: "numeric"
+    }
+  );
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
@@ -86,8 +90,8 @@ function inRange(key: string, start: string, end: string) {
 }
 
 function formatDayLabel(key: string) {
-  const [year, month, day] = key.split("-").map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString("es-MX", {
+  return new Date(`${key}T12:00:00-07:00`).toLocaleDateString("es-MX", {
+    timeZone: "America/Hermosillo",
     day: "numeric",
     month: "short",
     year: "numeric"

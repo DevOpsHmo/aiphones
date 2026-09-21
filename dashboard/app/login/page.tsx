@@ -76,14 +76,14 @@ export default function LoginPage() {
       });
 
       if (error) {
-        setError(error.message);
+        setError("Te equivocaste.");
         setLoading(false);
         return;
       }
 
       window.location.href = "/dashboard";
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo iniciar sesión");
+    } catch {
+      setError("Te equivocaste.");
       setLoading(false);
     }
   }
