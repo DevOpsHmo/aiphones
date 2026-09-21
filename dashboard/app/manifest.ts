@@ -7,20 +7,20 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Panel de pedidos por teléfono",
     start_url: "/",
     display: "standalone",
-    background_color: "#ffffff",
-    theme_color: "#6d28d9",
+    background_color: "#5b21b6",
+    theme_color: "#5b21b6",
     icons: [
       {
-        src: "/icon-192.png",
-        sizes: "192x192",
+        src: "/icon",
+        sizes: "512x512",
         type: "image/png",
         purpose: "any"
       },
       {
-        src: "/icon-512.png",
+        src: "/icon",
         sizes: "512x512",
         type: "image/png",
-        purpose: "any"
+        purpose: "maskable"
       }
     ]
   };

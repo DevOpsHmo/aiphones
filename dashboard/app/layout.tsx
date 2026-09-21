@@ -8,11 +8,14 @@ export const metadata = {
   appleWebApp: {
     capable: true,
     title: "AI-Phone",
-    statusBarStyle: "default" as const
+    statusBarStyle: "black-translucent" as const
   },
   icons: {
-    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
-    apple: [{ url: "/apple-icon.png", type: "image/png" }]
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon", type: "image/png" }
+    ],
+    apple: [{ url: "/apple-icon", type: "image/png" }]
   }
 };
 

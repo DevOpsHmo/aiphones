@@ -544,6 +544,13 @@ function fullDeliveryAddress(address: string) {
   return `${trimmed}, Hermosillo, Sonora, México`;
 }
 
+function orderItemsLines(order: Order) {
+  return (order.order_items || []).map(item => {
+    const note = item.notes?.trim() ? ` (${item.notes.trim()})` : "";
+    return `• ${item.quantity} × ${item.name} ($${Number(item.subtotal).toFixed(2)})${note}`;
+  });
+}
+
 function mapsPinUrl(order: Order) {
   if (order.address?.trim()) {
     return `https://www.google.com/maps/place/${encodeURIComponent(
@@ -566,9 +573,19 @@ function whatsappShareUrl(order: Order) {
     order.lat != null && order.lng != null
       ? `${order.lat.toFixed(6)}, ${order.lng.toFixed(6)}`
       : "";
+  const items = orderItemsLines(order);
   const text = [
-    `Pedido para ${name}`,
-    address ? `Dirección: ${address}` : "",
+    `Pedido #${order.order_number} para ${name}`,
+    order.order_type === "pickup" ? "Recoger en sucursal" : "Entrega a domicilio",
+    address
+      ? order.order_type === "pickup"
+        ? `Sucursal: ${address}`
+        : `Dirección: ${address}`
+      : "",
+    items.length ? "Orden:" : "",
+    ...items,
+    order.notes?.trim() ? `Notas: ${order.notes.trim()}` : "",
+    `Total: $${Number(order.total).toFixed(2)} · ${paymentLabel(order.payment_method)}`,
     coords ? `Coordenadas GPS: ${coords}` : "",
     maps ? `Pin exacto: ${maps}` : ""
   ]
@@ -637,6 +654,7 @@ function playDoorbell() {
 function formatOrderStamp(iso: string) {
   return new Date(iso)
     .toLocaleString("es-MX", {
+      timeZone: "America/Hermosillo",
       day: "numeric",
       month: "numeric",
       year: "numeric",
@@ -805,30 +823,43 @@ export default function DashboardPage() {
 
   const visibleOrders = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    return orders.filter(order => {
-      if (order.deleted_at) {
-        return false;
-      }
-      if (hermosilloDateKey(new Date(order.created_at)) !== selectedDay) {
-        return false;
-      }
-      if (statusFilter !== "all" && order.status !== statusFilter) {
-        return false;
-      }
-      if (!query) {
-        return true;
-      }
-      const haystack = [
-        order.customers?.name,
-        order.order_number,
-        order.address,
-        ...(order.order_items || []).map(item => item.name)
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(query);
-    });
+    return orders
+      .filter(order => {
+        if (order.deleted_at) {
+          return false;
+        }
+        if (hermosilloDateKey(new Date(order.created_at)) !== selectedDay) {
+          return false;
+        }
+        if (statusFilter !== "all" && order.status !== statusFilter) {
+          return false;
+        }
+        if (!query) {
+          return true;
+        }
+        const haystack = [
+          order.customers?.name,
+          order.order_number,
+          order.address,
+          ...(order.order_items || []).map(item => item.name)
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(query);
+      })
+      .sort((a, b) => {
+        const na = Number.parseInt(a.order_number, 10);
+        const nb = Number.parseInt(b.order_number, 10);
+        const aNum = Number.isFinite(na) ? na : Number.MAX_SAFE_INTEGER;
+        const bNum = Number.isFinite(nb) ? nb : Number.MAX_SAFE_INTEGER;
+        if (aNum !== bNum) {
+          return aNum - bNum;
+        }
+        return (
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+      });
   }, [orders, selectedDay, statusFilter, searchQuery]);
 
   const trashedToday = useMemo(
@@ -1971,12 +2002,7 @@ export default function DashboardPage() {
               </small>
               {!TIMER_HIDE_STATUSES.has(order.status) && (
               <p className="orders-card-elapsed">
-                {relativeTime(
-                  order.created_at,
-                  TIMER_PAUSE_STATUSES.has(order.status)
-                    ? order.stoppedAt ?? nowTick
-                    : nowTick
-                )}
+                {relativeTime(order.created_at, nowTick)}
               </p>
               )}
               <div className="orders-card-total">
