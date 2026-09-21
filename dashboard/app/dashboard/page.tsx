@@ -1812,6 +1812,7 @@ export default function DashboardPage() {
         </div>
       </header>
 
+      <div className={`orders-body${view === "stats" ? " is-stats" : ""}`}>
       {loadError && (
         <div
           style={{
@@ -2080,6 +2081,7 @@ export default function DashboardPage() {
       </div>
         </>
       )}
+      </div>
 
       {chatOrder && (
         <div
