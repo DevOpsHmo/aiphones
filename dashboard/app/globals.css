@@ -130,16 +130,13 @@ body.login-lock {
   overflow: hidden;
   display: grid;
   place-items: center;
-  padding: 10vh 20px 22vh;
-  padding-bottom: max(22vh, env(safe-area-inset-bottom));
+  padding-top: env(safe-area-inset-top);
+  padding-right: 20px;
+  padding-bottom: max(env(safe-area-inset-bottom), var(--login-kb, 0px));
+  padding-left: 20px;
   touch-action: none;
   background: #ffffff;
-}
-
-.login-screen--keyboard {
-  place-items: start center;
-  padding-top: 12px;
-  padding-bottom: 12px;
+  transition: padding-bottom 0.2s ease;
 }
 
 .login-blobs {
@@ -212,7 +209,7 @@ body.login-lock {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
   text-align: center;
   touch-action: manipulation;
-  transition: transform 0.2s ease;
+}
 }
 
 .login-card h1 {
@@ -1821,7 +1818,10 @@ body.login-lock {
 
 @media (max-width: 700px) {
   .orders-page {
-    padding: 16px 14px 28px;
+    padding-top: max(16px, env(safe-area-inset-top));
+    padding-right: max(14px, env(safe-area-inset-right));
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    padding-left: max(14px, env(safe-area-inset-left));
   }
 
   .orders-header {
@@ -2044,7 +2044,10 @@ body.login-lock {
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    padding-bottom: 12px;
+    padding-top: env(safe-area-inset-top);
+    padding-right: max(14px, env(safe-area-inset-right));
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    padding-left: max(14px, env(safe-area-inset-left));
   }
 
   .orders-chrome {
@@ -2088,5 +2091,19 @@ body.login-lock {
   .orders-body.is-stats .stats-calls {
     overflow: visible;
     max-height: none;
+  }
+}
+
+@media (display-mode: standalone) {
+  .orders-page,
+  .orders-page.is-stats {
+    padding-top: env(safe-area-inset-top);
+    padding-right: max(14px, env(safe-area-inset-right));
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    padding-left: max(14px, env(safe-area-inset-left));
+  }
+
+  .login-screen {
+    padding-top: env(safe-area-inset-top);
   }
 }

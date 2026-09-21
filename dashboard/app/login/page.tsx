@@ -17,8 +17,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [shift, setShift] = useState(0);
-  const cardRef = useRef<HTMLFormElement>(null);
+  const screenRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     document.documentElement.classList.add("login-lock");
@@ -31,46 +30,36 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
-    function updateShift() {
+    function updateKeyboardInset() {
       const vv = window.visualViewport;
-      const active = document.activeElement;
-      const card = cardRef.current;
-
-      if (
-        !vv ||
-        !card ||
-        !(active instanceof HTMLElement) ||
-        !card.contains(active)
-      ) {
-        setShift(0);
+      const node = screenRef.current;
+      if (!vv || !node) {
         return;
       }
 
-      const cardRect = card.getBoundingClientRect();
-      const visibleBottom = vv.offsetTop + vv.height;
-      const extra = cardRect.bottom - visibleBottom + 72;
-      setShift(extra > 0 ? extra : 0);
+      const keyboard = Math.max(
+        0,
+        window.innerHeight - vv.height - vv.offsetTop
+      );
+      node.style.setProperty("--login-kb", `${keyboard}px`);
     }
 
-    function scheduleShift() {
-      window.requestAnimationFrame(() => {
-        updateShift();
-        window.setTimeout(updateShift, 80);
-        window.setTimeout(updateShift, 280);
-      });
+    function schedule() {
+      window.requestAnimationFrame(updateKeyboardInset);
     }
 
     const vv = window.visualViewport;
-    vv?.addEventListener("resize", scheduleShift);
-    vv?.addEventListener("scroll", scheduleShift);
-    window.addEventListener("focusin", scheduleShift);
-    window.addEventListener("focusout", scheduleShift);
+    vv?.addEventListener("resize", schedule);
+    vv?.addEventListener("scroll", schedule);
+    window.addEventListener("focusin", schedule);
+    window.addEventListener("focusout", schedule);
+    schedule();
 
     return () => {
-      vv?.removeEventListener("resize", scheduleShift);
-      vv?.removeEventListener("scroll", scheduleShift);
-      window.removeEventListener("focusin", scheduleShift);
-      window.removeEventListener("focusout", scheduleShift);
+      vv?.removeEventListener("resize", schedule);
+      vv?.removeEventListener("scroll", schedule);
+      window.removeEventListener("focusin", schedule);
+      window.removeEventListener("focusout", schedule);
     };
   }, []);
 
@@ -101,9 +90,8 @@ export default function LoginPage() {
 
   return (
     <main
-      className={
-        shift ? "login-screen login-screen--keyboard" : "login-screen"
-      }
+      ref={screenRef}
+      className="login-screen"
       onTouchMove={event => event.preventDefault()}
     >
       <div className="login-blobs" aria-hidden="true">
@@ -111,13 +99,9 @@ export default function LoginPage() {
       </div>
 
       <form
-        ref={cardRef}
         className="login-card"
         onSubmit={login}
         onTouchMove={event => event.stopPropagation()}
-        style={{
-          transform: shift ? `translateY(-${shift}px)` : undefined
-        }}
       >
         <h1>AI-Phone</h1>
         <p>Iniciar sesión</p>

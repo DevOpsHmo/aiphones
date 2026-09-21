@@ -8,7 +8,7 @@ export const metadata = {
   appleWebApp: {
     capable: true,
     title: "AI-Phone",
-    statusBarStyle: "black-translucent" as const
+    statusBarStyle: "default" as const
   },
   icons: {
     icon: [
