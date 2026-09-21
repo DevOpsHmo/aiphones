@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "npm run dev --prefix dashboard",
     "build": "npm run build --prefix dashboard",
-    "start": "npm run start --prefix dashboard",
+    "start": "npm run start --prefix dashboard"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
