@@ -1,4 +1,4 @@
-FROM node:20-alpine
+FROM node:22-alpine
 WORKDIR /app
 COPY voice-server/package.json voice-server/package-lock.json ./
 RUN npm ci --omit=dev
