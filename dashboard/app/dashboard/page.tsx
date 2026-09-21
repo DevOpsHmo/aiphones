@@ -454,44 +454,74 @@ const DEMO_ORDERS: Order[] = [
 ];
 
 const DEMO_TRANSCRIPTS: Record<string, string> = {
-  "demo-call-new": `IA: ¡Hola, gracias por llamar a Pizza Demo! ¿En qué te puedo ayudar?
-Cliente: Quiero una pepperoni grande y una coca.
-IA: Perfecto, una Pizza Pepperoni Grande y una Coca-Cola de 600 ml. ¿Algo más?
-Cliente: No, eso es todo. Soy Diana López, para domicilio.
-IA: ¿Me das la dirección?
-Cliente: Boulevard Kino 312, colonia Pitic.
-IA: Entonces sería una pepperoni grande y una coca, total 219 pesos, a Blvd. Kino 312, pago en efectivo. ¿Confirmas tu pedido?
+  "demo-call-new": `IA: Buenas tardes, Pizzería Hermosillo, ¿en qué le ayudo?
+Cliente: Eh… buenas, ¿sí me oyen?
+IA: Sí, sí le escucho. Dime.
+Cliente: Quiero una pepperoni grande… y una coca.
+IA: Una Pizza Pepperoni Grande y una Coca-Cola de seiscientos. ¿Algo más?
+Cliente: No, eso es todo.
+IA: ¿A nombre de quién va el pedido?
+Cliente: Diana López.
+IA: Gracias, Diana. ¿Es para recoger o a domicilio?
+Cliente: A domicilio.
+IA: ¿Me da la dirección completa?
+Cliente: Está en el Kino… bueno, Blvd. Luis Encinas Johnson 312, colonia Pitic.
+IA: Luis Encinas 312, Pitic. ¿Paga en efectivo, transferencia o tarjeta?
+Cliente: Efectivo.
+IA: Perfecto. Entonces: una pepperoni grande, una coca, 219 pesos, a Encinas 312, Pitic, en efectivo. ¿Confirmas tu pedido?
+Cliente: Sí, así está bien.
+IA: Listo, ya quedó. Gracias por llamar a Pizzería Hermosillo.`,
+  "demo-call-preparing": `IA: Pizzería Hermosillo, buenas tardes.
+Cliente: Qué tal, quiero dos hawaianas grandes para recoger.
+IA: Dos Pizza Hawaiana Grande para recoger. ¿Con todo?
+Cliente: Sin jamón, por favor.
+IA: Ok, las dos sin jamón. ¿Llevan bebida?
+Cliente: Un agua.
+IA: Un Agua de seiscientos. ¿A nombre de quién?
+Cliente: Alfonso Ruiz.
+IA: Alfonso. ¿Cómo va a pagar?
+Cliente: Transferencia.
+IA: Dos hawaianas grandes sin jamón y un agua, 418 pesos, para recoger, transferencia. ¿Lo confirmas?
+Cliente: Sí, correcto.
+IA: Quedó registrado. Te esperamos aquí en sucursal.`,
+  "demo-call-ready": `IA: Pizzería Hermosillo, ¿qué se le ofrece?
+Cliente: Hola, una pepperoni, un agua y una coca, para recoger.
+IA: Pepperoni grande, agua y coca. ¿Nombre?
+Cliente: Sofía Navarro.
+IA: Sofía, ¿efectivo, transferencia o tarjeta?
+Cliente: Efectivo.
+IA: Son 239 pesos, para recoger, en efectivo. ¿Confirmas?
+Cliente: Sí.
+IA: Listo, Sofía. En unos minutos te avisamos.`,
+  "demo-call-delivering": `IA: Buenas, Pizzería Hermosillo.
+Cliente: Quiero una hawaiana y una pepperoni… y una coca, a domicilio.
+IA: Las dos grandes, ¿verdad?
+Cliente: Sí, las grandes.
+IA: ¿A nombre de quién y a qué dirección?
+Cliente: Carlos Méndez. Calle Reforma 88, colonia Centro.
+IA: Reforma 88, Centro. ¿Cómo paga?
+Cliente: Transferencia.
+IA: Una hawaiana, una pepperoni y una coca, 418 pesos a Reforma 88. ¿Confirmas el pedido?
+Cliente: Sí, mande.
+IA: Ya quedó. Gracias, Carlos.`,
+  "demo-call-completed": `IA: Pizzería Hermosillo, buenas tardes.
+Cliente: Una hawaiana, una coca y un agua, porfa.
+IA: ¿Para recoger o se la llevamos?
+Cliente: A domicilio. Ana Gutiérrez.
+IA: ¿La dirección, Ana?
+Cliente: Avenida Universidad 1500, colonia Sahuaro.
+IA: Universidad 1500, Sahuaro. ¿Pago?
+Cliente: Efectivo.
+IA: 249 pesos a domicilio, efectivo. ¿Lo confirmas?
 Cliente: Sí, confirmo.
-IA: Listo, tu pedido ya quedó registrado. Gracias por tu llamada.`,
-  "demo-call-preparing": `IA: Pizza Demo, buenas tardes. ¿Qué se te antoja?
-Cliente: Dos hawaianas grandes para recoger, sin jamón.
-IA: Dos Pizza Hawaiana Grande sin jamón para recoger. ¿Bebida?
-Cliente: Un agua. Alfonso Ruiz. Pago por transferencia.
-IA: Dos hawaianas grandes y un agua, 418 pesos, para recoger. ¿Confirmas?
-Cliente: Sí.
-IA: Pedido confirmado. Te esperamos.`,
-  "demo-call-ready": `IA: Pizza Demo, ¿en qué te ayudo?
-Cliente: Una pepperoni, un agua y una coca, para recoger. Sofía Navarro.
-IA: Total 239 pesos, para recoger, en efectivo. ¿Confirmas?
-Cliente: Sí.
-IA: Quedó listo el pedido. En unos minutos te avisamos.`,
-  "demo-call-delivering": `IA: ¡Hola! Pizza Demo.
-Cliente: Una hawaiana, una pepperoni y una coca a domicilio. Carlos Méndez.
-IA: ¿La dirección?
-Cliente: Calle Reforma 88, colonia Centro. Transferencia.
-IA: 418 pesos a Reforma 88. ¿Confirmas?
-Cliente: Sí.
-IA: Pedido registrado. Va en camino.`,
-  "demo-call-completed": `IA: Pizza Demo, buenas.
-Cliente: Una hawaiana, una coca y un agua. Ana Gutiérrez. Universidad 1500, Sahuaro.
-IA: 249 pesos a domicilio, efectivo. ¿Confirmas?
-Cliente: Sí, confirmo.
-IA: Gracias, pedido entregado en sistema.`,
-  "demo-call-cancelled": `IA: Pizza Demo, ¿qué se te antoja?
+IA: Perfecto, ya está en sistema. Gracias por llamar.`,
+  "demo-call-cancelled": `IA: Pizzería Hermosillo, ¿en qué le ayudo?
 Cliente: Una pepperoni para recoger. Luis Juarez.
-IA: 189 pesos, efectivo. ¿Confirmas?
-Cliente: Sí... espera, mejor cancélalo.
-IA: Listo, el pedido quedó cancelado.`
+IA: Una Pizza Pepperoni Grande, 189 pesos, para recoger. ¿Efectivo?
+Cliente: Sí… ay, espérame.
+IA: Claro.
+Cliente: Mejor cancélalo, al rato marco.
+IA: No hay problema, Luis. Pedido cancelado. Cuando guste volvemos a tomarlo.`
 };
 
 function isDemoOrder(id: string) {
@@ -702,7 +732,7 @@ function whatsappMessageUrl(phone?: string | null, name?: string | null) {
   if (!digits) {
     return "";
   }
-  const text = `Hola${name ? ` ${name}` : ""}, te escribimos de Pizza Demo por tu pedido.`;
+  const text = `Hola${name ? ` ${name}` : ""}, te escribimos de Pizzería Hermosillo por tu pedido.`;
   return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
 }
 
@@ -745,27 +775,35 @@ const DEMO_CALLS: CallRow[] = [
   }
 ];
 
+function formatCallClock(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
 function parseTranscript(text: string) {
+  let elapsed = 2;
   return text
-    .split("\n")
+    .replace(/Pizza Demo/gi, "Pizzería Hermosillo")
+    .split(/\n+/)
     .map(line => line.trim())
     .filter(Boolean)
     .map(line => {
-      if (line.startsWith("Cliente:")) {
-        return {
-          who: "Cliente",
-          text: line.replace(/^Cliente:\s*/, "")
-        };
+      let who = "";
+      let body = line;
+      if (/^Cliente:/i.test(line)) {
+        who = "Cliente";
+        body = line.replace(/^Cliente:\s*/i, "");
+      } else if (/^(IA|Asistente):/i.test(line)) {
+        who = "IA";
+        body = line.replace(/^(IA|Asistente):\s*/i, "");
       }
-
-      if (line.startsWith("IA:")) {
-        return {
-          who: "IA",
-          text: line.replace(/^IA:\s*/, "")
-        };
-      }
-
-      return { who: "", text: line };
+      elapsed += 2 + Math.min(11, Math.ceil(body.length / 22));
+      return {
+        who,
+        text: body,
+        at: formatCallClock(elapsed)
+      };
     });
 }
 
@@ -778,7 +816,7 @@ export default function DashboardPage() {
   const [minuteWarning, setMinuteWarning] = useState(800);
   const [chatOrder, setChatOrder] = useState<Order | null>(null);
   const [chatLines, setChatLines] = useState<
-    { who: string; text: string }[]
+    { who: string; text: string; at?: string }[]
   >([]);
   const [chatLoading, setChatLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -2053,7 +2091,23 @@ export default function DashboardPage() {
             onClick={e => e.stopPropagation()}
           >
             <div className="chat-modal-header">
-              <h2>Conversación</h2>
+              <div className="chat-header-person">
+                <span className="chat-avatar" aria-hidden="true">
+                  {(chatOrder.customers?.name || "C").slice(0, 1).toUpperCase()}
+                </span>
+                <div className="chat-header-copy">
+                  <h2>
+                    {chatOrder.customers?.name || "Cliente"}
+                    {chatOrder.order_number
+                      ? ` · #${chatOrder.order_number}`
+                      : ""}
+                  </h2>
+                  <p>
+                    Llamada con Pizzería Hermosillo
+                    {chatLines.at(-1)?.at ? ` · ${chatLines.at(-1)?.at}` : ""}
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
                 className="chat-contact-btn"
@@ -2072,30 +2126,55 @@ export default function DashboardPage() {
             <div className="chat-modal-body">
               {chatLoading && <p>Cargando...</p>}
 
+              {!chatLoading && (
+                <div className="chat-day-chip">Transcripción de la llamada</div>
+              )}
+
               {!chatLoading &&
-                chatLines.map((line, index) => (
-                  <div
-                    key={index}
-                    className={
-                      line.who === "IA"
-                        ? "chat-bubble-row chat-bubble-row--ia"
-                        : "chat-bubble-row chat-bubble-row--client"
-                    }
-                  >
+                chatLines.map((line, index) => {
+                  const isIa = line.who === "IA";
+                  const isClient = line.who === "Cliente";
+                  const speaker = isIa
+                    ? "Pizzería"
+                    : isClient
+                      ? (chatOrder.customers?.name || "Cliente").split(" ")[0]
+                      : "";
+                  return (
                     <div
+                      key={index}
                       className={
-                        line.who === "IA"
-                          ? "chat-bubble chat-bubble--ia"
-                          : "chat-bubble chat-bubble--client"
+                        isIa
+                          ? "chat-bubble-row chat-bubble-row--ia"
+                          : isClient
+                            ? "chat-bubble-row chat-bubble-row--client"
+                            : "chat-bubble-row chat-bubble-row--note"
                       }
                     >
-                      {line.who && (
-                        <div className="chat-bubble-who">{line.who}</div>
+                      {isIa && (
+                        <span className="chat-mini-avatar chat-mini-avatar--ia">
+                          PH
+                        </span>
                       )}
-                      {line.text}
+                      <div
+                        className={
+                          isIa
+                            ? "chat-bubble chat-bubble--ia"
+                            : isClient
+                              ? "chat-bubble chat-bubble--client"
+                              : "chat-bubble chat-bubble--note"
+                        }
+                      >
+                        {speaker && (
+                          <div className="chat-bubble-who">{speaker}</div>
+                        )}
+                        <p className="chat-bubble-text">{line.text}</p>
+                        {line.at && (
+                          <time className="chat-bubble-time">{line.at}</time>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
             </div>
           </div>
         </div>

@@ -256,7 +256,7 @@ insert into public.businesses (
   phone
 )
 values (
-  'Pizza Demo',
+  'Pizzería Hermosillo',
   '6620000000'
 )
 returning id;

@@ -40,8 +40,12 @@ using (
   )
 );
 
--- Pizza Demo: número Twilio de prueba que ya tienes.
+-- Pizzería Hermosillo: número Twilio de prueba que ya tienes.
 update public.businesses
 set twilio_phone = '+14632620761'
-where name = 'Pizza Demo'
+where name in ('Pizzería Hermosillo', 'Pizza Demo')
   and twilio_phone is null;
+
+update public.businesses
+set name = 'Pizzería Hermosillo'
+where name = 'Pizza Demo';

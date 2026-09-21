@@ -17,18 +17,19 @@ do $$
 declare
   bid uuid;
 begin
-  select id into bid from public.businesses where name = 'Pizza Demo' limit 1;
+  select id into bid from public.businesses where name in ('Pizzería Hermosillo', 'Pizza Demo') limit 1;
   if bid is null then
     select id into bid from public.businesses order by created_at limit 1;
   end if;
   if bid is null then
     insert into public.businesses (name, phone)
-    values ('Pizza Demo', '6620000000')
+    values ('Pizzería Hermosillo', '6620000000')
     returning id into bid;
   end if;
 
   update public.businesses
   set
+    name = 'Pizzería Hermosillo',
     monthly_minute_limit = coalesce(monthly_minute_limit, 900),
     minute_warning = coalesce(minute_warning, 800),
     minutes_reset_at = coalesce(minutes_reset_at, '2026-10-31')
@@ -64,64 +65,94 @@ begin
   values
     (
       '33333333-3333-4333-8333-333333333301', bid, 'demo-sid-new', '6621112233', 'completed',
-      $t$IA: ¡Hola, gracias por llamar a Pizza Demo! ¿En qué te puedo ayudar?
-Cliente: Quiero una pepperoni grande y una coca.
-IA: Perfecto, una Pizza Pepperoni Grande y una Coca-Cola de 600 ml. ¿Algo más?
-Cliente: No, eso es todo. Soy Diana López, para domicilio.
-IA: ¿Me das la dirección?
-Cliente: Boulevard Kino 312, colonia Pitic.
-IA: Entonces sería una pepperoni grande y una coca, total 219 pesos, a Blvd. Kino 312, pago en efectivo. ¿Confirmas tu pedido?
-Cliente: Sí, confirmo.
-IA: Listo, tu pedido ya quedó registrado. Gracias por tu llamada.$t$,
+      $t$IA: Buenas tardes, Pizzería Hermosillo, ¿en qué le ayudo?
+Cliente: Eh… buenas, ¿sí me oyen?
+IA: Sí, sí le escucho. Dime.
+Cliente: Quiero una pepperoni grande… y una coca.
+IA: Una Pizza Pepperoni Grande y una Coca-Cola de seiscientos. ¿Algo más?
+Cliente: No, eso es todo.
+IA: ¿A nombre de quién va el pedido?
+Cliente: Diana López.
+IA: Gracias, Diana. ¿Es para recoger o a domicilio?
+Cliente: A domicilio.
+IA: ¿Me da la dirección completa?
+Cliente: Está en el Kino… bueno, Blvd. Luis Encinas Johnson 312, colonia Pitic.
+IA: Luis Encinas 312, Pitic. ¿Paga en efectivo, transferencia o tarjeta?
+Cliente: Efectivo.
+IA: Perfecto. Entonces: una pepperoni grande, una coca, 219 pesos, a Encinas 312, Pitic, en efectivo. ¿Confirmas tu pedido?
+Cliente: Sí, así está bien.
+IA: Listo, ya quedó. Gracias por llamar a Pizzería Hermosillo.$t$,
       190, now() - interval '8 minutes', now() - interval '5 minutes'
     ),
     (
       '33333333-3333-4333-8333-333333333302', bid, 'demo-sid-preparing', '6622223344', 'completed',
-      $t$IA: Pizza Demo, buenas tardes. ¿Qué se te antoja?
-Cliente: Dos hawaianas grandes para recoger, sin jamón.
-IA: Dos Pizza Hawaiana Grande sin jamón para recoger. ¿Bebida?
-Cliente: Un agua. Alfonso Ruiz. Pago por transferencia.
-IA: Dos hawaianas grandes y un agua, 418 pesos, para recoger. ¿Confirmas?
-Cliente: Sí.
-IA: Pedido confirmado. Te esperamos.$t$,
+      $t$IA: Pizzería Hermosillo, buenas tardes.
+Cliente: Qué tal, quiero dos hawaianas grandes para recoger.
+IA: Dos Pizza Hawaiana Grande para recoger. ¿Con todo?
+Cliente: Sin jamón, por favor.
+IA: Ok, las dos sin jamón. ¿Llevan bebida?
+Cliente: Un agua.
+IA: Un Agua de seiscientos. ¿A nombre de quién?
+Cliente: Alfonso Ruiz.
+IA: Alfonso. ¿Cómo va a pagar?
+Cliente: Transferencia.
+IA: Dos hawaianas grandes sin jamón y un agua, 418 pesos, para recoger, transferencia. ¿Lo confirmas?
+Cliente: Sí, correcto.
+IA: Quedó registrado. Te esperamos aquí en sucursal.$t$,
       220, now() - interval '18 minutes', now() - interval '14 minutes'
     ),
     (
       '33333333-3333-4333-8333-333333333303', bid, 'demo-sid-ready', '6623334455', 'completed',
-      $t$IA: Pizza Demo, ¿en qué te ayudo?
-Cliente: Una pepperoni, un agua y una coca, para recoger. Sofía Navarro.
-IA: Total 239 pesos, para recoger, en efectivo. ¿Confirmas?
+      $t$IA: Pizzería Hermosillo, ¿qué se le ofrece?
+Cliente: Hola, una pepperoni, un agua y una coca, para recoger.
+IA: Pepperoni grande, agua y coca. ¿Nombre?
+Cliente: Sofía Navarro.
+IA: Sofía, ¿efectivo, transferencia o tarjeta?
+Cliente: Efectivo.
+IA: Son 239 pesos, para recoger, en efectivo. ¿Confirmas?
 Cliente: Sí.
-IA: Quedó listo el pedido. En unos minutos te avisamos.$t$,
+IA: Listo, Sofía. En unos minutos te avisamos.$t$,
       160, now() - interval '34 minutes', now() - interval '31 minutes'
     ),
     (
       '33333333-3333-4333-8333-333333333304', bid, 'demo-sid-delivering', '6624445566', 'completed',
-      $t$IA: ¡Hola! Pizza Demo.
-Cliente: Una hawaiana, una pepperoni y una coca a domicilio. Carlos Méndez.
-IA: ¿La dirección?
-Cliente: Calle Reforma 88, colonia Centro. Transferencia.
-IA: 418 pesos a Reforma 88. ¿Confirmas?
-Cliente: Sí.
-IA: Pedido registrado. Va en camino.$t$,
+      $t$IA: Buenas, Pizzería Hermosillo.
+Cliente: Quiero una hawaiana y una pepperoni… y una coca, a domicilio.
+IA: Las dos grandes, ¿verdad?
+Cliente: Sí, las grandes.
+IA: ¿A nombre de quién y a qué dirección?
+Cliente: Carlos Méndez. Calle Reforma 88, colonia Centro.
+IA: Reforma 88, Centro. ¿Cómo paga?
+Cliente: Transferencia.
+IA: Una hawaiana, una pepperoni y una coca, 418 pesos a Reforma 88. ¿Confirmas el pedido?
+Cliente: Sí, mande.
+IA: Ya quedó. Gracias, Carlos.$t$,
       240, now() - interval '52 minutes', now() - interval '48 minutes'
     ),
     (
       '33333333-3333-4333-8333-333333333305', bid, 'demo-sid-completed', '6625556677', 'completed',
-      $t$IA: Pizza Demo, buenas.
-Cliente: Una hawaiana, una coca y un agua. Ana Gutiérrez. Universidad 1500, Sahuaro.
-IA: 249 pesos a domicilio, efectivo. ¿Confirmas?
+      $t$IA: Pizzería Hermosillo, buenas tardes.
+Cliente: Una hawaiana, una coca y un agua, porfa.
+IA: ¿Para recoger o se la llevamos?
+Cliente: A domicilio. Ana Gutiérrez.
+IA: ¿La dirección, Ana?
+Cliente: Avenida Universidad 1500, colonia Sahuaro.
+IA: Universidad 1500, Sahuaro. ¿Pago?
+Cliente: Efectivo.
+IA: 249 pesos a domicilio, efectivo. ¿Lo confirmas?
 Cliente: Sí, confirmo.
-IA: Gracias, pedido entregado en sistema.$t$,
+IA: Perfecto, ya está en sistema. Gracias por llamar.$t$,
       180, now() - interval '132 minutes', now() - interval '129 minutes'
     ),
     (
       '33333333-3333-4333-8333-333333333306', bid, 'demo-sid-cancelled', '6626667788', 'completed',
-      $t$IA: Pizza Demo, ¿qué se te antoja?
+      $t$IA: Pizzería Hermosillo, ¿en qué le ayudo?
 Cliente: Una pepperoni para recoger. Luis Juarez.
-IA: 189 pesos, efectivo. ¿Confirmas?
-Cliente: Sí... espera, mejor cancélalo.
-IA: Listo, el pedido quedó cancelado.$t$,
+IA: Una Pizza Pepperoni Grande, 189 pesos, para recoger. ¿Efectivo?
+Cliente: Sí… ay, espérame.
+IA: Claro.
+Cliente: Mejor cancélalo, al rato marco.
+IA: No hay problema, Luis. Pedido cancelado. Cuando guste volvemos a tomarlo.$t$,
       90, now() - interval '192 minutes', now() - interval '190 minutes'
     )
   on conflict (id) do update
@@ -237,5 +268,5 @@ end $$;
 -- insert into public.profiles (id, business_id, full_name)
 -- select 'PEGA_AQUI_EL_UUID_DE_AUTH_USERS', id, 'Admin'
 -- from public.businesses
--- where name = 'Pizza Demo'
+-- where name = 'Pizzería Hermosillo'
 -- on conflict (id) do update set business_id = excluded.business_id;

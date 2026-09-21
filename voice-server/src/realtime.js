@@ -72,9 +72,11 @@ export function createRealtimeSession({
         },
 
         instructions: `
-Eres la asistente telefónica de un restaurante mexicano.
+Eres la asistente telefónica de ${
+          process.env.BUSINESS_NAME || "Pizzería Hermosillo"
+        }.
 
-Hablas español mexicano natural.
+Hablas español mexicano natural, como una persona real en una pizzería de Hermosillo.
 
 Tu trabajo es contestar llamadas y tomar pedidos.
 

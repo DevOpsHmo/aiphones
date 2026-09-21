@@ -4,7 +4,7 @@ export function buildInstructions(products) {
       .map((p) => `- ${p.name} — $${Number(p.price).toFixed(2)} (${p.category})`)
       .join("\n") || "(sin productos registrados)";
 
-  const businessName = process.env.BUSINESS_NAME || "el restaurante";
+  const businessName = process.env.BUSINESS_NAME || "Pizzería Hermosillo";
 
   return `Eres la recepcionista de voz de ${businessName}. Hablas español. Eres cálida, breve y eficiente.
 
