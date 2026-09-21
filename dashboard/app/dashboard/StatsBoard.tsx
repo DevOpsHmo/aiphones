@@ -343,7 +343,9 @@ export default function StatsBoard({
     <div className="stats-board">
       {chromeNode ? createPortal(periodBar, chromeNode) : periodBar}
 
-      {picker && (
+      {picker &&
+        chromeNode &&
+        createPortal(
         <div
           className="stats-picker-overlay"
           onClick={() => setPicker(null)}
@@ -354,6 +356,7 @@ export default function StatsBoard({
             role="dialog"
             aria-label="Seleccionar periodo"
           >
+            <div className="stats-picker-handle" aria-hidden="true" />
             {picker !== "month" ? (
               <>
                 <div className="orders-calendar-nav">
@@ -486,9 +489,17 @@ export default function StatsBoard({
                 </div>
               </>
             )}
+            <button
+              type="button"
+              className="stats-picker-done"
+              onClick={() => setPicker(null)}
+            >
+              Cancelar
+            </button>
           </div>
-        </div>
-      )}
+        </div>,
+        document.body
+        )}
 
       <div className="stats-scroll">
       <div className="stats-grid">
