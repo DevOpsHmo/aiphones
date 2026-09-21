@@ -1466,6 +1466,7 @@ body.login-lock {
   }
 }
 
+.orders-page.is-stats .orders-chrome,
 .orders-page.is-stats .orders-header {
   flex-shrink: 0;
 }
@@ -1774,42 +1775,6 @@ body.login-lock {
 }
 
 @media (min-width: 701px) and (max-width: 1199px) {
-  html:has(body.stats-locked:not(.overlay-open)),
-  body.stats-locked:not(.overlay-open) {
-    overflow: auto;
-    height: auto;
-  }
-
-  .orders-page.is-stats {
-    height: auto;
-    max-height: none;
-    overflow: visible;
-    padding-bottom: 28px;
-  }
-
-  .stats-board,
-  .stats-scroll {
-    flex: none;
-    min-height: 0;
-    overflow: visible;
-  }
-
-  .stats-grid {
-    grid-template-rows: none;
-    flex: none;
-  }
-
-  .stats-card--full {
-    overflow: visible;
-    min-height: 0;
-  }
-
-  .stats-calls {
-    flex: none;
-    max-height: none;
-    overflow: visible;
-  }
-
   .orders-grid,
   .stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1855,16 +1820,6 @@ body.login-lock {
 }
 
 @media (max-width: 700px) {
-  html:has(body.stats-locked:not(.overlay-open)) {
-    overflow: auto;
-    height: auto;
-  }
-
-  body.stats-locked:not(.overlay-open) {
-    overflow: auto;
-    height: auto;
-  }
-
   .orders-page {
     padding: 16px 14px 28px;
   }
@@ -1980,34 +1935,8 @@ body.login-lock {
     grid-template-columns: 1fr;
   }
 
-  .orders-page.is-stats {
-    height: auto;
-    max-height: none;
-    overflow: visible;
-    padding-bottom: 28px;
-  }
-
-  .stats-board,
-  .stats-scroll {
-    flex: none;
-    min-height: 0;
-    overflow: visible;
-  }
-
   .stats-grid {
     grid-template-rows: none;
-    flex: none;
-  }
-
-  .stats-card--full {
-    overflow: visible;
-    min-height: 0;
-  }
-
-  .stats-calls {
-    flex: none;
-    max-height: none;
-    overflow: visible;
   }
 
   .stats-card--wide,
@@ -2104,14 +2033,12 @@ body.login-lock {
     overflow: hidden;
   }
 
-  html:has(body.stats-locked:not(.overlay-open)),
-  body.stats-locked:not(.overlay-open) {
-    height: 100%;
-    overflow: hidden;
-  }
-
   .orders-page,
   .orders-page.is-stats {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    max-width: none;
     height: 100dvh;
     max-height: 100dvh;
     overflow: hidden;
@@ -2120,10 +2047,14 @@ body.login-lock {
     padding-bottom: 12px;
   }
 
-  .orders-header {
+  .orders-chrome {
     flex-shrink: 0;
     background: #ffffff;
-    z-index: 12;
+    z-index: 20;
+  }
+
+  .orders-header {
+    margin-bottom: 8px;
   }
 
   .orders-body {
@@ -2135,31 +2066,17 @@ body.login-lock {
   }
 
   .orders-body.is-stats {
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
+    overflow-y: auto;
+    display: block;
   }
 
   .orders-body.is-stats .stats-board {
-    flex: 1;
     min-height: 0;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .orders-body.is-stats .stats-period {
-    flex-shrink: 0;
-    background: #ffffff;
-    z-index: 2;
   }
 
   .orders-body.is-stats .stats-scroll {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
+    overflow: visible;
+    flex: none;
   }
 
   .orders-body.is-stats .stats-grid {

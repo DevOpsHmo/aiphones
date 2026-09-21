@@ -1538,6 +1538,7 @@ export default function DashboardPage() {
         <span className="page-blob page-blob-bottom" />
       </div>
     <main className={`orders-page${view === "stats" ? " is-stats" : ""}`}>
+      <div className="orders-chrome">
       <header className={`orders-header${calendarOpen || navOpen || statusMenuOpen ? " is-calendar-open" : ""}${searchOpen ? " is-search-open" : ""}`}>
         <div className="orders-header-left">
           <div className="orders-nav">
@@ -1811,6 +1812,8 @@ export default function DashboardPage() {
           </button>
         </div>
       </header>
+      <div id="orders-chrome-extra" />
+      </div>
 
       <div className={`orders-body${view === "stats" ? " is-stats" : ""}`}>
       {loadError && (

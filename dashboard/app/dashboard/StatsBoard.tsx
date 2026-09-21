@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 type StatsOrder = {
   id: string;
@@ -247,6 +248,12 @@ export default function StatsBoard({
     return () => document.body.classList.remove("overlay-open");
   }, [picker]);
 
+  const [chromeNode, setChromeNode] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    setChromeNode(document.getElementById("orders-chrome-extra"));
+  }, []);
+
   function openPicker(next: Period) {
     setPeriod(next);
     setPicker(next);
@@ -308,8 +315,7 @@ export default function StatsBoard({
   }));
   const maxStatus = Math.max(1, ...statusCounts.map(row => row.count));
 
-  return (
-    <div className="stats-board">
+  const periodBar = (
       <div className="stats-period">
         <div className="stats-period-tabs">
         {(
@@ -331,6 +337,11 @@ export default function StatsBoard({
         </div>
         <p className="stats-period-hint">{periodHint}</p>
       </div>
+  );
+
+  return (
+    <div className="stats-board">
+      {chromeNode ? createPortal(periodBar, chromeNode) : periodBar}
 
       {picker && (
         <div
