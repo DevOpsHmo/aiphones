@@ -1,0 +1,10 @@
+dashboard
+node_modules
+**/node_modules
+.git
+.next
+dashboard/.next
+*.md
+.env
+.env.*
+!**/.env.example
