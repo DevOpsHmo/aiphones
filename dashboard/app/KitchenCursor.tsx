@@ -9,14 +9,12 @@ export default function KitchenCursor() {
   const timerRef = useRef(0);
 
   useEffect(() => {
-    const root = rootRef.current;
-    if (!root) {
+    const cursor = rootRef.current;
+    if (!cursor || !window.matchMedia("(any-pointer: fine)").matches) {
       return;
     }
 
-    if (!window.matchMedia("(any-pointer: fine)").matches) {
-      return;
-    }
+    const node = cursor;
 
     function move(event: MouseEvent) {
       pointRef.current = { x: event.clientX, y: event.clientY };
@@ -26,17 +24,17 @@ export default function KitchenCursor() {
       frameRef.current = window.requestAnimationFrame(() => {
         frameRef.current = 0;
         const { x, y } = pointRef.current;
-        root.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+        node.style.transform = `translate3d(${x}px, ${y}px, 0)`;
       });
     }
 
     function spin() {
       window.clearTimeout(timerRef.current);
-      root.classList.remove("is-click");
-      void root.offsetWidth;
-      root.classList.add("is-click");
+      node.classList.remove("is-click");
+      void node.offsetWidth;
+      node.classList.add("is-click");
       timerRef.current = window.setTimeout(() => {
-        root.classList.remove("is-click");
+        node.classList.remove("is-click");
       }, 320);
     }
 
