@@ -8,17 +8,18 @@ export async function GET(request: Request) {
   const type = url.searchParams.get("type");
 
   if (tokenHash && type) {
-    const supabase = await createClient();
+    try {
+      const supabase = await createClient();
+      const { error } = await supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: type as EmailOtpType
+      });
 
-    const { error } = await supabase.auth.verifyOtp({
-      token_hash: tokenHash,
-      type: type as EmailOtpType
-    });
-
-    if (!error) {
-      return NextResponse.redirect(
-        new URL("/dashboard", url.origin)
-      );
+      if (!error) {
+        return NextResponse.redirect(new URL("/dashboard", url.origin));
+      }
+    } catch {
+      return NextResponse.redirect(new URL("/login", url.origin));
     }
   }
 

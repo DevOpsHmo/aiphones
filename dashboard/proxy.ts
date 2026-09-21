@@ -1,15 +1,19 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { getSupabasePublicEnv } from "./lib/supabase/env";
 
 export async function proxy(request: NextRequest) {
+  const { url, key, configured } = getSupabasePublicEnv();
+  if (!configured) {
+    return NextResponse.next();
+  }
+
   let response = NextResponse.next({
     request
   });
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-    {
+  try {
+    const supabase = createServerClient(url, key, {
       cookies: {
         getAll() {
           return request.cookies.getAll();
@@ -27,37 +31,34 @@ export async function proxy(request: NextRequest) {
             response.cookies.set(name, value, options);
           });
 
-          Object.entries(headers).forEach(([key, value]) => {
-            response.headers.set(key, value);
+          Object.entries(headers).forEach(([keyName, headerValue]) => {
+            response.headers.set(keyName, headerValue);
           });
         }
       }
+    });
+
+    const { data } = await supabase.auth.getClaims();
+    const user = data?.claims;
+    const pathname = request.nextUrl.pathname;
+
+    const isPublic =
+      pathname === "/" ||
+      pathname === "/manifest.webmanifest" ||
+      pathname === "/icon" ||
+      pathname === "/apple-icon" ||
+      pathname.startsWith("/login") ||
+      pathname.startsWith("/auth");
+
+    if (!user && !isPublic) {
+      return NextResponse.redirect(new URL("/login", request.url));
     }
-  );
 
-  const { data } = await supabase.auth.getClaims();
-  const user = data?.claims;
-
-  const pathname = request.nextUrl.pathname;
-
-  const isPublic =
-    pathname === "/" ||
-    pathname === "/manifest.webmanifest" ||
-    pathname === "/icon" ||
-    pathname === "/apple-icon" ||
-    pathname.startsWith("/login") ||
-    pathname.startsWith("/auth");
-
-  if (!user && !isPublic) {
-    return NextResponse.redirect(
-      new URL("/login", request.url)
-    );
-  }
-
-  if (user && pathname === "/login") {
-    return NextResponse.redirect(
-      new URL("/dashboard", request.url)
-    );
+    if (user && pathname === "/login") {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+  } catch {
+    return response;
   }
 
   return response;

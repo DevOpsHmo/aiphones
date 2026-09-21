@@ -68,24 +68,27 @@ export default function LoginPage() {
 
   async function login(event: React.FormEvent) {
     event.preventDefault();
-
     setLoading(true);
     setError("");
 
-    const supabase = createClient();
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithPassword({
+        email: toGmail(username),
+        password
+      });
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: toGmail(username),
-      password
-    });
+      if (error) {
+        setError(error.message);
+        setLoading(false);
+        return;
+      }
 
-    if (error) {
-      setError(error.message);
+      window.location.href = "/dashboard";
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo iniciar sesión");
       setLoading(false);
-      return;
     }
-
-    window.location.href = "/dashboard";
   }
 
   return (
