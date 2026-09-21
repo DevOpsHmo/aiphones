@@ -1,5 +1,6 @@
+import "./polyfill-ws.js";
 import { createClient } from "@supabase/supabase-js";
-import { WebSocket } from "ws";
+import WS from "ws";
 import { config } from "./config.js";
 
 export const supabase = createClient(
@@ -11,7 +12,7 @@ export const supabase = createClient(
       persistSession: false
     },
     realtime: {
-      transport: WebSocket
+      transport: WS
     }
   }
 );

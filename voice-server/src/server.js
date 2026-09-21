@@ -1,3 +1,4 @@
+import "./polyfill-ws.js";
 import express from "express";
 import http from "http";
 import WebSocket, {
@@ -84,8 +85,8 @@ app.get(
   (req, res) => {
     res.json({
       ok: true,
-      service:
-        "ai-phone"
+      service: "ai-phone",
+      node: process.version
     });
   }
 );
