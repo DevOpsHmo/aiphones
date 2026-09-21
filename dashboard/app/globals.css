@@ -1819,7 +1819,7 @@ body.login-lock {
   .orders-page {
     padding-top: calc(env(safe-area-inset-top) + 28px);
     padding-right: max(14px, env(safe-area-inset-right));
-    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    padding-bottom: 0;
     padding-left: max(14px, env(safe-area-inset-left));
   }
 
@@ -2045,7 +2045,7 @@ body.login-lock {
     flex-direction: column;
     padding-top: calc(env(safe-area-inset-top) + 28px);
     padding-right: max(14px, env(safe-area-inset-right));
-    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    padding-bottom: 0;
     padding-left: max(14px, env(safe-area-inset-left));
   }
 
@@ -2065,6 +2065,7 @@ body.login-lock {
     overflow-y: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
+    padding-bottom: 0;
   }
 
   .orders-body.is-stats {
@@ -2098,7 +2099,7 @@ body.login-lock {
   .orders-page.is-stats {
     padding-top: calc(env(safe-area-inset-top) + 28px);
     padding-right: max(14px, env(safe-area-inset-right));
-    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    padding-bottom: 0;
     padding-left: max(14px, env(safe-area-inset-left));
   }
 
