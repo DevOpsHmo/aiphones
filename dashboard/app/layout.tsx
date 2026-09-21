@@ -1,5 +1,5 @@
-import "./globals.css";
 import KitchenCursor from "./KitchenCursor";
+import "./globals.css";
 
 export const metadata = {
   title: "AI-Phone",
@@ -12,11 +12,19 @@ export const metadata = {
   },
   icons: {
     icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
-      { url: "/icon", type: "image/png" }
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" }
     ],
-    apple: [{ url: "/apple-icon", type: "image/png" }]
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }]
   }
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: "cover" as const,
+  interactiveWidget: "resizes-content" as const
 };
 
 export default function RootLayout({

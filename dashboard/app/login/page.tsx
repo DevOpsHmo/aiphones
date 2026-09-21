@@ -46,23 +46,31 @@ export default function LoginPage() {
         return;
       }
 
-      const rect = active.getBoundingClientRect();
+      const cardRect = card.getBoundingClientRect();
       const visibleBottom = vv.offsetTop + vv.height;
-      const extra = rect.bottom - visibleBottom + 24;
+      const extra = cardRect.bottom - visibleBottom + 72;
       setShift(extra > 0 ? extra : 0);
     }
 
+    function scheduleShift() {
+      window.requestAnimationFrame(() => {
+        updateShift();
+        window.setTimeout(updateShift, 80);
+        window.setTimeout(updateShift, 280);
+      });
+    }
+
     const vv = window.visualViewport;
-    vv?.addEventListener("resize", updateShift);
-    vv?.addEventListener("scroll", updateShift);
-    window.addEventListener("focusin", updateShift);
-    window.addEventListener("focusout", updateShift);
+    vv?.addEventListener("resize", scheduleShift);
+    vv?.addEventListener("scroll", scheduleShift);
+    window.addEventListener("focusin", scheduleShift);
+    window.addEventListener("focusout", scheduleShift);
 
     return () => {
-      vv?.removeEventListener("resize", updateShift);
-      vv?.removeEventListener("scroll", updateShift);
-      window.removeEventListener("focusin", updateShift);
-      window.removeEventListener("focusout", updateShift);
+      vv?.removeEventListener("resize", scheduleShift);
+      vv?.removeEventListener("scroll", scheduleShift);
+      window.removeEventListener("focusin", scheduleShift);
+      window.removeEventListener("focusout", scheduleShift);
     };
   }, []);
 
@@ -93,7 +101,9 @@ export default function LoginPage() {
 
   return (
     <main
-      className="login-screen"
+      className={
+        shift ? "login-screen login-screen--keyboard" : "login-screen"
+      }
       onTouchMove={event => event.preventDefault()}
     >
       <div className="login-blobs" aria-hidden="true">
