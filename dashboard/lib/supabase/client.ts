@@ -1,5 +1,6 @@
 import { createBrowserClient } from "@supabase/ssr";
 import { getSupabasePublicEnv } from "./env";
+import { fetchRetryingJwtSkew } from "./jwt-fetch";
 
 export function createClient() {
   const { url, key, configured } = getSupabasePublicEnv();
@@ -9,5 +10,9 @@ export function createClient() {
     );
   }
 
-  return createBrowserClient(url, key);
+  return createBrowserClient(url, key, {
+    global: {
+      fetch: fetchRetryingJwtSkew()
+    }
+  });
 }

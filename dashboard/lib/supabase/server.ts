@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { getSupabasePublicEnv } from "./env";
+import { fetchRetryingJwtSkew } from "./jwt-fetch";
 
 export async function createClient() {
   const { url, key, configured } = getSupabasePublicEnv();
@@ -13,6 +14,9 @@ export async function createClient() {
   const cookieStore = await cookies();
 
   return createServerClient(url, key, {
+    global: {
+      fetch: fetchRetryingJwtSkew()
+    },
     cookies: {
       getAll() {
         return cookieStore.getAll();

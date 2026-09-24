@@ -1831,10 +1831,12 @@ export default function DashboardPage() {
           }}
         >
           {loadError}
-          <div style={{ marginTop: 8, fontSize: 14 }}>
-            Si menciona una columna nueva, pega en Supabase
-            supabase/migration_dashboard_persistence.sql
-          </div>
+          {/columna|column|schema cache|PGRST204/i.test(loadError) && (
+            <div style={{ marginTop: 8, fontSize: 14 }}>
+              Si menciona una columna nueva, pega en Supabase
+              supabase/migration_dashboard_persistence.sql
+            </div>
+          )}
         </div>
       )}
 
@@ -1892,13 +1894,7 @@ export default function DashboardPage() {
       )}
 
       {!loading && !loadError && visibleOrders.length === 0 && (
-        <div
-          style={{
-            background: "white",
-            padding: 30,
-            borderRadius: 12
-          }}
-        >
+        <div className="orders-empty">
           {searchQuery.trim()
             ? "No hay pedidos que coincidan."
             : orders.length === 0

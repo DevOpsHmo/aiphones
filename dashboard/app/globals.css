@@ -270,6 +270,12 @@ body.login-lock {
   }
 }
 
+.orders-empty {
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+}
+
 .page-spinner {
   position: fixed;
   inset: 0;
@@ -1990,6 +1996,25 @@ body.login-lock {
   .orders-search-toggle {
     width: 100%;
     height: 36px;
+  }
+
+  .orders-body:not(.is-stats) {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .orders-empty {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    background: transparent;
+    border-radius: 0;
+    padding: 24px 16px;
+    box-sizing: border-box;
   }
 
   .orders-grid,
