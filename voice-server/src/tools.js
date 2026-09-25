@@ -149,12 +149,112 @@ export function formatMenuForPrompt(menu) {
   return lines.join("\n");
 }
 
+const SPANISH_NUMBERS = {
+  cero: 0,
+  un: 1,
+  uno: 1,
+  dos: 2,
+  tres: 3,
+  cuatro: 4,
+  cinco: 5,
+  seis: 6,
+  siete: 7,
+  ocho: 8,
+  nueve: 9,
+  diez: 10,
+  once: 11,
+  doce: 12,
+  trece: 13,
+  catorce: 14,
+  quince: 15,
+  dieciseis: 16,
+  diecisiete: 17,
+  dieciocho: 18,
+  diecinueve: 19,
+  veinte: 20,
+  veintiuno: 21,
+  veintidos: 22,
+  veintitres: 23,
+  veinticuatro: 24,
+  veinticinco: 25,
+  veintiseis: 26,
+  veintisiete: 27,
+  veintiocho: 28,
+  veintinueve: 29,
+  treinta: 30,
+  cuarenta: 40,
+  cincuenta: 50,
+  sesenta: 60,
+  setenta: 70,
+  ochenta: 80,
+  noventa: 90,
+  cien: 100,
+  ciento: 100
+};
+
+export function parseSpokenPostalCode(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+
+  if (hermosilloCatalog[digits]) {
+    return digits;
+  }
+
+  const tokens = foldText(value)
+    .replace(/\btrescientos\b/g, "tres ciento")
+    .split(" ")
+    .filter(token => token && token !== "y");
+
+  const groups = [];
+  let current = null;
+
+  for (const token of tokens) {
+    if (!(token in SPANISH_NUMBERS)) {
+      continue;
+    }
+
+    const number = SPANISH_NUMBERS[token];
+
+    if (current === null) {
+      current = number;
+    } else if (number >= 100) {
+      if (current < 100) {
+        groups.push(current);
+      }
+
+      current = number;
+    } else if (current >= 100 && number < 100) {
+      current += number;
+    } else if (current >= 20 && current % 10 === 0 && number < 10) {
+      current += number;
+    } else {
+      groups.push(current);
+      current = number;
+    }
+  }
+
+  if (current !== null) {
+    groups.push(current);
+  }
+
+  const spoken = groups.map(number => String(number)).join("");
+
+  if (hermosilloCatalog[spoken]) {
+    return spoken;
+  }
+
+  if (digits.length === 5) {
+    return digits;
+  }
+
+  return spoken || digits;
+}
+
 export async function checkAddressTool({
   postalCode,
   street,
   colony
 }) {
-  const cp = String(postalCode || "").replace(/\D/g, "");
+  const cp = parseSpokenPostalCode(postalCode);
   const colonias = hermosilloCatalog[cp];
 
   if (!colonias) {
