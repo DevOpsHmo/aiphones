@@ -465,57 +465,20 @@ export async function createOrderTool({
     });
   }
 
-  let customer = null;
-
-  if (customerPhone?.trim()) {
-    const { data } = await supabase
+  const { data: customer, error: customerError } =
+    await supabase
       .from("customers")
-      .select("*")
-      .eq("business_id", businessId)
-      .eq("phone", customerPhone)
-      .maybeSingle();
+      .insert({
+        business_id: businessId,
+        name: customerName,
+        phone: customerPhone || null,
+        address: address || null
+      })
+      .select()
+      .single();
 
-    customer = data;
-  }
-
-  if (customer) {
-    const { data, error } =
-      await supabase
-        .from("customers")
-        .update({
-          name: customerName,
-          address:
-            address || customer.address
-        })
-        .eq("id", customer.id)
-        .select()
-        .single();
-
-    if (error) {
-      throw error;
-    }
-
-    customer = data;
-  } else {
-    const { data, error } =
-      await supabase
-        .from("customers")
-        .insert({
-          business_id: businessId,
-          name: customerName,
-          phone:
-            customerPhone || null,
-          address:
-            address || null
-        })
-        .select()
-        .single();
-
-    if (error) {
-      throw error;
-    }
-
-    customer = data;
+  if (customerError) {
+    throw customerError;
   }
 
   const { data: nextNumber, error: numberError } =

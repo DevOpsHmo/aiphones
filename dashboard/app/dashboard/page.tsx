@@ -1383,7 +1383,6 @@ export default function DashboardPage() {
               full,
               ...current.filter(o => o.id !== full.id)
             ]);
-            playDoorbell();
           }
           loadUsage();
         }
@@ -1437,6 +1436,30 @@ export default function DashboardPage() {
       void supabase.removeChannel(channel);
     };
   }, [loadOrders, loadUsage, loadOrderById, loadCalls]);
+
+  const newOrderIds = orders
+    .filter(order => order.status === "new" && !order.deleted_at)
+    .map(order => order.id)
+    .join(",");
+
+  useEffect(() => {
+    if (!newOrderIds) {
+      return;
+    }
+
+    playDoorbell();
+
+    function onVisible() {
+      if (document.visibilityState === "visible") {
+        playDoorbell();
+      }
+    }
+
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [newOrderIds]);
 
   useEffect(() => {
     void flushStatusQueue();

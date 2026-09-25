@@ -2101,6 +2101,10 @@ body.login-lock {
   .page-blob {
     animation: none;
   }
+
+  .orders-card--new::after {
+    animation: status-pulse 1.4s ease-in-out infinite;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
