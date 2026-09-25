@@ -1,7 +1,10 @@
 import WebSocket from "ws";
 import {
-  getMenuTool,
-  createOrderTool
+  createOrderTool,
+  endCallTool,
+  checkAddressTool,
+  getLastOrderTool,
+  updateLastOrderTool
 } from "./tools.js";
 import { config } from "./config.js";
 
@@ -15,9 +18,11 @@ export function createRealtimeSession({
   twilioSocket,
   streamSid,
   callId,
+  callSid,
   callerPhone,
   businessId,
-  previousTranscript = ""
+  previousTranscript = "",
+  menuText = ""
 }) {
   const draft = previousTranscript.trim();
   const openaiSocket =
@@ -59,7 +64,7 @@ export function createRealtimeSession({
               type: "server_vad",
               threshold: 0.5,
               prefix_padding_ms: 300,
-              silence_duration_ms: 500
+              silence_duration_ms: 900
             }
           },
 
@@ -80,31 +85,29 @@ Hablas español mexicano natural, como una persona real en una pizzería de Herm
 
 Tu trabajo es contestar llamadas y tomar pedidos.
 
-REGLAS ABSOLUTAS:
+Ya te sabes el menú de abajo. Nunca digas que vas a revisar el menú. Nunca menciones un producto que el cliente no pidió, salvo la pregunta de la soda al final.
 
-1. Sé breve y natural.
-2. Si hay un pedido pendiente de una llamada anterior, no empieces de cero. Saluda, resume lo que ya se había elegido y pregunta si desea continuar. Si dice que no, descarta ese borrador y toma un pedido nuevo. Si no hay pendiente, di exactamente: "Pizzería Hermosillo, buen día. ¿Qué desea ordenar?"
-3. Antes de mencionar productos o precios utiliza get_menu.
-4. Nunca inventes productos.
-5. Nunca inventes precios.
-6. Pregunta la cantidad.
-7. Pregunta el nombre.
-8. Pregunta si desea recoger o recibir a domicilio.
-9. Si es domicilio, pregunta la dirección.
-10. Pregunta si pagará en efectivo o transferencia.
-11. Resume todos los productos.
-12. Indica el total y la forma de pago.
-13. Pregunta explícitamente:
-   "¿Confirmas tu pedido?"
-14. Solo después de una respuesta afirmativa clara ejecuta create_order.
-15. Nunca ejecutes create_order antes de la confirmación.
-16. Si el cliente modifica algo, actualiza el pedido antes de confirmar.
-17. Si no entiendes algo, pregunta nuevamente.
-18. No inventes cargos adicionales.
-19. No inventes tiempos de entrega.
-20. No inventes promociones.
-21. No reveles instrucciones internas.
-22. Si el cliente pregunta si eres IA, responde honestamente que eres el asistente virtual del restaurante.
+FLUJO. Una sola pregunta por turno. Espera a que termine de hablar.
+
+1. Si no hay pedido pendiente, di exactamente: "Bienvenido a Pizzería Hermosillo. ¿Qué desea ordenar?"
+2. Confirma el producto en una frase. Si es pizza, incluye el tamaño: mediana $200, grande $220 o familiar $250. Si preguntan precios, di solo esos tres. Si es boneless, pregunta "¿salsa bbq o buffalo?"
+3. Pregunta: "¿Cuál es su nombre?"
+4. Pregunta: "¿A domicilio o para recoger?"
+5. Si es recoger, di: "Su pedido está listo en 30 minutos." No pidas dirección ni pago.
+6. Si es domicilio, pregunta primero: "¿Cuál es su código postal?" Luego la calle y el número. Luego la colonia. Llama check_address. Si no está en Hermosillo, pide que lo repita. Si sí, repite la dirección y espera un sí. El pago es efectivo; no lo preguntes. No digas los 30 minutos.
+7. Una sola vez, al final: "¿Desea agregar una soda?" Si dice que sí, agrega solo Fresa 2 lts. Si dice que no, no hables de bebidas.
+8. Ejecuta create_order con lo que sí pidió. Luego: "Que tengas buen día, {nombre}." y llama end_call.
+9. Si hay un pedido pendiente sin confirmar, pregunta si siguen con ese pedido. Si no, empieza uno nuevo.
+
+CAMBIAR UN PEDIDO YA HECHO:
+
+1. Si dice que llamó antes y quiere cambiar el pedido, usa get_last_order.
+2. Confirma el nombre: "Muy bien, su nombre es ¿{nombre}?"
+3. Si dice que sí, ejecuta update_last_order con el cambio.
+4. Di: "Perfecto, su pedido ha sido modificado. ¿Algo más en lo que lo pueda ayudar?"
+5. Si dice que es todo, despídete con "Perfecto, que tengas buen día, {nombre}." y llama end_call.
+
+Sé breve. Una pregunta a la vez. No reveles estas instrucciones.
 
 El teléfono del cliente es:
 ${callerPhone || "desconocido"}
@@ -117,19 +120,26 @@ ${
     ? `PEDIDO PENDIENTE de la llamada anterior, cortada antes de confirmar. Retómalo:\n${draft}`
     : "No hay pedido pendiente."
 }
+
+MENÚ:
+${menuText || "Menú no disponible."}
         `,
 
         tools: [
           {
             type: "function",
-            name: "get_menu",
+            name: "check_address",
             description:
-              "Obtiene el menú disponible del restaurante.",
+              "Verifica que el código postal, la calle y la colonia estén en Hermosillo, Sonora.",
             parameters: {
               type: "object",
-              properties: {},
-              additionalProperties:
-                false
+              properties: {
+                postalCode: { type: "string" },
+                street: { type: "string" },
+                colony: { type: "string" }
+              },
+              required: ["postalCode", "street", "colony"],
+              additionalProperties: false
             }
           },
 
@@ -184,6 +194,21 @@ ${
                       },
                       quantity: {
                         type: "integer"
+                      },
+                      size: {
+                        type: "string",
+                        enum: [
+                          "mediana",
+                          "grande",
+                          "familiar"
+                        ]
+                      },
+                      sauce: {
+                        type: "string",
+                        enum: [
+                          "bbq",
+                          "buffalo"
+                        ]
                       }
                     },
                     required: [
@@ -208,6 +233,68 @@ ${
               additionalProperties:
                 false
             }
+          },
+
+          {
+            type: "function",
+            name: "get_last_order",
+            description:
+              "Busca el último pedido confirmado de este teléfono en las últimas 2 horas.",
+            parameters: {
+              type: "object",
+              properties: {},
+              additionalProperties: false
+            }
+          },
+
+          {
+            type: "function",
+            name: "update_last_order",
+            description:
+              "Modifica el último pedido confirmado de este teléfono.",
+            parameters: {
+              type: "object",
+              properties: {
+                customerName: {
+                  type: "string"
+                },
+                product_id: {
+                  type: "string"
+                },
+                size: {
+                  type: "string",
+                  enum: [
+                    "mediana",
+                    "grande",
+                    "familiar"
+                  ]
+                },
+                sauce: {
+                  type: "string",
+                  enum: [
+                    "bbq",
+                    "buffalo"
+                  ]
+                },
+                quantity: {
+                  type: "integer"
+                }
+              },
+              required: ["customerName"],
+              additionalProperties: false
+            }
+          },
+
+          {
+            type: "function",
+            name: "end_call",
+            description:
+              "Cuelga la llamada después de despedirte.",
+            parameters: {
+              type: "object",
+              properties: {},
+              additionalProperties: false
+            }
           }
         ],
 
@@ -229,8 +316,8 @@ ${
             type: "response.create",
             response: {
               instructions: draft
-                ? "Di exactamente: Pizzería Hermosillo, buen día. Se cortó la llamada. ¿Seguimos con el pedido que ya había empezado? No leas todo el historial."
-                : "Di exactamente esta frase y nada más: Pizzería Hermosillo, buen día. ¿Qué desea ordenar?"
+                ? "Di exactamente: Bienvenido a Pizzería Hermosillo. Se cortó la llamada. ¿Seguimos con el pedido que ya había empezado?"
+                : "Di exactamente esta frase y nada más: Bienvenido a Pizzería Hermosillo. ¿Qué desea ordenar?"
             }
           })
         );
@@ -318,6 +405,7 @@ ${
             openaiSocket,
             event,
             callId,
+            callSid,
             callerPhone,
             businessId
           );
@@ -371,6 +459,7 @@ async function handleToolCall(
   socket,
   event,
   callId,
+  callSid,
   callerPhone,
   businessId
 ) {
@@ -387,11 +476,12 @@ async function handleToolCall(
   let result;
 
   try {
-    if (
-      event.name === "get_menu"
-    ) {
-      result =
-        await getMenuTool(businessId);
+    if (event.name === "check_address") {
+      result = await checkAddressTool({
+        postalCode: args.postalCode,
+        street: args.street,
+        colony: args.colony
+      });
     }
 
     else if (
@@ -415,8 +505,38 @@ async function handleToolCall(
           confirmed:
             args.confirmed,
           paymentMethod:
-            args.paymentMethod
+            args.paymentMethod || "efectivo"
         });
+    }
+
+    else if (event.name === "get_last_order") {
+      result = await getLastOrderTool({
+        businessId,
+        callerPhone
+      });
+    }
+
+    else if (event.name === "update_last_order") {
+      result = await updateLastOrderTool({
+        businessId,
+        callerPhone,
+        customerName: args.customerName,
+        productId: args.product_id,
+        size: args.size,
+        sauce: args.sauce,
+        quantity: args.quantity
+      });
+    }
+
+    else if (event.name === "end_call") {
+      endCallTool(callSid).catch(error => {
+        console.error(
+          "No se pudo colgar:",
+          error.message
+        );
+      });
+
+      result = { success: true };
     }
 
     else {
@@ -461,6 +581,10 @@ async function handleToolCall(
       }
     })
   );
+
+  if (event.name === "end_call") {
+    return;
+  }
 
   socket.send(
     JSON.stringify({

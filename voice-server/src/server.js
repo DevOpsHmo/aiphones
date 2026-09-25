@@ -19,6 +19,10 @@ import {
   getMonthUsageSeconds,
   normalizePhone
 } from "./supabase.js";
+import {
+  formatMenuForPrompt,
+  getMenuTool
+} from "./tools.js";
 
 import {
   createRealtimeSession
@@ -325,6 +329,17 @@ wss.on(
             }, config.maxCallSeconds * 1000);
 
             let previousTranscript = "";
+            let menuText = "";
+
+            try {
+              const menu = await getMenuTool(businessId);
+              menuText = formatMenuForPrompt(menu);
+            } catch (error) {
+              console.error(
+                "No se pudo cargar el menú:",
+                error.message
+              );
+            }
 
             try {
               const draft = await findUnfinishedCall({
@@ -347,9 +362,11 @@ wss.on(
                   socket,
                 streamSid,
                 callId,
+                callSid,
                 callerPhone,
                 businessId,
-                previousTranscript
+                previousTranscript,
+                menuText
               });
 
             return;
