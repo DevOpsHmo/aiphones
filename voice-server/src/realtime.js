@@ -24,9 +24,7 @@ export function createRealtimeSession({
       {
         headers: {
           Authorization:
-            `Bearer ${config.openaiApiKey}`,
-          "OpenAI-Beta":
-            "realtime=v1"
+            `Bearer ${config.openaiApiKey}`
         }
       }
     );
@@ -83,7 +81,7 @@ Tu trabajo es contestar llamadas y tomar pedidos.
 REGLAS ABSOLUTAS:
 
 1. Sé breve y natural.
-2. Saluda al cliente.
+2. Al contestar, di exactamente: "Pizzería Hermosillo, buen día. ¿Qué desea ordenar?" y espera la respuesta.
 3. Antes de mencionar productos o precios utiliza get_menu.
 4. Nunca inventes productos.
 5. Nunca inventes precios.
@@ -220,8 +218,11 @@ ${callId}
       ) {
         openaiSocket.send(
           JSON.stringify({
-            type:
-              "response.create"
+            type: "response.create",
+            response: {
+              instructions:
+                "Di exactamente esta frase y nada más: Pizzería Hermosillo, buen día. ¿Qué desea ordenar?"
+            }
           })
         );
       }
