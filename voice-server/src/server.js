@@ -37,7 +37,13 @@ app.use(
 );
 
 function toWssUrl(httpUrl, path) {
-  const base = httpUrl
+  let base = httpUrl.trim().replace(/\/$/, "");
+
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(base)) {
+    base = `https://${base}`;
+  }
+
+  base = base
     .replace(/^https:/i, "wss:")
     .replace(/^http:/i, "ws:");
 
