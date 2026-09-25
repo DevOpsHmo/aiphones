@@ -134,7 +134,7 @@ app.post(
         );
 
       const limitSeconds =
-        (business.monthly_minute_limit || 900) * 60;
+        (business.monthly_minute_limit || 999) * 60;
 
       if (usedSeconds >= limitSeconds) {
         await createCall({

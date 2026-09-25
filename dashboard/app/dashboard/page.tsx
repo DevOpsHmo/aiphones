@@ -813,7 +813,7 @@ export default function DashboardPage() {
   const [calls, setCalls] = useState<CallRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [minutesUsed, setMinutesUsed] = useState(18);
-  const [minutesLimit, setMinutesLimit] = useState(900);
+  const [minutesLimit, setMinutesLimit] = useState(999);
   const [minuteWarning, setMinuteWarning] = useState(800);
   const [chatOrder, setChatOrder] = useState<Order | null>(null);
   const [chatLines, setChatLines] = useState<
@@ -925,7 +925,7 @@ export default function DashboardPage() {
       .maybeSingle();
 
     if (business) {
-      setMinutesLimit(Number(business.monthly_minute_limit) || 900);
+      setMinutesLimit(Number(business.monthly_minute_limit) || 999);
       setMinuteWarning(Number(business.minute_warning) || 800);
     }
 
