@@ -21,7 +21,8 @@ import {
 } from "./supabase.js";
 import {
   formatMenuForPrompt,
-  getMenuTool
+  getMenuTool,
+  refreshHermosilloCatalog
 } from "./tools.js";
 
 import {
@@ -484,5 +485,11 @@ server.listen(
     console.log(
       `AI Phone voice server running on ${config.port}`
     );
+    refreshHermosilloCatalog().catch(error => {
+      console.error(
+        "No se actualizó el directorio postal:",
+        error.message
+      );
+    });
   }
 );

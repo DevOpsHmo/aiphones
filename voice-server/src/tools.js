@@ -1,6 +1,71 @@
+import { readFileSync, writeFileSync } from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import twilio from "twilio";
 import { config } from "./config.js";
 import { normalizePhone, supabase } from "./supabase.js";
+
+const catalogPath = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../data/hermosillo-cp.json"
+);
+
+let hermosilloCatalog = {};
+
+function loadHermosilloCatalog() {
+  hermosilloCatalog = JSON.parse(readFileSync(catalogPath, "utf8"));
+  return hermosilloCatalog;
+}
+
+loadHermosilloCatalog();
+
+export async function refreshHermosilloCatalog() {
+  try {
+    const response = await fetch(
+      "https://postali.app/api/v1/mx/municipio/sonora/hermosillo"
+    );
+
+    if (!response.ok) {
+      return loadHermosilloCatalog();
+    }
+
+    const data = await response.json();
+
+    if (data.truncated || !Array.isArray(data.colonias)) {
+      return loadHermosilloCatalog();
+    }
+
+    const next = {};
+
+    for (const colonia of data.colonias) {
+      if (!next[colonia.cp]) {
+        next[colonia.cp] = [];
+      }
+
+      next[colonia.cp].push(colonia.nombre);
+    }
+
+    writeFileSync(catalogPath, JSON.stringify(next));
+    hermosilloCatalog = next;
+    return next;
+  } catch (error) {
+    console.error(
+      "Postali no respondió, se usa la lista local:",
+      error.message
+    );
+    return loadHermosilloCatalog();
+  }
+}
+
+function foldText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 const SIZE_PRICES = {
   mediana: 200,
@@ -65,13 +130,13 @@ export async function getMenuTool(businessId) {
 
 export function formatMenuForPrompt(menu) {
   const lines = [
-    "Pizzas: mediana $200, grande $220, familiar $250."
+    "Pizzas: mediana 200, grande 220, familiar 250. Di el número solo, por ejemplo: la pizza grande está en 220. Nunca digas dólares, pesos ni el signo de dinero."
   ];
 
   for (const product of menu.products || []) {
     const price = product.sizes
       ? "precio por tamaño"
-      : `$${Number(product.price).toFixed(0)}`;
+      : `${Number(product.price).toFixed(0)}`;
     const sauce = product.sauce_options
       ? " Salsas: bbq o buffalo."
       : "";
@@ -84,92 +149,60 @@ export function formatMenuForPrompt(menu) {
   return lines.join("\n");
 }
 
-const HERMOSILLO = {
-  minLat: 28.85,
-  maxLat: 29.3,
-  minLng: -111.2,
-  maxLng: -110.8
-};
-
 export async function checkAddressTool({
   postalCode,
   street,
   colony
 }) {
   const cp = String(postalCode || "").replace(/\D/g, "");
+  const colonias = hermosilloCatalog[cp];
 
-  if (!/^83\d{3}$/.test(cp) || Number(cp) < 83000 || Number(cp) > 83299) {
+  if (!colonias) {
     return {
       ok: false,
       error: "Ese código postal no es de Hermosillo, Sonora. Pídelo otra vez."
     };
   }
 
-  if (!street?.trim() || !colony?.trim()) {
+  if (!colony?.trim()) {
     return {
-      ok: false,
-      error: "Faltan la calle o la colonia."
+      ok: true,
+      postal_code_valid: true,
+      colonias,
+      address: `C.P. ${cp}, Hermosillo, Sonora`,
+      note: "El código postal es de Hermosillo. Falta la colonia."
     };
   }
 
-  const query = [
-    street.trim(),
-    colony.trim(),
-    cp,
-    "Hermosillo",
-    "Sonora",
-    "Mexico"
-  ].join(", ");
-
-  const url = new URL("https://nominatim.openstreetmap.org/search");
-  url.searchParams.set("q", query);
-  url.searchParams.set("format", "jsonv2");
-  url.searchParams.set("addressdetails", "1");
-  url.searchParams.set("limit", "1");
-  url.searchParams.set("countrycodes", "mx");
-
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent": "AI-Phone/1.0 (Pizzeria Hermosillo)",
-      "Accept-Language": "es"
-    }
+  const said = foldText(colony);
+  const match = colonias.find(name => {
+    const official = foldText(name);
+    return official === said || official.includes(said) || said.includes(official);
   });
 
-  if (!response.ok) {
+  const dictatedStreet = street?.trim() || "";
+
+  if (!match) {
     return {
-      ok: false,
-      error: "No pude verificar la dirección. Pide que la repita."
+      ok: true,
+      postal_code_valid: true,
+      colony_match: false,
+      colonias,
+      address: [dictatedStreet, colony.trim(), `C.P. ${cp}`, "Hermosillo, Sonora"]
+        .filter(Boolean)
+        .join(", "),
+      note: "El código es de Hermosillo. La colonia no coincide. Ofrece las colonias de la lista para que elija."
     };
   }
-
-  const rows = await response.json();
-  const hit = rows[0];
-  const lat = Number(hit?.lat);
-  const lng = Number(hit?.lon);
-  const place = hit?.address || {};
-  const city = place.city || place.town || place.municipality || "";
-  const inside =
-    city.toLowerCase().includes("hermosillo") &&
-    lat >= HERMOSILLO.minLat &&
-    lat <= HERMOSILLO.maxLat &&
-    lng >= HERMOSILLO.minLng &&
-    lng <= HERMOSILLO.maxLng;
-
-  if (!hit || !inside) {
-    return {
-      ok: false,
-      error: "Esa calle o colonia no está en Hermosillo, Sonora. Pide que la repita."
-    };
-  }
-
-  const foundStreet = place.road || street.trim();
-  const foundColony =
-    place.suburb || place.neighbourhood || place.quarter || colony.trim();
-  const foundCp = place.postcode || cp;
 
   return {
     ok: true,
-    address: `${foundStreet}, ${foundColony}, C.P. ${foundCp}, Hermosillo, Sonora`
+    postal_code_valid: true,
+    colony_match: true,
+    colony: match,
+    address: [dictatedStreet, match, `C.P. ${cp}`, "Hermosillo, Sonora"]
+      .filter(Boolean)
+      .join(", ")
   };
 }
 
