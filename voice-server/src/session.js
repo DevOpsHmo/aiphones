@@ -9,6 +9,8 @@ import { buildInstructions } from "./prompt.js";
 import { OpenAIRealtime } from "./openai.js";
 import { buildOrderItems } from "./orders.js";
 import { sendWhatsAppConfirmation } from "./whatsapp.js";
+import twilio from "twilio";
+import { config } from "./config.js";
 
 // Maneja la conexion WebSocket de Twilio para UNA llamada:
 // Twilio <-> este servidor <-> OpenAI Realtime API.
@@ -36,6 +38,7 @@ class CallSession {
     this.orderId = null;
     this.assistantTranscript = [];
     this.userTranscript = [];
+    this.limitTimer = null;
   }
 
   onTwilioMessage(raw) {
@@ -57,6 +60,19 @@ class CallSession {
     this.to = start.customParameters?.to ?? "";
     this.startedAt = Date.now();
     console.log(`[call] inicio ${this.callSid} from=${this.from}`);
+
+    this.limitTimer = setTimeout(() => {
+      if (!this.callSid) {
+        return;
+      }
+
+      twilio(config.twilioAccountSid, config.twilioAuthToken)
+        .calls(this.callSid)
+        .update({ status: "completed" })
+        .catch(err => {
+          console.error("[call] no se pudo cortar a los 3 min:", err.message);
+        });
+    }, config.maxCallSeconds * 1000);
 
     try {
       const products = await fetchActiveProducts();
@@ -158,7 +174,15 @@ class CallSession {
     if (this.closed) return;
     this.closed = true;
 
-    const duration = Math.round((Date.now() - this.startedAt) / 1000);
+    if (this.limitTimer) {
+      clearTimeout(this.limitTimer);
+      this.limitTimer = null;
+    }
+
+    const duration = Math.min(
+      config.maxCallSeconds,
+      Math.round((Date.now() - this.startedAt) / 1000)
+    );
     const transcript = [
       ...this.userTranscript.map((t) => `Cliente: ${t}`),
       ...this.assistantTranscript.map((t) => `IA: ${t}`),

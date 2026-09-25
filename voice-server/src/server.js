@@ -152,7 +152,8 @@ app.post(
         if (overflow) {
           response.dial(
             {
-              timeout: 30
+              timeout: 30,
+              timeLimit: config.maxCallSeconds
             },
             overflow
           );
@@ -244,6 +245,12 @@ wss.on(
 
     let realtime = null;
     let finalized = false;
+    let limitTimer = null;
+
+    const client = twilio(
+      config.twilioAccountSid,
+      config.twilioAuthToken
+    );
 
     socket.on(
       "message",
@@ -297,6 +304,24 @@ wss.on(
               "Call started:",
               callSid
             );
+
+            limitTimer = setTimeout(() => {
+              if (!callSid) {
+                return;
+              }
+
+              client
+                .calls(callSid)
+                .update({
+                  status: "completed"
+                })
+                .catch(error => {
+                  console.error(
+                    "No se pudo cortar la llamada a los 3 min:",
+                    error.message
+                  );
+                });
+            }, config.maxCallSeconds * 1000);
 
             realtime =
               createRealtimeSession({
@@ -377,6 +402,11 @@ wss.on(
 
       finalized = true;
 
+      if (limitTimer) {
+        clearTimeout(limitTimer);
+        limitTimer = null;
+      }
+
       try {
         if (
           realtime &&
@@ -386,8 +416,10 @@ wss.on(
             callId,
             transcript:
               realtime.getTranscript(),
-            durationSeconds:
+            durationSeconds: Math.min(
+              config.maxCallSeconds,
               realtime.getDurationSeconds()
+            )
           });
         }
       } catch (error) {

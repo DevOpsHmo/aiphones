@@ -48,5 +48,7 @@ export const config = {
     process.env.BUSINESS_ID || null,
 
   validateTwilioSignature:
-    process.env.VALIDATE_TWILIO_SIGNATURE === "true"
+    process.env.VALIDATE_TWILIO_SIGNATURE === "true",
+
+  maxCallSeconds: 180
 };
