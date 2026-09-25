@@ -945,10 +945,13 @@ export default function DashboardPage() {
 
     for (const call of calls || []) {
       if (call.status === "in_progress" && call.started_at) {
-        seconds += Math.max(
+        const elapsed = Math.max(
           0,
           Math.round((now - new Date(call.started_at).getTime()) / 1000)
         );
+        if (elapsed <= 20 * 60) {
+          seconds += elapsed;
+        }
       } else {
         seconds += Number(call.duration_seconds) || 0;
       }
