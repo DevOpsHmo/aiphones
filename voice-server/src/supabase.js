@@ -105,12 +105,15 @@ export async function getMonthUsageSeconds(businessId) {
       call.status === "in_progress" &&
       call.started_at
     ) {
-      seconds += Math.max(
+      const elapsed = Math.max(
         0,
         Math.round(
           (now - new Date(call.started_at).getTime()) / 1000
         )
       );
+      if (elapsed <= 20 * 60) {
+        seconds += elapsed;
+      }
       continue;
     }
 
@@ -118,6 +121,68 @@ export async function getMonthUsageSeconds(businessId) {
   }
 
   return seconds;
+}
+
+export async function findUnfinishedCall({
+  businessId,
+  callerPhone,
+  excludeCallId
+}) {
+  const phone = normalizePhone(callerPhone);
+
+  if (!businessId || !phone) {
+    return null;
+  }
+
+  const since = new Date(
+    Date.now() - 2 * 60 * 60 * 1000
+  ).toISOString();
+
+  const { data: calls, error } = await supabase
+    .from("calls")
+    .select("id, transcript, started_at")
+    .eq("business_id", businessId)
+    .eq("caller_phone", phone)
+    .eq("status", "completed")
+    .gte("started_at", since)
+    .order("started_at", { ascending: false })
+    .limit(5);
+
+  if (error) {
+    throw error;
+  }
+
+  for (const call of calls || []) {
+    if (call.id === excludeCallId) {
+      continue;
+    }
+
+    const transcript = (call.transcript || "").trim();
+
+    if (!transcript) {
+      continue;
+    }
+
+    const { data: order, error: orderError } = await supabase
+      .from("orders")
+      .select("id")
+      .eq("call_id", call.id)
+      .limit(1)
+      .maybeSingle();
+
+    if (orderError) {
+      throw orderError;
+    }
+
+    if (!order) {
+      return {
+        callId: call.id,
+        transcript
+      };
+    }
+  }
+
+  return null;
 }
 
 export async function createCall({

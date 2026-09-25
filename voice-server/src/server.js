@@ -14,6 +14,7 @@ import {
 import {
   createCall,
   finishCall,
+  findUnfinishedCall,
   getBusinessByTwilioPhone,
   getMonthUsageSeconds,
   normalizePhone
@@ -323,6 +324,23 @@ wss.on(
                 });
             }, config.maxCallSeconds * 1000);
 
+            let previousTranscript = "";
+
+            try {
+              const draft = await findUnfinishedCall({
+                businessId,
+                callerPhone,
+                excludeCallId: callId
+              });
+
+              previousTranscript = draft?.transcript || "";
+            } catch (error) {
+              console.error(
+                "No se pudo buscar el pedido pendiente:",
+                error.message
+              );
+            }
+
             realtime =
               createRealtimeSession({
                 twilioSocket:
@@ -330,7 +348,8 @@ wss.on(
                 streamSid,
                 callId,
                 callerPhone,
-                businessId
+                businessId,
+                previousTranscript
               });
 
             return;

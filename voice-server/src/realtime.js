@@ -16,8 +16,10 @@ export function createRealtimeSession({
   streamSid,
   callId,
   callerPhone,
-  businessId
+  businessId,
+  previousTranscript = ""
 }) {
+  const draft = previousTranscript.trim();
   const openaiSocket =
     new WebSocket(
       OPENAI_URL,
@@ -81,7 +83,7 @@ Tu trabajo es contestar llamadas y tomar pedidos.
 REGLAS ABSOLUTAS:
 
 1. Sé breve y natural.
-2. Al contestar, di exactamente: "Pizzería Hermosillo, buen día. ¿Qué desea ordenar?" y espera la respuesta.
+2. Si hay un pedido pendiente de una llamada anterior, no empieces de cero. Saluda, resume lo que ya se había elegido y pregunta si desea continuar. Si dice que no, descarta ese borrador y toma un pedido nuevo. Si no hay pendiente, di exactamente: "Pizzería Hermosillo, buen día. ¿Qué desea ordenar?"
 3. Antes de mencionar productos o precios utiliza get_menu.
 4. Nunca inventes productos.
 5. Nunca inventes precios.
@@ -109,6 +111,12 @@ ${callerPhone || "desconocido"}
 
 El ID de llamada es:
 ${callId}
+
+${
+  draft
+    ? `PEDIDO PENDIENTE de la llamada anterior, cortada antes de confirmar. Retómalo:\n${draft}`
+    : "No hay pedido pendiente."
+}
         `,
 
         tools: [
@@ -220,8 +228,9 @@ ${callId}
           JSON.stringify({
             type: "response.create",
             response: {
-              instructions:
-                "Di exactamente esta frase y nada más: Pizzería Hermosillo, buen día. ¿Qué desea ordenar?"
+              instructions: draft
+                ? "Di exactamente: Pizzería Hermosillo, buen día. Se cortó la llamada. ¿Seguimos con el pedido que ya había empezado? No leas todo el historial."
+                : "Di exactamente esta frase y nada más: Pizzería Hermosillo, buen día. ¿Qué desea ordenar?"
             }
           })
         );
