@@ -2,12 +2,12 @@ import KitchenCursor from "./KitchenCursor";
 import "./globals.css";
 
 export const metadata = {
-  title: "AI-Phones",
+  title: "Ai-Phones",
   description: "Panel de pedidos por teléfono",
-  applicationName: "AI-Phones",
+  applicationName: "Ai-Phones",
   appleWebApp: {
     capable: true,
-    title: "AI-Phones",
+    title: "Ai-Phones",
     statusBarStyle: "default" as const
   },
   icons: {

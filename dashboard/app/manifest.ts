@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "AI-Phones",
-    short_name: "AI-Phones",
+    name: "Ai-Phones",
+    short_name: "Ai-Phones",
     description: "Panel de pedidos por teléfono",
     start_url: "/",
     display: "standalone",
