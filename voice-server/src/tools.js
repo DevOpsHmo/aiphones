@@ -246,12 +246,40 @@ export function parseSpokenPostalCode(value) {
     }
   }
 
-  const spoken = fiveDigit(postalChunks(atoms).map(number => String(number)).join(""));
+  const joined = postalChunks(atoms).map(number => String(number)).join("");
+  const spoken = fiveDigit(joined) || repairDroppedZero(joined);
   if (spoken) {
     return spoken;
   }
 
-  return direct || digits;
+  return repairDroppedZero(direct || digits) || direct || digits;
+}
+
+function repairDroppedZero(cp) {
+  if (hermosilloCatalog[cp]) {
+    return cp;
+  }
+  if (/^\d{4}$/.test(cp)) {
+    const withZero = `${cp.slice(0, 2)}0${cp.slice(2)}`;
+    if (hermosilloCatalog[withZero]) {
+      return withZero;
+    }
+  }
+  return "";
+}
+
+function foldColony(value) {
+  return foldText(value)
+    .replace(/\bcero\b/g, "0")
+    .replace(/\buno\b/g, "1")
+    .replace(/\bdos\b/g, "2")
+    .replace(/\btres\b/g, "3")
+    .replace(/\bcuatro\b/g, "4")
+    .replace(/\bcinco\b/g, "5")
+    .replace(/\bseis\b/g, "6")
+    .replace(/\bsiete\b/g, "7")
+    .replace(/\bocho\b/g, "8")
+    .replace(/\bnueve\b/g, "9");
 }
 
 export async function checkAddressTool({
@@ -260,6 +288,13 @@ export async function checkAddressTool({
   colony
 }) {
   const cp = parseSpokenPostalCode(postalCode);
+  if (!/^\d{5}$/.test(cp)) {
+    return {
+      ok: false,
+      error: "El código debe tener 5 dígitos. Pídelo otra vez y pasa las palabras oídas, sin convertirlas a número."
+    };
+  }
+
   const colonias = hermosilloCatalog[cp];
 
   if (!colonias) {
@@ -278,9 +313,9 @@ export async function checkAddressTool({
     };
   }
 
-  const said = foldText(colony);
+  const said = foldColony(colony);
   const match = colonias.find(name => {
-    const official = foldText(name);
+    const official = foldColony(name);
     return official === said || official.includes(said) || said.includes(official);
   });
 
@@ -325,6 +360,27 @@ export async function createOrderTool({
     throw new Error(
       "El pedido no se guardó porque no está confirmado."
     );
+  }
+
+  if (callId) {
+    const { data: existing } = await supabase
+      .from("orders")
+      .select("id, total, order_number")
+      .eq("call_id", callId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existing) {
+      return {
+        success: true,
+        already_saved: true,
+        order_id: existing.id,
+        order_number: existing.order_number,
+        total: existing.total,
+        note: "Este pedido ya quedó guardado. No lo vuelvas a crear. Sigue con la despedida."
+      };
+    }
   }
 
   paymentMethod = paymentMethod || "efectivo";
