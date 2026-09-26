@@ -2,10 +2,10 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabasePublicEnv } from "./lib/supabase/env";
 
-function contentSecurityPolicy(nonce: string) {
+function contentSecurityPolicy() {
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}'`,
+    "script-src 'self' 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
@@ -34,27 +34,19 @@ function withSecurity(response: NextResponse, policy: string) {
   response.headers.set("X-DNS-Prefetch-Control", "off");
 }
 
-function nextWithNonce(request: NextRequest, requestHeaders: Headers) {
-  return NextResponse.next({
-    request: { headers: requestHeaders }
-  });
-}
-
 export async function proxy(request: NextRequest) {
-  const nonce = btoa(crypto.randomUUID());
-  const policy = contentSecurityPolicy(nonce);
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.set("x-nonce", nonce);
-  requestHeaders.set("Content-Security-Policy", policy);
+  const policy = contentSecurityPolicy();
 
   const { url, key, configured } = getSupabasePublicEnv();
   if (!configured) {
-    const response = nextWithNonce(request, requestHeaders);
+    const response = NextResponse.next();
     withSecurity(response, policy);
     return response;
   }
 
-  let response = nextWithNonce(request, requestHeaders);
+  let response = NextResponse.next({
+    request
+  });
 
   try {
     const supabase = createServerClient(url, key, {
@@ -67,7 +59,9 @@ export async function proxy(request: NextRequest) {
             request.cookies.set(name, value);
           });
 
-          response = nextWithNonce(request, requestHeaders);
+          response = NextResponse.next({
+            request
+          });
 
           cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, options);
