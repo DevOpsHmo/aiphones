@@ -2122,6 +2122,7 @@ body.login-lock {
   body:has(.orders-page) {
     height: 100%;
     overflow: hidden;
+    background: #f6f1ff;
   }
 
   .orders-page,
@@ -2130,8 +2131,8 @@ body.login-lock {
     inset: 0;
     width: 100%;
     max-width: none;
-    height: 100dvh;
-    max-height: 100dvh;
+    height: 100%;
+    max-height: none;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -2202,12 +2203,28 @@ body.login-lock {
 }
 
 @media (display-mode: standalone) {
+  html,
+  body {
+    background: #f6f1ff;
+    min-height: 100%;
+  }
+
+  .page-blobs {
+    bottom: calc(-1 * env(safe-area-inset-bottom));
+  }
+
+  .page-blob,
+  .page-blob-bottom {
+    bottom: calc(-18% - env(safe-area-inset-bottom));
+  }
+
   .orders-page,
   .orders-page.is-stats {
     padding-top: calc(env(safe-area-inset-top) + 28px);
     padding-right: max(14px, env(safe-area-inset-right));
     padding-bottom: 0;
     padding-left: max(14px, env(safe-area-inset-left));
+    background: #f6f1ff;
   }
 
   .login-screen {
