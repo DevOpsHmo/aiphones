@@ -145,13 +145,13 @@ app.post(
           status: "overflow"
         });
 
-        const overflow =
-          normalizePhone(
-            business.overflow_phone
-          ) ||
-          normalizePhone(
-            business.phone
-          );
+        const overflowDigits = String(
+          business.overflow_phone || business.phone || ""
+        ).replace(/\D/g, "");
+        const overflow = overflowDigits.length === 10
+          ? `+52${overflowDigits}`
+          : normalizePhone(business.overflow_phone) ||
+            normalizePhone(business.phone);
 
         const response =
           new twilio.twiml.VoiceResponse();

@@ -778,6 +778,40 @@ export async function updateLastOrderTool({
   };
 }
 
+export async function transferToHumanTool(callSid, businessId) {
+  if (!callSid) {
+    return { success: false };
+  }
+
+  const { data, error } = await supabase
+    .from("businesses")
+    .select("overflow_phone")
+    .eq("id", businessId)
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  const digits = String(data?.overflow_phone || "").replace(/\D/g, "");
+  const overflow = digits.length === 10 ? `+52${digits}` : normalizePhone(data?.overflow_phone);
+
+  if (!overflow) {
+    return { success: false, error: "No hay número de desborde." };
+  }
+
+  await new Promise(resolve => setTimeout(resolve, 4000));
+
+  const response = new twilio.twiml.VoiceResponse();
+  response.dial({ timeout: 30 }, overflow);
+
+  await twilio(config.twilioAccountSid, config.twilioAuthToken)
+    .calls(callSid)
+    .update({ twiml: response.toString() });
+
+  return { success: true };
+}
+
 export async function endCallTool(callSid) {
   if (!callSid) {
     return { success: false };
