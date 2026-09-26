@@ -2,14 +2,26 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabasePublicEnv } from "./lib/supabase/env";
 
-function contentSecurityPolicy() {
+function supabaseConnectSources(supabaseUrl: string) {
+  try {
+    const host = new URL(supabaseUrl).host;
+    if (!host.endsWith(".supabase.co")) {
+      return "";
+    }
+    return ` https://${host} wss://${host}`;
+  } catch {
+    return "";
+  }
+}
+
+function contentSecurityPolicy(supabaseUrl: string) {
   return [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+    `connect-src 'self'${supabaseConnectSources(supabaseUrl)}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -32,12 +44,13 @@ function withSecurity(response: NextResponse, policy: string) {
     "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
   );
   response.headers.set("X-DNS-Prefetch-Control", "off");
+  response.headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  response.headers.set("Cross-Origin-Resource-Policy", "same-origin");
 }
 
 export async function proxy(request: NextRequest) {
-  const policy = contentSecurityPolicy();
-
   const { url, key, configured } = getSupabasePublicEnv();
+  const policy = contentSecurityPolicy(url);
   if (!configured) {
     const response = NextResponse.next();
     withSecurity(response, policy);
