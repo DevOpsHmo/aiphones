@@ -103,7 +103,7 @@ export default function LoginPage() {
         onSubmit={login}
         onTouchMove={event => event.stopPropagation()}
       >
-        <h1>AI-Phone</h1>
+        <h1>AI-Phones</h1>
         <p>Iniciar sesión</p>
 
         <input
