@@ -50,5 +50,5 @@ export const config = {
   validateTwilioSignature:
     process.env.VALIDATE_TWILIO_SIGNATURE === "true",
 
-  maxCallSeconds: 180
+  maxCallSeconds: 300
 };

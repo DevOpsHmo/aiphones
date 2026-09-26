@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "fs";
+import { readFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import twilio from "twilio";
@@ -20,41 +20,7 @@ function loadHermosilloCatalog() {
 loadHermosilloCatalog();
 
 export async function refreshHermosilloCatalog() {
-  try {
-    const response = await fetch(
-      "https://postali.app/api/v1/mx/municipio/sonora/hermosillo"
-    );
-
-    if (!response.ok) {
-      return loadHermosilloCatalog();
-    }
-
-    const data = await response.json();
-
-    if (data.truncated || !Array.isArray(data.colonias)) {
-      return loadHermosilloCatalog();
-    }
-
-    const next = {};
-
-    for (const colonia of data.colonias) {
-      if (!next[colonia.cp]) {
-        next[colonia.cp] = [];
-      }
-
-      next[colonia.cp].push(colonia.nombre);
-    }
-
-    writeFileSync(catalogPath, JSON.stringify(next));
-    hermosilloCatalog = next;
-    return next;
-  } catch (error) {
-    console.error(
-      "Postali no respondió, se usa la lista local:",
-      error.message
-    );
-    return loadHermosilloCatalog();
-  }
+  return loadHermosilloCatalog();
 }
 
 function foldText(value) {
@@ -192,35 +158,17 @@ const SPANISH_NUMBERS = {
   ciento: 100
 };
 
-export function parseSpokenPostalCode(value) {
-  const digits = String(value || "").replace(/\D/g, "");
-
-  if (hermosilloCatalog[digits]) {
-    return digits;
-  }
-
-  const tokens = foldText(value)
-    .replace(/\btrescientos\b/g, "tres ciento")
-    .split(" ")
-    .filter(token => token && token !== "y");
-
+function postalChunks(atoms) {
   const groups = [];
   let current = null;
 
-  for (const token of tokens) {
-    if (!(token in SPANISH_NUMBERS)) {
-      continue;
-    }
-
-    const number = SPANISH_NUMBERS[token];
-
+  for (const number of atoms) {
     if (current === null) {
       current = number;
     } else if (number >= 100) {
       if (current < 100) {
         groups.push(current);
       }
-
       current = number;
     } else if (current >= 100 && number < 100) {
       current += number;
@@ -236,17 +184,74 @@ export function parseSpokenPostalCode(value) {
     groups.push(current);
   }
 
-  const spoken = groups.map(number => String(number)).join("");
+  return groups;
+}
 
-  if (hermosilloCatalog[spoken]) {
+function fiveDigit(candidate) {
+  const cp = String(candidate || "");
+  if (!/^\d{5}$/.test(cp)) {
+    return "";
+  }
+  return cp;
+}
+
+export function parseSpokenPostalCode(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  const direct = fiveDigit(digits);
+  if (direct && hermosilloCatalog[direct]) {
+    return direct;
+  }
+
+  const thousandDigits = digits.match(/^(\d{2})000(\d{3})$/);
+  if (thousandDigits) {
+    const cp = fiveDigit(thousandDigits[1] + thousandDigits[2]);
+    if (cp) {
+      return cp;
+    }
+  }
+
+  const tokens = foldText(value)
+    .replace(/\btrescientos\b/g, "tres ciento")
+    .replace(/\bcuatrocientos\b/g, "cuatro ciento")
+    .replace(/\bquinientos\b/g, "cinco ciento")
+    .replace(/\bseiscientos\b/g, "seis ciento")
+    .replace(/\bsetecientos\b/g, "siete ciento")
+    .replace(/\bochocientos\b/g, "ocho ciento")
+    .replace(/\bnovecientos\b/g, "nueve ciento")
+    .split(" ")
+    .filter(token => token && token !== "y");
+
+  const atoms = [];
+  let milAt = -1;
+
+  for (const token of tokens) {
+    if (token === "mil" || token === "miles") {
+      milAt = atoms.length;
+      continue;
+    }
+    if (token in SPANISH_NUMBERS) {
+      atoms.push(SPANISH_NUMBERS[token]);
+    } else if (/^\d+$/.test(token)) {
+      atoms.push(Number(token));
+    }
+  }
+
+  if (milAt > 0) {
+    const prefix = Number(postalChunks(atoms.slice(0, milAt)).join(""));
+    const restChunks = postalChunks(atoms.slice(milAt));
+    const rest = restChunks.length ? Number(restChunks.join("")) : 0;
+    const fromThousands = fiveDigit(prefix * 1000 + rest);
+    if (fromThousands) {
+      return fromThousands;
+    }
+  }
+
+  const spoken = fiveDigit(postalChunks(atoms).map(number => String(number)).join(""));
+  if (spoken) {
     return spoken;
   }
 
-  if (digits.length === 5) {
-    return digits;
-  }
-
-  return spoken || digits;
+  return direct || digits;
 }
 
 export async function checkAddressTool({

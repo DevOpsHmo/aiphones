@@ -135,7 +135,7 @@ app.post(
         );
 
       const limitSeconds =
-        (business.monthly_minute_limit || 999) * 60;
+        (business.monthly_minute_limit || 1000) * 60;
 
       if (usedSeconds >= limitSeconds) {
         await createCall({
@@ -253,6 +253,7 @@ wss.on(
     let realtime = null;
     let finalized = false;
     let limitTimer = null;
+    let warningTimer = null;
 
     const client = twilio(
       config.twilioAccountSid,
@@ -324,11 +325,15 @@ wss.on(
                 })
                 .catch(error => {
                   console.error(
-                    "No se pudo cortar la llamada a los 3 min:",
+                    "No se pudo cortar la llamada a los 5 min:",
                     error.message
                   );
                 });
             }, config.maxCallSeconds * 1000);
+
+            warningTimer = setTimeout(() => {
+              realtime?.warnTimeUp?.();
+            }, (config.maxCallSeconds - 30) * 1000);
 
             let previousTranscript = "";
             let knownName = "";
@@ -461,6 +466,11 @@ wss.on(
       if (limitTimer) {
         clearTimeout(limitTimer);
         limitTimer = null;
+      }
+
+      if (warningTimer) {
+        clearTimeout(warningTimer);
+        warningTimer = null;
       }
 
       try {

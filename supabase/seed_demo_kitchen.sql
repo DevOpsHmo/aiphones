@@ -30,7 +30,7 @@ begin
   update public.businesses
   set
     name = 'Pizzería Hermosillo',
-    monthly_minute_limit = coalesce(monthly_minute_limit, 999),
+    monthly_minute_limit = coalesce(monthly_minute_limit, 1000),
     minute_warning = coalesce(minute_warning, 800),
     minutes_reset_at = coalesce(minutes_reset_at, '2026-10-31')
   where id = bid;

@@ -3,7 +3,7 @@
 alter table public.businesses
   add column if not exists twilio_phone text,
   add column if not exists overflow_phone text,
-  add column if not exists monthly_minute_limit integer not null default 999,
+  add column if not exists monthly_minute_limit integer not null default 1000,
   add column if not exists minute_warning integer not null default 800;
 
 create unique index if not exists businesses_twilio_phone_idx
