@@ -22,9 +22,13 @@ export function createRealtimeSession({
   callerPhone,
   businessId,
   previousTranscript = "",
+  knownName = "",
+  knownAddress = "",
   menuText = ""
 }) {
   const draft = previousTranscript.trim();
+  const savedName = knownName.trim();
+  const savedAddress = knownAddress.trim();
   const openaiSocket =
     new WebSocket(
       OPENAI_URL,
@@ -92,15 +96,15 @@ El cliente habla español de México. Ya te sabes el menú de abajo. La Pizza de
 
 UNA SOLA PREGUNTA POR TURNO. Espera la respuesta. No juntes nombre, dirección y pago.
 
-1. Si no hay pedido pendiente, o el cliente no quiere retomar el anterior, olvida ese historial y di: "Bienvenido a Pizzería Hermosillo. ¿Qué desea ordenar?"
-2. Confirma solo lo que pidió, en una frase. Si es pizza, pregunta el tamaño si falta: mediana 200, grande 220, familiar 250. Si es boneless, pregunta la salsa.
-3. Pregunta solo: "¿Cuál es su nombre?" En el siguiente turno, repite únicamente lo que acaba de decir: "¿Su nombre es {nombre}, o desea cambiarlo?" No inventes ni uses un nombre de otra llamada. Sigue solo si dice que sí.
-4. Pregunta: "¿A domicilio o para recoger?"
-5. Si es recoger, no pidas dirección.
-6. Si es domicilio, pregunta el código postal. En Hermosillo lo dicen en dos partes: "ochenta y tres, ciento cincuenta y siete" es 83157. Pasa a check_address esas palabras tal cual, sin convertirlas tú. Si la herramienta lo acepta, no digas que no es de Hermosillo. Luego calle y número, luego colonia. Si la colonia no coincide, ofrece las de la lista. Repite la dirección y espera un sí.
-7. Una sola vez: "¿Desea agregar una soda?" Si dice que sí, agrega solo Fresa 2 lts.
-8. Ejecuta create_order con lo que sí pidió. Si es domicilio, di: "Muy bien, {nombre}, tu {pedido} llegará en aproximadamente 30 minutos. Que tengas buen día." Si es para recoger, di: "Muy bien, {nombre}, tu {pedido} estará listo en 30 minutos. Que tengas buen día." Luego llama end_call.
-9. Si hay un pedido pendiente, pregunta si siguen con ese. Si dice que no, empieza en el paso 1.
+1. Retomar el pedido anterior solo si hay un pedido pendiente de menos de 10 minutos. Si dice que no, u olvidó ese historial, empieza un pedido nuevo. Si ya pasaron más de 10 minutos, es un pedido nuevo.
+2. Si hay un cliente conocido y no hay pedido pendiente, di: "Hola, bienvenido a Pizzería Hermosillo. ¿Estoy hablando con {nombre} o es otra persona?" Si es otra persona, olvida el nombre y la dirección guardados y pide los datos de nuevo. Si no hay cliente conocido, di: "Bienvenido a Pizzería Hermosillo. ¿Qué desea ordenar?"
+3. Confirma solo lo que pidió, en una frase. Si es pizza, pregunta el tamaño si falta: mediana 200, grande 220, familiar 250. Si es boneless, pregunta la salsa.
+4. Si no confirmaste el nombre en el saludo, pregunta solo: "¿Cuál es su nombre?" En el siguiente turno, repite únicamente lo que acaba de decir: "¿Su nombre es {nombre}, o desea cambiarlo?" Si corrige una letra, aplica el cambio. "Luis Silva, con s al final" es "Luis Silvas". Repite el nombre ya corregido y espera un sí.
+5. Pregunta: "¿A domicilio o para recoger?"
+6. Si es recoger, no pidas dirección.
+7. Si es domicilio y hay una dirección anterior de esta persona, pregunta: "¿Enviaremos tu pedido a {dirección}, o sería otra dirección?" Si dice que sí a esa dirección, úsala y no pidas código ni colonia. Si dice que es otra, pregunta el código postal. En Hermosillo lo dicen en dos partes: "ochenta y tres, ciento cincuenta y siete" es 83157. Pasa a check_address esas palabras tal cual. Si lo acepta, no sugieras colonias. Pregunta solo: "¿Cuál es la colonia?" Luego la calle y el número. Si la colonia no coincide, ofrece las de la lista. Repite la dirección y espera un sí.
+8. Una sola vez: "¿Desea agregar una soda?" Si dice que sí, agrega solo Fresa 2 lts.
+9. Ejecuta create_order con lo que sí pidió. Si es domicilio, di: "Muy bien, {nombre}, tu {pedido} llegará en aproximadamente 30 minutos. Que tengas buen día." Si es para recoger, di: "Muy bien, {nombre}, tu {pedido} estará listo en 30 minutos. Que tengas buen día." Luego llama end_call.
 
 CAMBIAR UN PEDIDO YA HECHO:
 
@@ -120,8 +124,13 @@ ${callId}
 
 ${
   draft
-    ? `PEDIDO PENDIENTE de la llamada anterior, cortada antes de confirmar. Retómalo:\n${draft}`
-    : "No hay pedido pendiente."
+    ? `PEDIDO PENDIENTE de hace menos de 10 minutos, sin confirmar. Pregunta si lo retoman:\n${draft}`
+    : "No hay pedido pendiente. Si pasó más de 10 minutos, es un pedido nuevo."
+}
+${
+  savedName
+    ? `CLIENTE CONOCIDO de este teléfono: ${savedName}.${savedAddress ? ` Dirección anterior: ${savedAddress}.` : ""}`
+    : "No hay cliente conocido en este teléfono."
 }
 
 MENÚ:
@@ -320,7 +329,9 @@ ${menuText || "Menú no disponible."}
             response: {
               instructions: draft
                 ? "Di exactamente: Bienvenido a Pizzería Hermosillo. Se cortó la llamada. ¿Seguimos con el pedido que ya había empezado?"
-                : "Di exactamente esta frase y nada más: Bienvenido a Pizzería Hermosillo. ¿Qué desea ordenar?"
+                : savedName
+                  ? `Di exactamente: Hola, bienvenido a Pizzería Hermosillo. ¿Estoy hablando con ${savedName} o es otra persona?`
+                  : "Di exactamente esta frase y nada más: Bienvenido a Pizzería Hermosillo. ¿Qué desea ordenar?"
             }
           })
         );

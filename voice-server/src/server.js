@@ -14,6 +14,7 @@ import {
 import {
   createCall,
   finishCall,
+  findKnownCaller,
   findUnfinishedCall,
   getBusinessByTwilioPhone,
   getMonthUsageSeconds,
@@ -330,6 +331,8 @@ wss.on(
             }, config.maxCallSeconds * 1000);
 
             let previousTranscript = "";
+            let knownName = "";
+            let knownAddress = "";
             let menuText = "";
 
             try {
@@ -338,6 +341,20 @@ wss.on(
             } catch (error) {
               console.error(
                 "No se pudo cargar el menú:",
+                error.message
+              );
+            }
+
+            try {
+              const known = await findKnownCaller({
+                businessId,
+                callerPhone
+              });
+              knownName = known?.name || "";
+              knownAddress = known?.address || "";
+            } catch (error) {
+              console.error(
+                "No se pudo buscar al cliente conocido:",
                 error.message
               );
             }
@@ -367,6 +384,8 @@ wss.on(
                 callerPhone,
                 businessId,
                 previousTranscript,
+                knownName,
+                knownAddress,
                 menuText
               });
 

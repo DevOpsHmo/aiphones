@@ -268,9 +268,8 @@ export async function checkAddressTool({
     return {
       ok: true,
       postal_code_valid: true,
-      colonias,
       address: `C.P. ${cp}, Hermosillo, Sonora`,
-      note: "El código postal es de Hermosillo. Falta la colonia."
+      note: "El código postal es de Hermosillo. Pregunta solo cuál es la colonia. No menciones ni sugieras colonias."
     };
   }
 

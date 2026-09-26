@@ -123,6 +123,39 @@ export async function getMonthUsageSeconds(businessId) {
   return seconds;
 }
 
+export async function findKnownCaller({
+  businessId,
+  callerPhone
+}) {
+  const phone = normalizePhone(callerPhone);
+
+  if (!businessId || !phone) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("customers")
+    .select("name, address, created_at")
+    .eq("business_id", businessId)
+    .eq("phone", phone)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data?.name) {
+    return null;
+  }
+
+  return {
+    name: data.name,
+    address: data.address || ""
+  };
+}
+
 export async function findUnfinishedCall({
   businessId,
   callerPhone,
@@ -135,7 +168,7 @@ export async function findUnfinishedCall({
   }
 
   const since = new Date(
-    Date.now() - 2 * 60 * 60 * 1000
+    Date.now() - 10 * 60 * 1000
   ).toISOString();
 
   const { data: calls, error } = await supabase

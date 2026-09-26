@@ -1440,25 +1440,30 @@ export default function DashboardPage() {
   const newOrderIds = orders
     .filter(order => order.status === "new" && !order.deleted_at)
     .map(order => order.id)
+    .sort()
     .join(",");
 
   useEffect(() => {
-    if (!newOrderIds) {
+    if (!newOrderIds || typeof window === "undefined") {
+      return;
+    }
+
+    const storageKey = "announced-new-orders";
+    const announced = new Set(
+      JSON.parse(window.localStorage.getItem(storageKey) || "[]") as string[]
+    );
+    const unseen = newOrderIds.split(",").filter(id => id && !announced.has(id));
+
+    if (!unseen.length) {
       return;
     }
 
     playDoorbell();
-
-    function onVisible() {
-      if (document.visibilityState === "visible") {
-        playDoorbell();
-      }
-    }
-
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisible);
-    };
+    unseen.forEach(id => announced.add(id));
+    window.localStorage.setItem(
+      storageKey,
+      JSON.stringify([...announced].slice(-200))
+    );
   }, [newOrderIds]);
 
   useEffect(() => {
