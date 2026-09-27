@@ -176,6 +176,79 @@ const DRINK_SIZES = [
 
 const PIZZA_SIZES = ["mediana", "grande", "familiar"] as const;
 
+function MenuSelect({
+  name,
+  value,
+  options,
+  onChange
+}: {
+  name: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const current = options.find(option => option.value === value);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    function close(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className={`menu-select${open ? " is-open" : ""}`} ref={rootRef}>
+      <input type="hidden" name={name} value={value} />
+      <button
+        type="button"
+        className="menu-select-trigger"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        onClick={() => setOpen(currentOpen => !currentOpen)}
+      >
+        {current?.label || "Elegir"}
+      </button>
+      {open && (
+        <ul className="menu-select-menu" role="listbox">
+          {options.map(option => (
+            <li key={option.value}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={option.value === value}
+                className={option.value === value ? "is-active" : ""}
+                onClick={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                }}
+              >
+                {option.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function Switch({
   on,
   label,
@@ -656,16 +729,17 @@ export default function MenuBoard({
       <section className="menu-panel">
         <h2>Agregar</h2>
         <form className="menu-form" onSubmit={addProduct}>
-          <select
+          <MenuSelect
             name="product-category"
             value={category}
-            onChange={event => setCategory(event.target.value as typeof category)}
-          >
-            <option value="Pizzas">Pizza</option>
-            <option value="Bebidas">Bebida</option>
-            <option value="Ingrediente">Ingrediente</option>
-            <option value="Promociones">Promoción</option>
-          </select>
+            onChange={next => setCategory(next as typeof category)}
+            options={[
+              { value: "Pizzas", label: "Pizza" },
+              { value: "Bebidas", label: "Bebida" },
+              { value: "Ingrediente", label: "Ingrediente" },
+              { value: "Promociones", label: "Promoción" }
+            ]}
+          />
           {category !== "Promociones" && (
             <input
               name="product-name"
@@ -680,69 +754,71 @@ export default function MenuBoard({
           )}
           {category === "Bebidas" && (
             <>
-              <select name="drink-volume" value={volume} onChange={event => setVolume(event.target.value)}>
-                {DRINK_SIZES.map(size => (
-                  <option key={size} value={size}>
-                    {size}
-                  </option>
-                ))}
-              </select>
+              <MenuSelect
+                name="drink-volume"
+                value={volume}
+                onChange={setVolume}
+                options={DRINK_SIZES.map(size => ({ value: size, label: size }))}
+              />
               <PriceStep name="product-price" value={price} onChange={setPrice} />
             </>
           )}
           {category === "Promociones" && (
             <>
-              <select
+              <MenuSelect
                 name="promo-kind"
                 value={promoKind}
-                onChange={event => setPromoKind(event.target.value as "pizzas" | "combo")}
-              >
-                <option value="pizzas">Varias pizzas</option>
-                <option value="combo">Pizza y bebida</option>
-              </select>
+                onChange={next => setPromoKind(next as "pizzas" | "combo")}
+                options={[
+                  { value: "pizzas", label: "Varias pizzas" },
+                  { value: "combo", label: "Pizza y bebida" }
+                ]}
+              />
               {promoKind === "pizzas" ? (
                 <div className="menu-split">
-                  <select name="promo-count" value={promoCount} onChange={event => setPromoCount(event.target.value)}>
-                    <option value="2">2</option>
-                    <option value="3">3</option>
-                    <option value="4">4</option>
-                  </select>
-                  <select
+                  <MenuSelect
+                    name="promo-count"
+                    value={promoCount}
+                    onChange={setPromoCount}
+                    options={[
+                      { value: "2", label: "2" },
+                      { value: "3", label: "3" },
+                      { value: "4", label: "4" }
+                    ]}
+                  />
+                  <MenuSelect
                     name="promo-size"
                     value={promoSize}
-                    onChange={event => setPromoSize(event.target.value as (typeof PIZZA_SIZES)[number])}
-                  >
-                    {PIZZA_SIZES.map(size => (
-                      <option key={size} value={size}>
-                        {size.charAt(0).toUpperCase() + size.slice(1)}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={next => setPromoSize(next as (typeof PIZZA_SIZES)[number])}
+                    options={PIZZA_SIZES.map(size => ({
+                      value: size,
+                      label: size.charAt(0).toUpperCase() + size.slice(1)
+                    }))}
+                  />
                 </div>
               ) : (
-                <select
+                <MenuSelect
                   name="promo-size"
                   value={promoSize}
-                  onChange={event => setPromoSize(event.target.value as (typeof PIZZA_SIZES)[number])}
-                >
-                  {PIZZA_SIZES.map(size => (
-                    <option key={size} value={size}>
-                      {size.charAt(0).toUpperCase() + size.slice(1)}
-                    </option>
-                  ))}
-                </select>
+                  onChange={next => setPromoSize(next as (typeof PIZZA_SIZES)[number])}
+                  options={PIZZA_SIZES.map(size => ({
+                    value: size,
+                    label: size.charAt(0).toUpperCase() + size.slice(1)
+                  }))}
+                />
               )}
               {promoKind === "combo" && (
-                <select name="promo-drink" value={comboDrink} onChange={event => setComboDrink(event.target.value)}>
-                  {products
+                <MenuSelect
+                  name="promo-drink"
+                  value={comboDrink}
+                  onChange={setComboDrink}
+                  options={products
                     .filter(item => item.category === "Bebidas")
-                    .map(item => (
-                      <option key={item.id} value={item.id}>
-                        {item.name}
-                        {item.description ? ` ${item.description}` : ""}
-                      </option>
-                    ))}
-                </select>
+                    .map(item => ({
+                      value: item.id,
+                      label: `${item.name}${item.description ? ` ${item.description}` : ""}`
+                    }))}
+                />
               )}
               <PriceStep name="product-price" value={price} onChange={setPrice} />
             </>
