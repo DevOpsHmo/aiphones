@@ -59,6 +59,46 @@ function isPizza(product) {
   );
 }
 
+function mentionsPizzaSize(name) {
+  return /\b(?:medianas?|grandes?|familiares?|chicas?|individuales?|\d+\s*pulgadas|pulgadas)\b/i.test(name || "");
+}
+
+function pizzaFlavor(name) {
+  return String(name || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/peperoni/g, "pepperoni")
+    .replace(/\b(?:medianas?|grandes?|familiares?|chicas?|individuales?|\d+\s*pulgadas|pulgadas|pizza|de)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function withoutSizedPizzaCopies(products) {
+  const chosen = new Map();
+  const others = [];
+  for (const product of products) {
+    if (!isPizza(product)) {
+      others.push(product);
+      continue;
+    }
+    const key = pizzaFlavor(product.name);
+    const current = chosen.get(key);
+    if (!current) {
+      chosen.set(key, product);
+      continue;
+    }
+    const currentSized = mentionsPizzaSize(current.name);
+    const nextSized = mentionsPizzaSize(product.name);
+    if (currentSized && !nextSized) {
+      chosen.set(key, product);
+    } else if (currentSized === nextSized && product.name.length < current.name.length) {
+      chosen.set(key, product);
+    }
+  }
+  return [...others, ...chosen.values()];
+}
+
 function needsSauce(product) {
   return /boneless/i.test(product.name || "");
 }
@@ -165,7 +205,9 @@ export async function getMenuTool(businessId) {
     grande: menuPrices.grande,
     familiar: menuPrices.familiar
   };
-  const products = (data || []).filter(product => blockedIngredients(product, unavailable).length === 0);
+  const products = withoutSizedPizzaCopies(data || []).filter(
+    product => blockedIngredients(product, unavailable).length === 0
+  );
 
   return {
     pizza_sizes: sizePrices,
@@ -174,6 +216,12 @@ export async function getMenuTool(businessId) {
     unavailableIngredients: [...unavailable],
     products: products.map(product => ({
       ...product,
+      name: isPizza(product)
+        ? String(product.name)
+            .replace(/\b(?:medianas?|grandes?|familiares?|chicas?|individuales?|\d+\s*pulgadas|pulgadas)\b/gi, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+        : product.name,
       price: isPizza(product) ? null : Number(product.price),
       sizes: isPizza(product) ? sizePrices : undefined,
       sauce_options: needsSauce(product)
