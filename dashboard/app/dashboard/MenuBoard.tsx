@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
 import { foldIngredient, ingredientLabel, ingredientsFromText } from "../../lib/menu-ingredients";
 
@@ -28,17 +28,59 @@ function PriceStep({
   value: string;
   onChange: (next: string) => void;
 }) {
-  const amount = Math.max(0, Number(value) || 0);
+  const [text, setText] = useState(value);
+  const editing = useRef(false);
+
+  useEffect(() => {
+    if (!editing.current) {
+      setText(String(Math.max(0, Number(value) || 0)));
+    }
+  }, [value]);
+
+  function commit(next: string) {
+    const clean = String(Math.max(0, Math.floor(Number(next) || 0)));
+    setText(clean);
+    onChange(clean);
+  }
+
+  const shown = Math.max(0, Number(text) || 0);
+
   return (
     <div className="price-step">
-      <button type="button" aria-label="Bajar precio" onClick={() => onChange(String(Math.max(0, amount - 1)))}>
+      <button type="button" aria-label="Bajar precio" onClick={() => commit(String(Math.max(0, shown - 1)))}>
         −
       </button>
-      <span>${amount}</span>
-      <button type="button" aria-label="Subir precio" onClick={() => onChange(String(amount + 1))}>
+      <span className="price-step-amount">
+        $
+        <input
+          aria-label="Precio"
+          inputMode="numeric"
+          value={text}
+          onFocus={() => {
+            editing.current = true;
+          }}
+          onChange={event => setText(event.target.value.replace(/\D/g, ""))}
+          onBlur={() => {
+            editing.current = false;
+            commit(text);
+          }}
+        />
+      </span>
+      <button type="button" aria-label="Subir precio" onClick={() => commit(String(shown + 1))}>
         +
       </button>
     </div>
+  );
+}
+
+function PencilButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button type="button" className="menu-edit" aria-label={label} onClick={onClick}>
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3z" />
+        <path d="M13.5 6.5l3 3" />
+      </svg>
+    </button>
   );
 }
 
@@ -46,7 +88,11 @@ function TrashButton({ label, onClick }: { label: string; onClick: () => void })
   return (
     <button type="button" className="menu-delete" aria-label={label} onClick={onClick}>
       <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9z" />
+        <path d="M4 7h16" />
+        <path d="M9.5 7V5.2A1.2 1.2 0 0 1 10.7 4h2.6a1.2 1.2 0 0 1 1.2 1.2V7" />
+        <path d="M7.2 7.5 8 19.2A1.5 1.5 0 0 0 9.5 20.5h5a1.5 1.5 0 0 0 1.5-1.3l.8-11.7" />
+        <path d="M10 11v6" />
+        <path d="M14 11v6" />
       </svg>
     </button>
   );
@@ -109,6 +155,20 @@ function IngredientPicker({
   );
 }
 
+const DRINK_SIZES = [
+  "235 ml",
+  "355 ml",
+  "500 ml",
+  "600 ml",
+  "1 litro",
+  "1.5 litros",
+  "2 litros",
+  "2.5 litros",
+  "3 litros"
+];
+
+const PIZZA_SIZES = ["mediana", "grande", "familiar"] as const;
+
 function Switch({
   on,
   label,
@@ -142,8 +202,21 @@ export default function MenuBoard() {
   const [category, setCategory] = useState<"Pizzas" | "Bebidas" | "Ingrediente" | "Promociones">("Pizzas");
   const [price, setPrice] = useState("30");
   const [picked, setPicked] = useState<string[]>([]);
+  const [volume, setVolume] = useState(DRINK_SIZES[3]);
+  const [promoKind, setPromoKind] = useState<"pizzas" | "combo">("pizzas");
+  const [promoCount, setPromoCount] = useState("2");
+  const [promoSize, setPromoSize] = useState<(typeof PIZZA_SIZES)[number]>("grande");
+  const [comboDrink, setComboDrink] = useState("");
   const [saving, setSaving] = useState(false);
   const [savingPrices, setSavingPrices] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<
+    { kind: "product"; item: ProductRow } | { kind: "ingredient"; item: IngredientRow } | null
+  >(null);
+  const [editing, setEditing] = useState<
+    | { kind: "product"; id: string; name: string; description: string; price: string; pizza: boolean }
+    | { kind: "ingredient"; id: string; name: string }
+    | null
+  >(null);
   const [sizePrices, setSizePrices] = useState({
     mediana: "200",
     grande: "220",
@@ -252,7 +325,10 @@ export default function MenuBoard() {
 
   async function addProduct(event: React.FormEvent) {
     event.preventDefault();
-    if (!businessId || !name.trim()) {
+    if (!businessId) {
+      return;
+    }
+    if (category !== "Promociones" && !name.trim()) {
       return;
     }
     setSaving(true);
@@ -272,12 +348,36 @@ export default function MenuBoard() {
       void load();
       return;
     }
-    const pizzaDescription = picked.map(ingredientLabel).join(", ");
-    const nextDescription = category === "Pizzas" ? pizzaDescription : description.trim();
+    const drinks = products.filter(item => item.category === "Bebidas");
+    const drink = drinks.find(item => item.id === comboDrink) || drinks[0];
+    let nextName = name.trim();
+    let nextDescription = description.trim();
+    if (category === "Pizzas") {
+      nextDescription = picked.map(ingredientLabel).join(", ");
+    }
+    if (category === "Bebidas") {
+      nextDescription = volume;
+    }
+    const sizePlural = promoSize === "familiar" ? "familiares" : `${promoSize}s`;
+    if (category === "Promociones" && promoKind === "pizzas") {
+      nextName = `${promoCount} ${sizePlural}`;
+      nextDescription = `${promoCount} pizzas ${sizePlural}`;
+    }
+    if (category === "Promociones" && promoKind === "combo") {
+      if (!drink) {
+        setSaving(false);
+        setError("Agrega una bebida antes de armar el combo.");
+        return;
+      }
+      const sizeLabel = promoSize.charAt(0).toUpperCase() + promoSize.slice(1);
+      const drinkLabel = `${drink.name}${drink.description ? ` ${drink.description}` : ""}`;
+      nextName = `${sizeLabel} y ${drinkLabel}`;
+      nextDescription = `1 pizza ${promoSize} y ${drinkLabel}`;
+    }
     const nextPrice = category === "Pizzas" ? 0 : Number(price);
     const { error: insertError } = await supabase.from("products").insert({
       business_id: businessId,
-      name: name.trim(),
+      name: nextName,
       description: nextDescription,
       category,
       price: nextPrice,
@@ -327,7 +427,60 @@ export default function MenuBoard() {
     setIngredients(current => current.filter(item => item.id !== ingredient.id));
   }
 
+  async function saveEdit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!editing || !editing.name.trim()) {
+      return;
+    }
+    const supabase = createClient();
+    if (editing.kind === "ingredient") {
+      const nextName = foldIngredient(editing.name);
+      const { error: updateError } = await supabase
+        .from("menu_ingredients")
+        .update({ name: nextName })
+        .eq("id", editing.id);
+      if (updateError) {
+        setError(updateError.message);
+        return;
+      }
+      setIngredients(current =>
+        current.map(item => (item.id === editing.id ? { ...item, name: nextName } : item))
+      );
+      setEditing(null);
+      return;
+    }
+    const nextPrice = Number(editing.price);
+    const { error: updateError } = await supabase
+      .from("products")
+      .update({
+        name: editing.name.trim(),
+        description: editing.description.trim(),
+        ...(editing.pizza ? {} : { price: Number.isFinite(nextPrice) ? nextPrice : 0 })
+      })
+      .eq("id", editing.id);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    setProducts(current =>
+      current.map(item =>
+        item.id === editing.id
+          ? {
+              ...item,
+              name: editing.name.trim(),
+              description: editing.description.trim(),
+              price: editing.pizza ? item.price : Number.isFinite(nextPrice) ? nextPrice : 0
+            }
+          : item
+      )
+    );
+    setEditing(null);
+  }
+
   function isPizza(product: ProductRow) {
+    if (product.category === "Promociones") {
+      return false;
+    }
     return product.category === "Pizzas" || /^pizza\b/i.test(product.name);
   }
 
@@ -392,30 +545,32 @@ export default function MenuBoard() {
             ["extra", "Extra"],
             ["promo_pair", "Dos grandes"]
           ] as const).map(([key, label]) => (
-            <label key={key}>
-              {label}
+            <div className="price-field" key={key}>
+              <span>{label}</span>
               <PriceStep
                 value={sizePrices[key]}
                 onChange={next => setSizePrices(current => ({ ...current, [key]: next }))}
               />
-            </label>
+            </div>
           ))}
           <button type="submit" className={savingPrices ? "is-busy" : ""} disabled={savingPrices}>
+            <span className="menu-save-label">Guardar precios</span>
             {savingPrices && <span className="menu-save-spin" aria-hidden="true" />}
-            Guardar precios
           </button>
         </form>
       </section>
       <section>
         <h2>Agregar</h2>
         <form className="menu-form" onSubmit={addProduct}>
-          <input
-            name="product-name"
-            placeholder="Nombre"
-            value={name}
-            onChange={event => setName(event.target.value)}
-            required
-          />
+          {category !== "Promociones" && (
+            <input
+              name="product-name"
+              placeholder="Nombre"
+              value={name}
+              onChange={event => setName(event.target.value)}
+              required
+            />
+          )}
           <select
             name="product-category"
             value={category}
@@ -429,14 +584,58 @@ export default function MenuBoard() {
           {category === "Pizzas" && (
             <IngredientPicker ingredients={ingredients} picked={picked} onChange={setPicked} />
           )}
-          {(category === "Bebidas" || category === "Promociones") && (
+          {category === "Bebidas" && (
             <>
-              <input
-                name="product-description"
-                placeholder="Descripción"
-                value={description}
-                onChange={event => setDescription(event.target.value)}
-              />
+              <select name="drink-volume" value={volume} onChange={event => setVolume(event.target.value)}>
+                {DRINK_SIZES.map(size => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+              <PriceStep value={price} onChange={setPrice} />
+            </>
+          )}
+          {category === "Promociones" && (
+            <>
+              <select
+                name="promo-kind"
+                value={promoKind}
+                onChange={event => setPromoKind(event.target.value as "pizzas" | "combo")}
+              >
+                <option value="pizzas">Varias pizzas</option>
+                <option value="combo">Pizza y bebida</option>
+              </select>
+              {promoKind === "pizzas" && (
+                <select name="promo-count" value={promoCount} onChange={event => setPromoCount(event.target.value)}>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                </select>
+              )}
+              <select
+                name="promo-size"
+                value={promoSize}
+                onChange={event => setPromoSize(event.target.value as (typeof PIZZA_SIZES)[number])}
+              >
+                {PIZZA_SIZES.map(size => (
+                  <option key={size} value={size}>
+                    {size.charAt(0).toUpperCase() + size.slice(1)}
+                  </option>
+                ))}
+              </select>
+              {promoKind === "combo" && (
+                <select name="promo-drink" value={comboDrink} onChange={event => setComboDrink(event.target.value)}>
+                  {products
+                    .filter(item => item.category === "Bebidas")
+                    .map(item => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                        {item.description ? ` ${item.description}` : ""}
+                      </option>
+                    ))}
+                </select>
+              )}
               <PriceStep value={price} onChange={setPrice} />
             </>
           )}
@@ -455,7 +654,20 @@ export default function MenuBoard() {
             );
             const sellable = product.available && missing.length === 0;
             return (
-              <li key={product.id} className={sellable ? "" : "is-off"}>
+              <li
+                key={product.id}
+                className={sellable ? "" : "is-off"}
+                onClick={() =>
+                  setEditing({
+                    kind: "product",
+                    id: product.id,
+                    name: product.name,
+                    description: product.description || "",
+                    price: String(product.price),
+                    pizza: isPizza(product)
+                  })
+                }
+              >
                 <div>
                   <strong>{product.name}</strong>
                   <p>{product.category || "Producto"}</p>
@@ -466,14 +678,32 @@ export default function MenuBoard() {
                     </p>
                   )}
                   {!isPizza(product) && (
-                    <PriceStep
-                      value={String(product.price)}
-                      onChange={next => saveProductPrice(product, next)}
-                    />
+                    <div onClick={event => event.stopPropagation()}>
+                      <PriceStep
+                        value={String(product.price)}
+                        onChange={next => saveProductPrice(product, next)}
+                      />
+                    </div>
                   )}
                 </div>
-                <div className="menu-row-actions">
-                <TrashButton label={`Eliminar ${product.name}`} onClick={() => deleteProduct(product)} />
+                <div className="menu-row-actions" onClick={event => event.stopPropagation()}>
+                <PencilButton
+                  label={`Editar ${product.name}`}
+                  onClick={() =>
+                    setEditing({
+                      kind: "product",
+                      id: product.id,
+                      name: product.name,
+                      description: product.description || "",
+                      price: String(product.price),
+                      pizza: isPizza(product)
+                    })
+                  }
+                />
+                <TrashButton
+                  label={`Eliminar ${product.name}`}
+                  onClick={() => setPendingDelete({ kind: "product", item: product })}
+                />
                 <Switch
                   on={product.available}
                   label={product.available ? `Apagar ${product.name}` : `Prender ${product.name}`}
@@ -492,9 +722,19 @@ export default function MenuBoard() {
             <li key={ingredient.id} className={ingredient.available ? "" : "is-off"}>
               <strong>{ingredientLabel(ingredient.name)}</strong>
               <div className="menu-row-actions">
+              <PencilButton
+                label={`Editar ${ingredientLabel(ingredient.name)}`}
+                onClick={() =>
+                  setEditing({
+                    kind: "ingredient",
+                    id: ingredient.id,
+                    name: ingredientLabel(ingredient.name)
+                  })
+                }
+              />
               <TrashButton
                 label={`Eliminar ${ingredientLabel(ingredient.name)}`}
-                onClick={() => deleteIngredient(ingredient)}
+                onClick={() => setPendingDelete({ kind: "ingredient", item: ingredient })}
               />
               <Switch
                 on={ingredient.available}
@@ -510,6 +750,102 @@ export default function MenuBoard() {
           ))}
         </ul>
       </section>
+      {editing && (
+        <div className="notice-overlay" onClick={() => setEditing(null)}>
+          <form
+            className="notice-dialog menu-form"
+            role="dialog"
+            aria-label="Editar"
+            onSubmit={saveEdit}
+            onClick={event => event.stopPropagation()}
+          >
+            <h2>Editar</h2>
+            <input
+              name="edit-name"
+              value={editing.name}
+              onChange={event => setEditing({ ...editing, name: event.target.value })}
+              required
+            />
+            {editing.kind === "product" && (
+              <textarea
+                name="edit-description"
+                placeholder="Descripción"
+                rows={5}
+                value={editing.description}
+                onChange={event => setEditing({ ...editing, description: event.target.value })}
+              />
+            )}
+            {editing.kind === "product" && !editing.pizza && (
+              <PriceStep
+                value={editing.price}
+                onChange={next => setEditing(current => (current && current.kind === "product" ? { ...current, price: next } : current))}
+              />
+            )}
+            <div className="notice-actions">
+              {editing.kind === "product" && (
+                <button
+                  type="button"
+                  className="notice-btn notice-btn-danger"
+                  onClick={() => {
+                    const product = products.find(item => item.id === editing.id);
+                    if (product) {
+                      setPendingDelete({ kind: "product", item: product });
+                    }
+                  }}
+                >
+                  Eliminar
+                </button>
+              )}
+              <button type="button" className="notice-btn notice-btn-cancel" onClick={() => setEditing(null)}>
+                Cancelar
+              </button>
+              <button type="submit" className="notice-btn notice-btn-save">
+                Guardar
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+      {pendingDelete && (
+        <div className="notice-overlay" onClick={() => setPendingDelete(null)}>
+          <div
+            className="notice-dialog"
+            role="dialog"
+            aria-label="Confirmar eliminación"
+            onClick={event => event.stopPropagation()}
+          >
+            <h2>Eliminar</h2>
+            <p>
+              ¿Seguro que quieres eliminar{" "}
+              {pendingDelete.kind === "product"
+                ? pendingDelete.item.name
+                : ingredientLabel(pendingDelete.item.name)}
+              ?
+            </p>
+            <div className="notice-actions">
+              <button type="button" className="notice-btn notice-btn-cancel" onClick={() => setPendingDelete(null)}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="notice-btn notice-btn-danger"
+                onClick={() => {
+                  const pending = pendingDelete;
+                  setPendingDelete(null);
+                  setEditing(null);
+                  if (pending.kind === "product") {
+                    void deleteProduct(pending.item);
+                  } else {
+                    void deleteIngredient(pending.item);
+                  }
+                }}
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

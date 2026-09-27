@@ -50,6 +50,9 @@ const SIZE_PRICES = {
 };
 
 function isPizza(product) {
+  if (product.category === "Promociones") {
+    return false;
+  }
   return (
     product.category === "Pizzas" ||
     /^pizza\b/i.test(product.name || "")
