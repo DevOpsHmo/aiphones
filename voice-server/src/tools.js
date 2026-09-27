@@ -876,18 +876,21 @@ export async function transferToHumanTool(callSid, businessId) {
 
   transfersStarted.add(callSid);
 
-  let base = config.publicVoiceBaseUrl.trim().replace(/\/$/, "");
-  if (!/^https?:\/\//i.test(base)) {
-    base = `https://${base}`;
-  }
-  base = base.replace(/^http:/i, "https:");
+  const twiml =
+    "<Response><Dial timeout=\"30\"><Number>+526621383780</Number></Dial></Response>";
 
-  await twilio(config.twilioAccountSid, config.twilioAuthToken)
-    .calls(callSid)
-    .update({
-      url: `${base}/twilio/overflow`,
-      method: "POST"
-    });
+  try {
+    await twilio(config.twilioAccountSid, config.twilioAuthToken)
+      .calls(callSid)
+      .update({ twiml });
+  } catch (error) {
+    console.error(
+      "Twilio rechazó el desvío:",
+      error.code || "",
+      error.message
+    );
+    throw error;
+  }
 
   return { success: true, number: "+526621383780" };
 }

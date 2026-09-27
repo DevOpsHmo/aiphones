@@ -56,6 +56,15 @@ export function createRealtimeSession({
   let assistantSpeaking = false;
   const callState = { orderPlaced: false, hangupScheduled: false };
 
+  function redirectToHuman() {
+    if (openaiSocket.readyState === WebSocket.OPEN) {
+      openaiSocket.send(JSON.stringify({ type: "response.cancel" }));
+    }
+    transferToHumanTool(callSid, businessId).catch(error => {
+      console.error("No se pudo transferir:", error.message);
+    });
+  }
+
   openaiSocket.on("open", () => {
     const session = {
       type: "session.update",
@@ -430,9 +439,7 @@ ${menuText || "Menú no disponible."}
             transcript +=
               `Cliente: ${event.transcript}\n`;
             if (/\b(humano|persona|encargado|transfier)\w*/i.test(event.transcript)) {
-              transferToHumanTool(callSid, businessId).catch(error => {
-                console.error("No se pudo transferir:", error.message);
-              });
+              redirectToHuman();
             }
           }
         }
@@ -447,9 +454,7 @@ ${menuText || "Menú no disponible."}
             transcript +=
               `IA: ${event.transcript}\n`;
             if (/transfer|comunico|humano/i.test(event.transcript)) {
-              transferToHumanTool(callSid, businessId).catch(error => {
-                console.error("No se pudo transferir:", error.message);
-              });
+              redirectToHuman();
             }
             if (
               callState.orderPlaced &&
@@ -621,6 +626,9 @@ async function handleToolCall(
     }
 
     else if (event.name === "transfer_to_human") {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: "response.cancel" }));
+      }
       transferToHumanTool(callSid, businessId).catch(error => {
         console.error("No se pudo transferir:", error.message);
       });

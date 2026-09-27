@@ -23,7 +23,8 @@ import {
 import {
   formatMenuForPrompt,
   getMenuTool,
-  refreshHermosilloCatalog
+  refreshHermosilloCatalog,
+  humanTransferStarted
 } from "./tools.js";
 
 import {
@@ -325,7 +326,7 @@ wss.on(
             );
 
             limitTimer = setTimeout(() => {
-              if (!callSid) {
+              if (!callSid || humanTransferStarted(callSid)) {
                 return;
               }
 
