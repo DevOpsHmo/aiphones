@@ -1166,12 +1166,16 @@ body.login-lock {
 }
 
 .orders-minutes-row {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
 }
 
 .orders-trash-btn {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2469,9 +2473,7 @@ body.login-lock {
   }
 
   .orders-minutes-row {
-    flex-direction: column;
     align-items: flex-start;
-    gap: 8px;
   }
 
   .orders-trash-btn {
