@@ -62,8 +62,14 @@ function pizzaPrice(size) {
   return price;
 }
 
-function itemNotes(size, sauce) {
-  return [size, sauce].filter(Boolean).join(", ");
+function itemNotes(size, sauce, extra) {
+  const topping = extra === "champinones" ? "champiñones" : extra;
+  return [size, sauce, topping].filter(Boolean).join(", ");
+}
+
+export function priceWithMushrooms(size) {
+  const base = pizzaPrice(size);
+  return { base, total: base + 25 };
 }
 
 export async function getMenuTool(businessId) {
@@ -581,8 +587,13 @@ export async function createOrderTool({
       ? String(item.size).toLowerCase()
       : null;
 
+    const extra = item.extra === "champinones" ? "champinones" : null;
+
     if (isPizza(product)) {
       unitPrice = pizzaPrice(size);
+      if (extra) {
+        unitPrice += 25;
+      }
     }
 
     if (needsSauce(product)) {
@@ -606,7 +617,7 @@ export async function createOrderTool({
       quantity,
       unit_price: unitPrice,
       subtotal,
-      notes: itemNotes(size, sauce) || null
+      notes: itemNotes(size, sauce, extra) || null
     });
   }
 
@@ -741,6 +752,7 @@ export async function getLastOrderTool({
     return {
       found: true,
       order_id: order.id,
+      customer_id: order.customer_id,
       customer_name: customer?.name || "",
       address: order.address,
       items: items || []
@@ -771,12 +783,20 @@ export async function updateLastOrderTool({
   }
 
   const expected = (last.customer_name || "").trim().toLowerCase();
-  const given = (customerName || "").trim().toLowerCase();
+  const given = (customerName || "").trim();
+  let savedName = last.customer_name;
 
-  if (expected && given && expected !== given) {
-    throw new Error(
-      `El pedido está a nombre de ${last.customer_name}.`
-    );
+  if (given && expected !== given.toLowerCase()) {
+    const { error: nameError } = await supabase
+      .from("customers")
+      .update({ name: given })
+      .eq("id", last.customer_id);
+
+    if (nameError) {
+      throw nameError;
+    }
+
+    savedName = given;
   }
 
   const item = (last.items || [])[0];
@@ -856,7 +876,10 @@ export async function updateLastOrderTool({
   return {
     success: true,
     order_id: last.order_id,
-    customer_name: last.customer_name,
+    customer_name: savedName,
+    note: savedName === last.customer_name
+      ? "Pedido modificado."
+      : `El nombre quedó en ${savedName}. No reinicies el pedido. Úsalo en el cierre.`,
     item: product.name,
     notes: itemNotes(isPizza(product) ? nextSize : null, nextSauce),
     total: subtotal
