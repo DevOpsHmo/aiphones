@@ -471,7 +471,7 @@ export async function checkAddressTool({
       ok: true,
       postal_code_valid: true,
       address: `C.P. ${cp}, Hermosillo, Sonora`,
-      note: `El código es de Hermosillo. Di el código dígito por dígito: ${spellPostalCode(cp)}. Pregunta solo cuál es la colonia.`
+      note: `El código es de Hermosillo. Dilo despacio: ${spellPostalCode(cp)}. Pregunta solo cuál es la colonia.`
     };
   }
 
@@ -504,8 +504,8 @@ export async function checkAddressTool({
       .filter(Boolean)
       .join(", "),
     note: dictatedStreet
-      ? `Confirmado. Di el código dígito por dígito: ${spellPostalCode(cp)}. Colonia ${match}. Calle ${dictatedStreet}.`
-      : `Colonia ${match}. Di el código dígito por dígito: ${spellPostalCode(cp)}. Pregunta solo: ¿Calle y número? No confirmes el domicilio todavía.`
+      ? `Confirmado. Di despacio: ${match}, ${dictatedStreet}. Código ${spellPostalCode(cp)}.`
+      : `${match}, ${spellPostalCode(cp)}. Pregunta solo: ¿Cuál es la calle y el número? No confirmes el domicilio todavía.`
   };
 }
 
@@ -580,7 +580,7 @@ async function saveOrder({
     (!address?.trim() || !/\d/.test(address))
   ) {
     throw new Error(
-      "Falta la calle y el número. Pregunta solo: ¿Calle y número?"
+      "Falta la calle y el número. Pregunta solo: ¿Cuál es la calle y el número?"
     );
   }
 
@@ -998,7 +998,7 @@ export function humanTransferStarted(callSid) {
 
 export async function transferToHumanTool(callSid) {
   if (!callSid) {
-    return { success: false, spoken: "En este momento no pude comunicarte con una persona. Permíteme continuar ayudándote." };
+    return { success: false, spoken: "No pudieron tomar la llamada. Yo sigo con su pedido." };
   }
   const gate = requestTransfer(callSid);
   console.log(JSON.stringify({
@@ -1016,7 +1016,7 @@ export async function transferToHumanTool(callSid) {
     markTransferFailed(callSid);
     transfersStarted.delete(callSid);
     console.log(JSON.stringify({ event: "transfer_failed", callSid, at: new Date().toISOString(), error: "numero" }));
-    return { success: false, spoken: "En este momento no pude comunicarte con una persona. Permíteme continuar ayudándote." };
+    return { success: false, spoken: "No pudieron tomar la llamada. Yo sigo con su pedido." };
   }
   let base = config.publicVoiceBaseUrl.trim().replace(/\/$/, "");
   if (!/^https?:\/\//i.test(base)) {
@@ -1043,7 +1043,7 @@ export async function transferToHumanTool(callSid) {
       number: maskNumber(number),
       error: error.message
     }));
-    return { success: false, spoken: "En este momento no pude comunicarte con una persona. Permíteme continuar ayudándote." };
+    return { success: false, spoken: "No pudieron tomar la llamada. Yo sigo con su pedido." };
   }
   markTransferred(callSid);
   console.log(JSON.stringify({

@@ -116,7 +116,7 @@ app.post(
     } else {
       response.say(
         { language: "es-MX" },
-        "En este momento no pude comunicarte con una persona. Permíteme continuar ayudándote."
+        "No pudieron tomar la llamada. Yo sigo con su pedido."
       );
     }
     sendTwiml(res, response);

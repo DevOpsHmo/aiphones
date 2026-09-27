@@ -86,7 +86,7 @@ for (let index = 0; index < 100; index += 1) {
     assert.equal(spoken.ok, true);
     assert.equal(spoken.total, bases[size] * quantity + (extra ? 25 * quantity : 0));
     assert.match(spoken.spoken, new RegExp(`Total ${spoken.total}`));
-    assert.match(spoken.spoken, /83010/);
+    assert.match(spoken.spoken, /ocho, tres, cero, uno, cero/);
     const lied = buildConfirmation({ ...draft, claimedTotal: 1 });
     assert.equal(lied.ok, false);
     const wrongSize = buildConfirmation({

@@ -49,8 +49,10 @@ export function buildConfirmation(draft) {
       return { ok: false, error: "El precio no coincide con el servidor" };
     }
     total += priced.subtotal;
-    const topping = priced.extra === "champinones" ? " con champiñones" : "";
-    lines.push(`${priced.quantity} pizza ${priced.size}${topping} ${priced.subtotal}`);
+    const extras = priced.extras
+      .map(item => (item.nombre === "champinones" ? "champiñones" : item.nombre))
+      .join(" y ");
+    lines.push(`${priced.quantity} pizza ${priced.size}${extras ? ` con ${extras}` : ""} ${priced.subtotal}`);
   }
   if (!lines.length) {
     return { ok: false, error: "Pedido incompleto" };
@@ -66,8 +68,19 @@ export function buildConfirmation(draft) {
   if (draft.claimedTotal != null && Number(draft.claimedTotal) !== total) {
     return { ok: false, error: "El total dicho no es el del servidor" };
   }
+  const digits = ["cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve"];
+  const spokenCode = (draft.postalCode || "")
+    .split("")
+    .map(digit => digits[Number(digit)] || digit)
+    .join(", ");
+  const street = (draft.address || "")
+    .replace(/,?\s*Hermosillo,?\s*Sonora/gi, "")
+    .replace(/,?\s*C\.P\.\s*\d{5}/gi, "")
+    .replace(/,\s*,/g, ", ")
+    .replace(/,\s*$/, "")
+    .trim();
   const place = draft.orderType === "delivery"
-    ? ` Domicilio ${draft.address}, C.P. ${draft.postalCode}. Listo, tu pedido ha sido confirmado y llegará en aproximadamente 30 minutos a tu domicilio. Gracias por marcar a Pizzería Hermosillo, que tengas un buen día. Hasta luego.`
+    ? ` A ${street}. Código ${spokenCode}. Listo, tu pedido ha sido confirmado y llegará en aproximadamente 30 minutos a tu domicilio. Gracias por marcar a Pizzería Hermosillo, que tengas un buen día. Hasta luego.`
     : " Para recoger. Listo, tu pedido ha sido confirmado y estará listo en aproximadamente 30 minutos. Gracias por marcar a Pizzería Hermosillo, que tengas un buen día. Hasta luego.";
   return {
     ok: true,
@@ -76,7 +89,7 @@ export function buildConfirmation(draft) {
     lines,
     postalCode: draft.postalCode || "",
     address: draft.address || "",
-    spoken: `Muy bien, ${draft.customerName}. Tu pedido quedó listo: ${lines.join(", ")}. Total ${total}.${place} ¿Tiene alguna duda con tu pedido?`
+    spoken: `Muy bien, ${draft.customerName}. Tu pedido: ${lines.join(", ")}. Total ${total}.${place}`
   };
 }
 
