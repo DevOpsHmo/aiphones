@@ -224,24 +224,14 @@ export default function StatsBoard({
     : callsWithCustomer;
 
   useEffect(() => {
-    function closeSearch(event: MouseEvent) {
-      const target = event.target as HTMLElement | null;
-      if (target && !target.closest(".stats-calls-head")) {
-        setCallSearchOpen(false);
-      }
-    }
-
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setCallSearchOpen(false);
         setPicker(null);
       }
     }
 
-    document.addEventListener("mousedown", closeSearch);
     window.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("mousedown", closeSearch);
       window.removeEventListener("keydown", onKey);
     };
   }, []);

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createClient } from "../../lib/supabase/client";
 import StatsBoard from "./StatsBoard";
 import MenuBoard from "./MenuBoard";
+import { loadSessionBusiness } from "../../lib/session-business";
 
 type OrderItem = {
   name: string;
@@ -815,6 +816,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [minutesUsed, setMinutesUsed] = useState(18);
   const [minutesLimit, setMinutesLimit] = useState(1000);
+  const [businessName, setBusinessName] = useState("");
   const [minuteWarning, setMinuteWarning] = useState(800);
   const [chatOrder, setChatOrder] = useState<Order | null>(null);
   const [chatLines, setChatLines] = useState<
@@ -926,13 +928,10 @@ export default function DashboardPage() {
   const loadUsage = useCallback(async () => {
     const supabase = createClient();
 
-    const { data: business } = await supabase
-      .from("businesses")
-      .select("*")
-      .limit(1)
-      .maybeSingle();
+    const business = await loadSessionBusiness(supabase);
 
     if (business) {
+      setBusinessName(business.name || "");
       setMinutesLimit(Number(business.monthly_minute_limit) || 1000);
       setMinuteWarning(Number(business.minute_warning) || 800);
     }
@@ -942,11 +941,15 @@ export default function DashboardPage() {
     );
     setMinutesResetLabel(formatLongDate(cycle.nextReset));
 
-    const { data: calls } = await supabase
+    let callsQuery = supabase
       .from("calls")
       .select("status,duration_seconds,started_at")
       .neq("status", "overflow")
       .gte("started_at", cycle.fromIso);
+    if (business?.id) {
+      callsQuery = callsQuery.eq("business_id", business.id);
+    }
+    const { data: calls } = await callsQuery;
 
     const now = Date.now();
     let seconds = 0;
@@ -987,12 +990,14 @@ export default function DashboardPage() {
   const loadOrders = useCallback(async () => {
     const supabase = createClient();
 
-    const { data, error } = await supabase
-      .from("orders")
-      .select("*")
-      .order("created_at", {
-        ascending: false
-      });
+    const business = await loadSessionBusiness(supabase);
+    let ordersQuery = supabase.from("orders").select("*").order("created_at", {
+      ascending: false
+    });
+    if (business?.id) {
+      ordersQuery = ordersQuery.eq("business_id", business.id);
+    }
+    const { data, error } = await ordersQuery;
 
     if (error) {
       const message = supabaseErrorText(error);
@@ -1006,7 +1011,7 @@ export default function DashboardPage() {
     setLoadError("");
     const rows = (data || []) as OrderRow[];
     const hydrated = await hydrateOrders(rows);
-    setOrders(hydrated.length > 0 ? hydrated : DEMO_ORDERS);
+    setOrders(hydrated);
     setLoading(false);
 
     if (hydrated.length > 0) {
@@ -1030,13 +1035,18 @@ export default function DashboardPage() {
 
   const loadCalls = useCallback(async () => {
     const supabase = createClient();
-    const { data, error } = await supabase
+    const business = await loadSessionBusiness(supabase);
+    let callsQuery = supabase
       .from("calls")
       .select("id,started_at,duration_seconds,status")
       .neq("status", "overflow")
       .order("started_at", { ascending: false });
+    if (business?.id) {
+      callsQuery = callsQuery.eq("business_id", business.id);
+    }
+    const { data, error } = await callsQuery;
 
-    if (error || !data || data.length === 0) {
+    if (error) {
       setCalls(DEMO_CALLS);
       return;
     }
@@ -1388,7 +1398,7 @@ export default function DashboardPage() {
 
     const hasNew = ids.some(id => !seenOrderIds.current?.has(id));
     for (const id of ids) {
-      seenOrderIds.current.add(id);
+      seenOrderIds.current?.add(id);
     }
 
     if (hasNew) {
@@ -1751,7 +1761,7 @@ export default function DashboardPage() {
 
         <div className="orders-daypicker">
           {view === "menu" ? (
-            <p className="orders-daypicker-trigger is-static">Pizzeria Hermosillo</p>
+            <p className="orders-daypicker-trigger is-static">{businessName || "Menú"}</p>
           ) : view === "stats" ? (
             <p className="orders-daypicker-trigger is-static" suppressHydrationWarning>
               {formatDayHeading(todayKey)}

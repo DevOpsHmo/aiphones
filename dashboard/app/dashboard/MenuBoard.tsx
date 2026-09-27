@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
 import { foldIngredient, ingredientDescription, ingredientLabel } from "../../lib/menu-ingredients";
+import { loadSessionBusiness } from "../../lib/session-business";
 
 type ProductRow = {
   id: string;
@@ -234,29 +235,33 @@ export default function MenuBoard({ query }: { query: string }) {
 
   const load = useCallback(async () => {
     const supabase = createClient();
-    const { data: business } = await supabase
-      .from("businesses")
-      .select("id")
-      .limit(1)
-      .maybeSingle();
+    const business = await loadSessionBusiness(supabase);
     if (business?.id) {
       setBusinessId(business.id);
     }
 
-    const { data: productRows, error: productError } = await supabase
+    let productsQuery = supabase
       .from("products")
       .select("id,business_id,name,description,category,price,available")
       .order("category")
       .order("name");
+    if (business?.id) {
+      productsQuery = productsQuery.eq("business_id", business.id);
+    }
+    const { data: productRows, error: productError } = await productsQuery;
     if (productError) {
       setError(productError.message);
       return;
     }
 
-    const { data: ingredientRows, error: ingredientError } = await supabase
+    let ingredientsQuery = supabase
       .from("menu_ingredients")
       .select("id,business_id,name,available")
       .order("name");
+    if (business?.id) {
+      ingredientsQuery = ingredientsQuery.eq("business_id", business.id);
+    }
+    const { data: ingredientRows, error: ingredientError } = await ingredientsQuery;
     if (ingredientError) {
       setError(
         /menu_ingredients|schema cache|PGRST205|42P01/i.test(ingredientError.message)
@@ -267,11 +272,13 @@ export default function MenuBoard({ query }: { query: string }) {
       return;
     }
 
-    const { data: settings } = await supabase
+    let settingsQuery = supabase
       .from("menu_settings")
-      .select("mediana,grande,familiar,extra,promo_pair")
-      .limit(1)
-      .maybeSingle();
+      .select("mediana,grande,familiar,extra,promo_pair");
+    if (business?.id) {
+      settingsQuery = settingsQuery.eq("business_id", business.id);
+    }
+    const { data: settings } = await settingsQuery.maybeSingle();
     if (settings) {
       setSizePrices({
         mediana: String(settings.mediana),
