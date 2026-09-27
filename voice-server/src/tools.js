@@ -195,35 +195,41 @@ function fiveDigit(candidate) {
   return cp;
 }
 
-export function parseSpokenPostalCode(value) {
-  const digits = String(value || "").replace(/\D/g, "");
-  const direct = fiveDigit(digits);
-  if (direct && hermosilloCatalog[direct]) {
-    return direct;
-  }
+function inCatalog(cp) {
+  return /^\d{5}$/.test(cp) && Boolean(hermosilloCatalog[cp]);
+}
 
-  const thousandDigits = digits.match(/^(\d{2})000(\d{3})$/);
-  if (thousandDigits) {
-    const cp = fiveDigit(thousandDigits[1] + thousandDigits[2]);
-    if (cp) {
-      return cp;
+function insertions(cp) {
+  if (!/^\d{4}$/.test(cp)) {
+    return [];
+  }
+  const found = [];
+  for (let index = 0; index <= cp.length; index += 1) {
+    for (let digit = 0; digit <= 9; digit += 1) {
+      const next = `${cp.slice(0, index)}${digit}${cp.slice(index)}`;
+      if (inCatalog(next)) {
+        found.push(next);
+      }
     }
   }
+  return found;
+}
 
-  const tokens = foldText(value)
+export function parseSpokenPostalCode(value) {
+  const folded = foldText(value)
     .replace(/\btrescientos\b/g, "tres ciento")
     .replace(/\bcuatrocientos\b/g, "cuatro ciento")
     .replace(/\bquinientos\b/g, "cinco ciento")
     .replace(/\bseiscientos\b/g, "seis ciento")
     .replace(/\bsetecientos\b/g, "siete ciento")
     .replace(/\bochocientos\b/g, "ocho ciento")
-    .replace(/\bnovecientos\b/g, "nueve ciento")
-    .split(" ")
-    .filter(token => token && token !== "y");
+    .replace(/\bnovecientos\b/g, "nueve ciento");
+  const digits = String(value || "").replace(/\D/g, "");
+  const direct = fiveDigit(digits);
 
+  const tokens = folded.split(" ").filter(token => token && token !== "y");
   const atoms = [];
   let milAt = -1;
-
   for (const token of tokens) {
     if (token === "mil" || token === "miles") {
       milAt = atoms.length;
@@ -236,40 +242,62 @@ export function parseSpokenPostalCode(value) {
     }
   }
 
+  const candidates = [];
+  const joined = postalChunks(atoms).map(number => String(number)).join("");
+  if (fiveDigit(joined)) {
+    candidates.push(joined);
+  }
+  if (atoms.length === 5 && atoms.every(number => number < 10)) {
+    candidates.push(atoms.join(""));
+  }
   if (milAt > 0) {
     const prefix = Number(postalChunks(atoms.slice(0, milAt)).join(""));
     const restChunks = postalChunks(atoms.slice(milAt));
     const rest = restChunks.length ? Number(restChunks.join("")) : 0;
     const fromThousands = fiveDigit(prefix * 1000 + rest);
     if (fromThousands) {
-      return fromThousands;
+      candidates.push(fromThousands);
     }
   }
-
-  const joined = postalChunks(atoms).map(number => String(number)).join("");
-  const spoken = fiveDigit(joined) || repairDroppedZero(joined);
-  if (spoken) {
-    return spoken;
+  if (direct) {
+    candidates.push(direct);
   }
 
-  return repairDroppedZero(direct || digits) || direct || digits;
-}
-
-function repairDroppedZero(cp) {
-  if (hermosilloCatalog[cp]) {
-    return cp;
+  const catalogHits = [...new Set(candidates.filter(inCatalog))];
+  if (catalogHits.length === 1) {
+    return catalogHits[0];
   }
-  if (/^\d{4}$/.test(cp)) {
-    const withZero = `${cp.slice(0, 2)}0${cp.slice(2)}`;
-    if (hermosilloCatalog[withZero]) {
+  if (catalogHits.length > 1) {
+    const spoken = catalogHits.find(cp => cp === joined);
+    return spoken || catalogHits[0];
+  }
+
+  const repaired = [...new Set(
+    [joined, digits].flatMap(insertions)
+  )];
+  if (repaired.length === 1) {
+    return repaired[0];
+  }
+  if (/\bciento\b/.test(folded)) {
+    const withOne = repaired.find(cp => /^\d{2}1\d{2}$/.test(cp));
+    if (withOne) {
+      return withOne;
+    }
+  }
+  if (/\bcero\b/.test(folded)) {
+    const withZero = repaired.find(cp => /^\d{2}0\d{2}$/.test(cp));
+    if (withZero) {
       return withZero;
     }
   }
+
   return "";
 }
 
 function foldColony(value) {
-  return foldText(value)
+  let text = foldText(value)
+    .replace(/\bi\s+ese\s+ese\s+ese\s+te\s+e\b/g, "issste")
+    .replace(/\bi\s+ese\s+ese\s+te\s+e\b/g, "issste")
     .replace(/\bcero\b/g, "0")
     .replace(/\buno\b/g, "1")
     .replace(/\bdos\b/g, "2")
@@ -280,8 +308,65 @@ function foldColony(value) {
     .replace(/\bsiete\b/g, "7")
     .replace(/\bocho\b/g, "8")
     .replace(/\bnueve\b/g, "9");
+
+  if (/\bissste\b/.test(text) && !/\bfederal\b/.test(text)) {
+    text = text.replace(/\bissste\b/, "issste federal");
+  }
+
+  return text;
 }
 
+function editDistance(left, right) {
+  const rows = Array.from({ length: left.length + 1 }, (_, index) => [index]);
+  for (let column = 1; column <= right.length; column += 1) {
+    rows[0][column] = column;
+  }
+  for (let row = 1; row <= left.length; row += 1) {
+    for (let column = 1; column <= right.length; column += 1) {
+      const cost = left[row - 1] === right[column - 1] ? 0 : 1;
+      rows[row][column] = Math.min(
+        rows[row - 1][column] + 1,
+        rows[row][column - 1] + 1,
+        rows[row - 1][column - 1] + cost
+      );
+    }
+  }
+  return rows[left.length][right.length];
+}
+
+function colonyScore(said, official) {
+  if (!said || !official) {
+    return 0;
+  }
+  if (said === official) {
+    return 100;
+  }
+  if (official.includes(said) || said.includes(official)) {
+    return 85;
+  }
+  const distance = editDistance(said, official);
+  const limit = Math.max(said.length, official.length);
+  return Math.max(0, Math.round(100 - (distance / limit) * 100));
+}
+
+function matchColonies(colony, colonias) {
+  const said = foldColony(colony);
+  const ranked = colonias
+    .map(name => ({ name, score: colonyScore(said, foldColony(name)) }))
+    .filter(item => item.score >= 70)
+    .sort((left, right) => right.score - left.score);
+
+  if (ranked.length === 0) {
+    return { match: "", options: [] };
+  }
+  if (ranked.length === 1 || ranked[0].score - ranked[1].score >= 15) {
+    return { match: ranked[0].name, options: [] };
+  }
+  return {
+    match: "",
+    options: ranked.slice(0, 4).map(item => item.name)
+  };
+}
 export async function checkAddressTool({
   postalCode,
   street,
@@ -300,7 +385,7 @@ export async function checkAddressTool({
   if (!colonias) {
     return {
       ok: false,
-      error: "Ese código postal no es de Hermosillo, Sonora. Pídelo otra vez."
+      error: "No entendí el código. Pide que lo repita con las palabras, sin convertirlo a número."
     };
   }
 
@@ -313,35 +398,35 @@ export async function checkAddressTool({
     };
   }
 
-  const said = foldColony(colony);
-  const match = colonias.find(name => {
-    const official = foldColony(name);
-    return official === said || official.includes(said) || said.includes(official);
-  });
-
   const dictatedStreet = street?.trim() || "";
+  const { match, options } = matchColonies(colony, colonias);
 
   if (!match) {
     return {
       ok: true,
       postal_code_valid: true,
+      postal_code: cp,
       colony_match: false,
-      colonias,
+      colonias: options,
       address: [dictatedStreet, colony.trim(), `C.P. ${cp}`, "Hermosillo, Sonora"]
         .filter(Boolean)
         .join(", "),
-      note: "El código es de Hermosillo. La colonia no coincide. Ofrece las colonias de la lista para que elija."
+      note: options.length
+        ? `El código ${cp} es de Hermosillo. No pidas deletrear. Ofrece solo estas colonias: ${options.join(", ")}.`
+        : `El código ${cp} es de Hermosillo. No pidas deletrear. Pregunta otra vez cuál es la colonia.`
     };
   }
 
   return {
     ok: true,
     postal_code_valid: true,
+    postal_code: cp,
     colony_match: true,
     colony: match,
     address: [dictatedStreet, match, `C.P. ${cp}`, "Hermosillo, Sonora"]
       .filter(Boolean)
-      .join(", ")
+      .join(", "),
+    note: `Confirmado. Di exactamente el código ${cp} y la colonia ${match}. No pidas deletrear.`
   };
 }
 

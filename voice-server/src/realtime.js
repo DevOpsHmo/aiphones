@@ -52,8 +52,9 @@ export function createRealtimeSession({
 
   let transcript = "";
   let startedAt = Date.now();
-  let orderPlaced = false;
+  let timeWarned = false;
   let assistantSpeaking = false;
+  const callState = { orderPlaced: false, hangupScheduled: false };
 
   openaiSocket.on("open", () => {
     const session = {
@@ -76,7 +77,7 @@ export function createRealtimeSession({
               model: "gpt-4o-transcribe",
               language: "es",
               prompt:
-                "pedido nuevo, una pizza mediana, una pizza grande, una pizza familiar, pepperoni, domicilio, recoger, no será otra, otra dirección, Hermosillo, Diana Gallardo, Luis Silva, Luis Silvas, colonia, calle, código postal"
+                "pedido nuevo, una pizza mediana, una pizza grande, una pizza familiar, pepperoni, domicilio, recoger, no será otra, otra dirección, Hermosillo, colonia ISSSTE Federal, ISSSTE Federal, Diana Gallardo, Luis Silva, Luis Silvas, calle, código postal, ochenta y tres ciento cincuenta y siete"
             },
             turn_detection: {
               type: "server_vad",
@@ -111,7 +112,7 @@ Habla muy breve. UNA sola frase y UNA sola pregunta por turno. Di la frase compl
 3. Confirma solo el producto, en una frase. Si falta el tamaño, el siguiente turno es solo: "¿Mediana 200, grande 220 o familiar 250?" Si es boneless: "¿BBQ o buffalo?" No preguntes domicilio en este turno.
 4. Si el nombre no salió en el saludo: "¿Su nombre?" En el siguiente turno confirma solo el nombre ya corregido: "¿Luis Silvas?" Si dice "con s al final", "con s" o "le falta una s", agrega esa letra al apellido. Nunca repitas la frase "con s al final". Espera un sí.
 5. Solo entonces: "¿Domicilio o recoger?" Si es recoger, no pidas dirección.
-6. Domicilio con dirección anterior: "¿La enviamos a {dirección}?" Si dice que sí, úsala. Si dice "no", "será otra", "otra dirección" o "no, será otra", es otra dirección: no la repitas y pregunta solo "¿Cuál es el código postal?" Nunca lo oigas como "se lo traeré". Son 5 dígitos. No conviertas las palabras a número. "ochenta y tres cero diez" y "ocho tres cero uno cero" son 83010. "Cero diez" es 010, no 10. 83157 se oye como "ocho tres uno cinco siete", "ochenta y tres ciento cincuenta y siete", "ocho tres ciento cincuenta y siete" u "ochenta y tres mil ciento cincuenta y siete". Pasa a check_address las palabras oídas. Si no son 5 dígitos, pídelo otra vez. Si es válido, no sugieras colonias. Solo: "¿Colonia?" Luego solo: "¿Calle y número?" "Cinco de Mayo" es la colonia 5 de Mayo. Si no coincide, ofrece la lista. Confirma la dirección en una frase y espera un sí.
+6. Domicilio con dirección anterior: "¿La enviamos a {dirección}?" Si dice que sí, úsala. Si es otra dirección, pregunta solo "¿Cuál es el código postal?" No conviertas el código ni la colonia. Pasa las palabras tal cual a check_address. Confirma únicamente el código de 5 dígitos y el nombre de colonia que devuelva la herramienta. Nunca pidas deletrear. Si es válido, pregunta solo "¿Colonia?" y después solo "¿Calle y número?" Si hay varias colonias parecidas, ofrece solo esas. Confirma la dirección en una frase y espera un sí.
 7. Una sola vez: "¿Le ofrezco una soda?" Si dice que no, no la menciones. Si dice que sí, solo entonces: "¿Fresa, Coca o Coca Light, de 600 o de 2 litros?" 600 está en 30. 2 litros está en 50. Solo esas.
 8. Ejecuta create_order una sola vez. Si responde que ya quedó guardado, no lo vuelvas a crear. Di en una sola vez: "Muy bien, {nombre}. Tu pedido quedó listo: {pedido}. ¿Tiene alguna duda con tu pedido? Tu pedido llega en aproximadamente 30 minutos a domicilio." Si es para recoger, cambia solo el final: "Tu pedido estará listo en aproximadamente 30 minutos para recoger." Si tiene una duda, respóndela en una frase y vuelve a preguntar. Si dice "no", "no, así está bien" o "no, es todo", di exactamente: "Gracias por marcar a Pizzería Hermosillo, que tenga un buen día. Hasta luego." Luego end_call.
 
@@ -450,6 +451,17 @@ ${menuText || "Menú no disponible."}
                 console.error("No se pudo transferir:", error.message);
               });
             }
+            if (
+              callState.orderPlaced &&
+              /hasta luego/i.test(event.transcript) &&
+              !callState.hangupScheduled &&
+              !humanTransferStarted(callSid)
+            ) {
+              callState.hangupScheduled = true;
+              endCallTool(callSid).catch(error => {
+                console.error("No se pudo colgar:", error.message);
+              });
+            }
           }
         }
 
@@ -463,7 +475,8 @@ ${menuText || "Menú no disponible."}
             callId,
             callSid,
             callerPhone,
-            businessId
+            businessId,
+            callState
           );
         }
 
@@ -510,11 +523,11 @@ ${menuText || "Menú no disponible."}
     },
 
     warnTimeUp() {
-      if (orderPlaced || openaiSocket.readyState !== WebSocket.OPEN) {
+      if (callState.orderPlaced || timeWarned || openaiSocket.readyState !== WebSocket.OPEN) {
         return;
       }
 
-      orderPlaced = true;
+      timeWarned = true;
 
       openaiSocket.send(JSON.stringify({ type: "response.cancel" }));
       openaiSocket.send(JSON.stringify({
@@ -535,7 +548,8 @@ async function handleToolCall(
   callId,
   callSid,
   callerPhone,
-  businessId
+  businessId,
+  callState
 ) {
   let args = {};
 
@@ -583,7 +597,7 @@ async function handleToolCall(
         });
 
       if (result?.success) {
-        orderPlaced = true;
+        callState.orderPlaced = true;
       }
     }
 
@@ -614,16 +628,23 @@ async function handleToolCall(
     }
 
     else if (event.name === "end_call") {
-      if (!humanTransferStarted(callSid)) {
+      if (!callState.orderPlaced) {
+        result = {
+          success: false,
+          error: "El pedido no está guardado. No cuelgues. Sigue con la toma."
+        };
+      } else if (!humanTransferStarted(callSid) && !callState.hangupScheduled) {
+        callState.hangupScheduled = true;
         endCallTool(callSid).catch(error => {
           console.error(
             "No se pudo colgar:",
             error.message
           );
         });
+        result = { success: true };
+      } else {
+        result = { success: true };
       }
-
-      result = { success: true };
     }
 
     else {
@@ -669,7 +690,11 @@ async function handleToolCall(
     })
   );
 
-  if (event.name === "end_call" || event.name === "transfer_to_human") {
+  if (event.name === "transfer_to_human") {
+    return;
+  }
+
+  if (event.name === "end_call" && result?.success) {
     return;
   }
 
