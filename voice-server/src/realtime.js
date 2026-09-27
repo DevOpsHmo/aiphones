@@ -53,6 +53,7 @@ export function createRealtimeSession({
   let transcript = "";
   let startedAt = Date.now();
   let orderPlaced = false;
+  let assistantSpeaking = false;
 
   openaiSocket.on("open", () => {
     const session = {
@@ -79,9 +80,10 @@ export function createRealtimeSession({
             },
             turn_detection: {
               type: "server_vad",
-              threshold: 0.5,
+              threshold: 0.7,
               prefix_padding_ms: 300,
-              silence_duration_ms: 500
+              silence_duration_ms: 700,
+              interrupt_response: false
             }
           },
 
@@ -102,7 +104,7 @@ Hablas español mexicano natural, como una persona real en una pizzería de Herm
 
 Tu trabajo es contestar llamadas y tomar pedidos.
 
-Habla muy breve. UNA sola frase y UNA sola pregunta por turno. Nunca juntes dos preguntas. No digas que vas a revisar el menú. La Pizza de Corazón no existe. No menciones productos que no pidió, salvo la oferta de soda. No preguntes cómo paga. A domicilio el pago es efectivo. Precios solo con el número, por ejemplo "familiar, 250". Sin dólares, pesos ni signo.
+Habla muy breve. UNA sola frase y UNA sola pregunta por turno. Di la frase completa, de principio a fin, sin cortarla ni empezar otra. Nunca juntes dos preguntas. No digas que vas a revisar el menú. La Pizza de Corazón no existe. No menciones productos que no pidió, salvo la oferta de soda. No preguntes cómo paga. A domicilio el pago es efectivo. Precios solo con el número, por ejemplo "familiar, 250". Sin dólares, pesos ni signo.
 
 1. Si hay pedido pendiente de menos de 10 minutos, di solo: "¿Sigue con su pedido anterior?" Si no, o si ya pasaron más de 10 minutos, es pedido nuevo. No digas nada más en ese turno.
 2. El saludo ya se dijo. No lo repitas ni preguntes la orden hasta que el cliente conteste. Si es cliente conocido y dice que sí, sigue con el pedido. Si es otra persona, olvida nombre y dirección y pregunta solo "¿Qué desea ordenar?"
@@ -368,6 +370,7 @@ ${menuText || "Menú no disponible."}
           "input_audio_buffer.speech_started"
         ) {
           if (
+            !assistantSpeaking &&
             twilioSocket.readyState ===
             WebSocket.OPEN
           ) {
@@ -378,6 +381,20 @@ ${menuText || "Menú no disponible."}
               })
             );
           }
+        }
+
+        if (
+          event.type === "response.created" ||
+          event.type === "response.output_audio.delta" ||
+          event.type === "response.audio.delta"
+        ) {
+          assistantSpeaking = true;
+        }
+
+        if (event.type === "response.done") {
+          setTimeout(() => {
+            assistantSpeaking = false;
+          }, 1500);
         }
 
         if (
