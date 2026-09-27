@@ -38,7 +38,7 @@ begin
   insert into public.products (id, business_id, name, description, category, price)
   values
     ('11111111-1111-4111-8111-111111111101', bid, 'Pizza Pepperoni Grande', 'Pizza grande de pepperoni', 'Pizzas', 189),
-    ('11111111-1111-4111-8111-111111111102', bid, 'Pizza Hawaiana Grande', 'Pizza grande hawaiana', 'Pizzas', 199),
+    ('11111111-1111-4111-8111-111111111102', bid, 'Pizza Hawaiana', 'Piña, jamón y cereza', 'Pizzas', 199),
     ('11111111-1111-4111-8111-111111111103', bid, 'Coca-Cola 600ml', 'Refresco Coca-Cola 600ml', 'Bebidas', 30),
     ('11111111-1111-4111-8111-111111111104', bid, 'Agua 600ml', 'Agua embotellada 600ml', 'Bebidas', 20)
   on conflict (id) do update

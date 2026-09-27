@@ -275,8 +275,8 @@ returning id;
 -- ),
 -- (
 --   'PEGA_BUSINESS_ID',
---   'Pizza Hawaiana Grande',
---   'Pizza grande hawaiana',
+--   'Pizza Hawaiana',
+--   'Piña, jamón y cereza',
 --   'Pizzas',
 --   199
 -- ),
