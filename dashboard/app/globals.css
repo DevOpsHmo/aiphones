@@ -1986,6 +1986,7 @@ body.login-lock {
 }
 
 .notice-dialog.menu-form .notice-btn-cancel {
+  border: 1px solid #d1d5db;
   background: white;
   color: #374151;
 }
