@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
 import StatsBoard from "./StatsBoard";
 import MenuBoard from "./MenuBoard";
@@ -846,6 +846,8 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [menuSearchOpen, setMenuSearchOpen] = useState(false);
   const [menuQuery, setMenuQuery] = useState("");
+  const [callSearchOpen, setCallSearchOpen] = useState(false);
+  const [callQuery, setCallQuery] = useState("");
   const [nowTick, setNowTick] = useState(0);
   const [trashOpen, setTrashOpen] = useState(false);
   const [minutesResetLabel, setMinutesResetLabel] = useState("31 de octubre 2026");
@@ -1360,11 +1362,27 @@ export default function DashboardPage() {
   }
 
   const seenOrderIds = useRef<Set<string> | null>(null);
+  const ordersReady = useRef(false);
+
+  useLayoutEffect(() => {
+    const saved = window.sessionStorage.getItem("kitchen-view");
+    if (saved === "menu") {
+      setView("menu");
+    }
+  }, []);
+
+  useEffect(() => {
+    window.sessionStorage.setItem("kitchen-view", view === "menu" ? "menu" : "orders");
+  }, [view]);
 
   useEffect(() => {
     const ids = orders.map(order => order.id);
-    if (seenOrderIds.current === null) {
+    if (!ordersReady.current) {
       seenOrderIds.current = new Set(ids);
+      if (orders.length === 0) {
+        return;
+      }
+      ordersReady.current = true;
       return;
     }
 
@@ -1628,7 +1646,7 @@ export default function DashboardPage() {
       </div>
     <main className={`orders-page${view === "stats" ? " is-stats" : ""}`}>
       <div className="orders-chrome">
-      <header className={`orders-header${calendarOpen || navOpen || statusMenuOpen ? " is-calendar-open" : ""}${searchOpen || menuSearchOpen ? " is-search-open" : ""}`}>
+      <header className={`orders-header${calendarOpen || navOpen || statusMenuOpen ? " is-calendar-open" : ""}${searchOpen || menuSearchOpen || callSearchOpen ? " is-search-open" : ""}`}>
         <div className="orders-header-left">
           <div className="orders-nav">
             <div className="orders-nav-tabs">
@@ -1914,6 +1932,43 @@ export default function DashboardPage() {
               </div>
             </>
           )}
+          {view === "stats" && (
+            <>
+              <div className="orders-search">
+                <button
+                  type="button"
+                  className="orders-search-toggle"
+                  aria-label="Buscar llamada"
+                  onClick={() =>
+                    setCallSearchOpen(open => {
+                      if (open) {
+                        setCallQuery("");
+                      }
+                      return !open;
+                    })
+                  }
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="2" />
+                    <path d="M16 16l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+              {callSearchOpen && (
+                <input
+                  id="call-search"
+                  name="call-search"
+                  type="search"
+                  autoComplete="off"
+                  className="orders-search-input"
+                  autoFocus
+                  placeholder="Buscar cliente o dirección…"
+                  value={callQuery}
+                  onChange={event => setCallQuery(event.target.value)}
+                />
+              )}
+            </>
+          )}
           {view === "menu" && (
             <>
               <div className="orders-search">
@@ -2006,6 +2061,7 @@ export default function DashboardPage() {
         <StatsBoard
           orders={orders}
           calls={calls}
+          callQuery={callSearchOpen ? callQuery : ""}
           minutesUsed={minutesUsed}
           minutesLimit={minutesLimit}
           onOpenCall={callId => {
@@ -2199,11 +2255,29 @@ export default function DashboardPage() {
                 </p>
                 <button
                   type="button"
-                  className={`orders-card-price${order.paid ? " is-paid" : ""}`}
+                  className={`orders-card-price${order.status === "cancelled" ? " is-cancelled" : order.paid ? " is-paid" : ""}`}
                   onClick={() => setPayOrder(order)}
                 >
                   ${Number(order.total).toFixed(2)}
-                  {order.paid && (
+                  {order.status === "cancelled" ? (
+                    <svg
+                      className="orders-paid-check"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 16 16"
+                      aria-hidden="true"
+                    >
+                      <circle cx="8" cy="8" r="8" fill="#dc2626" />
+                      <path
+                        d="M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6"
+                        fill="none"
+                        stroke="#fff"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  ) : (
+                    order.paid && (
                     <svg
                       className="orders-paid-check"
                       width="16"
@@ -2221,6 +2295,7 @@ export default function DashboardPage() {
                         strokeLinejoin="round"
                       />
                     </svg>
+                    )
                   )}
                 </button>
               </div>

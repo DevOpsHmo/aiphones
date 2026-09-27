@@ -6,7 +6,7 @@ import { config } from "./config.js";
 import { normalizePhone, supabase } from "./supabase.js";
 import { withCallLock } from "./call-lock.js";
 import { buildConfirmation, priceLine } from "./confirmation.js";
-import { bakeNote, billableExtras, foldIngredient, ingredientsFromText, menuIngredients } from "./menu-ingredients.js";
+import { bakeNote, billableExtras, foldIngredient, ingredientDescription, ingredientsFromText, menuIngredients } from "./menu-ingredients.js";
 import {
   requestTransfer,
   markTransferred,
@@ -222,6 +222,7 @@ export async function getMenuTool(businessId) {
             .replace(/\s+/g, " ")
             .trim()
         : product.name,
+      description: isPizza(product) ? ingredientDescription(product.description) : product.description,
       price: isPizza(product) ? null : Number(product.price),
       sizes: isPizza(product) ? sizePrices : undefined,
       sauce_options: needsSauce(product)

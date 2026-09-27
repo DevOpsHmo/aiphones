@@ -141,13 +141,15 @@ function changePercent(current: number, previous: number) {
 export default function StatsBoard({
   orders,
   calls,
-  onOpenCall
+  onOpenCall,
+  callQuery = ""
 }: {
   orders: StatsOrder[];
   calls: StatsCall[];
   minutesUsed?: number;
   minutesLimit?: number;
   onOpenCall?: (callId: string) => void;
+  callQuery?: string;
 }) {
   const today = hermosilloDateKey();
   const [period, setPeriod] = useState<Period>("day");
@@ -162,9 +164,6 @@ export default function StatsBoard({
   const [pickerYear, setPickerYear] = useState(() =>
     Number(today.slice(0, 4))
   );
-  const [callSearchOpen, setCallSearchOpen] = useState(false);
-  const [callQuery, setCallQuery] = useState("");
-
   const activeOrders = orders.filter(order => !order.deleted_at);
 
   const weekEnd = addDays(weekStart, 6);
@@ -577,32 +576,6 @@ export default function StatsBoard({
         <article className="stats-card stats-card--full">
           <div className="stats-calls-head">
             <p className="stats-label">Llamadas</p>
-            <div className="stats-calls-search">
-              <button
-                type="button"
-                className="orders-search-toggle"
-                aria-label="Buscar llamada"
-                onClick={() => setCallSearchOpen(open => !open)}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="2" />
-                  <path d="M16 16l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-              </button>
-              {callSearchOpen && (
-                <input
-                  id="call-search"
-                  name="call-search"
-                  type="search"
-                  autoComplete="off"
-                  className="orders-search-input"
-                  autoFocus
-                  placeholder="Buscar cliente o dirección…"
-                  value={callQuery}
-                  onChange={event => setCallQuery(event.target.value)}
-                />
-              )}
-            </div>
           </div>
           {visibleCalls.length === 0 ? (
             <p className="stats-empty">

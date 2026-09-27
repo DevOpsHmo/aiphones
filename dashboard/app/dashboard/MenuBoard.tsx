@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
-import { foldIngredient, ingredientLabel } from "../../lib/menu-ingredients";
+import { foldIngredient, ingredientDescription, ingredientLabel } from "../../lib/menu-ingredients";
 
 type ProductRow = {
   id: string;
@@ -213,6 +213,7 @@ export default function MenuBoard({ query }: { query: string }) {
   const [promoSize, setPromoSize] = useState<(typeof PIZZA_SIZES)[number]>("grande");
   const [comboDrink, setComboDrink] = useState("");
   const [saving, setSaving] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [toast, setToast] = useState("");
   const [savingPrices, setSavingPrices] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<
@@ -282,7 +283,19 @@ export default function MenuBoard({ query }: { query: string }) {
     }
 
     setError("");
-    setProducts((productRows || []) as ProductRow[]);
+    const rows = ((productRows || []) as ProductRow[]).map(product => {
+      const pizza = product.category === "Pizzas" || /^pizza\b/i.test(product.name);
+      if (!pizza) {
+        return product;
+      }
+      const description = ingredientDescription(product.description || "");
+      if (description === (product.description || "").trim()) {
+        return product;
+      }
+      void supabase.from("products").update({ description }).eq("id", product.id);
+      return { ...product, description };
+    });
+    setProducts(rows);
     setIngredients((ingredientRows || []) as IngredientRow[]);
   }, []);
 
@@ -409,18 +422,36 @@ export default function MenuBoard({ query }: { query: string }) {
 
   async function deleteProduct(product: ProductRow) {
     const supabase = createClient();
-    const { error: deleteError } = await supabase.from("products").delete().eq("id", product.id);
-    if (deleteError) {
-      setError(
-        /foreign key|violates/i.test(deleteError.message)
-          ? `${product.name} ya está en un pedido. Apágala en lugar de borrarla.`
-          : /policy|42501/i.test(deleteError.message)
-            ? "Falta el permiso de borrar. Pega supabase/migration_menu_delete.sql en Supabase."
-            : deleteError.message
-      );
-      return;
+    const flavor = isPizza(product) ? pizzaFlavor(product.name) : "";
+    const targets = flavor
+      ? products.filter(item => isPizza(item) && pizzaFlavor(item.name) === flavor)
+      : [product];
+    const removed: string[] = [];
+    for (const item of targets) {
+      const { data, error: deleteError } = await supabase
+        .from("products")
+        .delete()
+        .eq("id", item.id)
+        .select("id");
+      if (deleteError) {
+        setError(
+          /foreign key|violates/i.test(deleteError.message)
+            ? `${item.name} ya está en un pedido. Apágala en lugar de borrarla.`
+            : /policy|42501/i.test(deleteError.message)
+              ? "Falta el permiso de borrar. Pega supabase/migration_menu_delete.sql en Supabase."
+              : deleteError.message
+        );
+        break;
+      }
+      if (!data?.length) {
+        setError("Falta el permiso de borrar. Pega supabase/migration_menu_delete.sql en Supabase.");
+        break;
+      }
+      removed.push(item.id);
     }
-    setProducts(current => current.filter(item => item.id !== product.id));
+    if (removed.length) {
+      setProducts(current => current.filter(item => !removed.includes(item.id)));
+    }
   }
 
   async function deleteIngredient(ingredient: IngredientRow) {
@@ -442,9 +473,10 @@ export default function MenuBoard({ query }: { query: string }) {
 
   async function saveEdit(event: React.FormEvent) {
     event.preventDefault();
-    if (!editing || !editing.name.trim()) {
+    if (!editing || !editing.name.trim() || savingEdit) {
       return;
     }
+    setSavingEdit(true);
     const supabase = createClient();
     if (editing.kind === "ingredient") {
       const nextName = foldIngredient(editing.name);
@@ -454,11 +486,13 @@ export default function MenuBoard({ query }: { query: string }) {
         .eq("id", editing.id);
       if (updateError) {
         setError(updateError.message);
+        setSavingEdit(false);
         return;
       }
       setIngredients(current =>
         current.map(item => (item.id === editing.id ? { ...item, name: nextName } : item))
       );
+      setSavingEdit(false);
       setEditing(null);
       flashSaved();
       return;
@@ -474,6 +508,7 @@ export default function MenuBoard({ query }: { query: string }) {
       .eq("id", editing.id);
     if (updateError) {
       setError(updateError.message);
+      setSavingEdit(false);
       return;
     }
     setProducts(current =>
@@ -488,6 +523,7 @@ export default function MenuBoard({ query }: { query: string }) {
           : item
       )
     );
+    setSavingEdit(false);
     setEditing(null);
     flashSaved();
   }
@@ -858,8 +894,13 @@ export default function MenuBoard({ query }: { query: string }) {
               <button type="button" className="notice-btn notice-btn-cancel" onClick={() => setEditing(null)}>
                 Cancelar
               </button>
-              <button type="submit" className="notice-btn notice-btn-save">
-                Guardar
+              <button
+                type="submit"
+                className={`notice-btn notice-btn-save menu-save${savingEdit ? " is-busy" : ""}`}
+                disabled={savingEdit}
+              >
+                <span className="menu-save-label">Guardar</span>
+                {savingEdit && <span className="menu-save-spin" aria-hidden="true" />}
               </button>
             </div>
           </form>

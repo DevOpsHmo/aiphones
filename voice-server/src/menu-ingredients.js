@@ -32,10 +32,17 @@ export function foldIngredient(value) {
     .trim();
 }
 
+export function ingredientDescription(value) {
+  return String(value || "")
+    .replace(/\.\s*\d*\s*pizzas?\b[\s\S]*$/i, "")
+    .replace(/\b\d+\s*pizzas?\b[\s\S]*$/i, "")
+    .replace(/\d+\s*(?:pulgadas|'|’|′).*$/i, "")
+    .replace(/[.\s]+$/g, "")
+    .trim();
+}
+
 export function ingredientsFromText(description) {
-  const cleaned = String(description || "")
-    .replace(/1 pizza grande.*/i, "")
-    .replace(/\d+\s*pulgadas.*/i, "");
+  const cleaned = ingredientDescription(description);
   const parts = cleaned.split(/,| y /i);
   const found = [];
   for (const part of parts) {

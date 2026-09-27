@@ -1839,7 +1839,8 @@ body.login-lock {
   gap: 6px;
 }
 
-.orders-card-price.is-paid {
+.orders-card-price.is-paid,
+.orders-card-price.is-cancelled {
   color: #9ca3af;
   text-decoration: line-through;
 }
