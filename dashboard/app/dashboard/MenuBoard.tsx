@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { createClient } from "../../lib/supabase/client";
 import { foldIngredient, ingredientDescription, ingredientLabel } from "../../lib/menu-ingredients";
 import { loadSessionBusiness } from "../../lib/session-business";
@@ -198,7 +199,13 @@ function Switch({
   );
 }
 
-export default function MenuBoard({ query }: { query: string }) {
+export default function MenuBoard({
+  query,
+  toastSlot
+}: {
+  query: string;
+  toastSlot: HTMLElement | null;
+}) {
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [ingredients, setIngredients] = useState<IngredientRow[]>([]);
   const [businessId, setBusinessId] = useState("");
@@ -374,6 +381,7 @@ export default function MenuBoard({ query }: { query: string }) {
         return;
       }
       setName("");
+      flashSaved();
       void load();
       return;
     }
@@ -850,7 +858,12 @@ export default function MenuBoard({ query }: { query: string }) {
         </ul>
       </section>
       )}
-      {toast && <p className="app-toast app-toast--success">{toast}</p>}
+      {toast &&
+        toastSlot &&
+        createPortal(
+          <p className="app-toast app-toast--success">{toast}</p>,
+          toastSlot
+        )}
       {editing && (
         <div className="notice-overlay" onClick={() => setEditing(null)}>
           <form

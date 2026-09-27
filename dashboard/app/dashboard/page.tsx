@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { createClient } from "../../lib/supabase/client";
 import StatsBoard from "./StatsBoard";
 import MenuBoard from "./MenuBoard";
@@ -833,6 +834,11 @@ export default function DashboardPage() {
     type: "success" | "error";
     message: string;
   } | null>(null);
+  const toastSlotRef = useRef<HTMLDivElement>(null);
+  const [toastSlot, setToastSlot] = useState<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    setToastSlot(toastSlotRef.current);
+  }, []);
   const todayKey = hermosilloDateKey();
   const [selectedDay, setSelectedDay] = useState(todayKey);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -1882,6 +1888,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="orders-header-right">
+          <div className="orders-header-note" ref={toastSlotRef} />
           {view === "orders" && (
             <>
               <div className="orders-search">
@@ -2066,7 +2073,7 @@ export default function DashboardPage() {
       )}
 
       {view === "menu" ? (
-        <MenuBoard query={menuSearchOpen ? menuQuery : ""} />
+        <MenuBoard query={menuSearchOpen ? menuQuery : ""} toastSlot={toastSlot} />
       ) : view === "stats" ? (
         <StatsBoard
           orders={orders}
@@ -2268,7 +2275,7 @@ export default function DashboardPage() {
                   className={`orders-card-price${order.status === "cancelled" ? " is-cancelled" : order.paid ? " is-paid" : ""}`}
                   onClick={() => setPayOrder(order)}
                 >
-                  ${Number(order.total).toFixed(2)}
+                  <span className="orders-price-amount">${Number(order.total).toFixed(2)}</span>
                   {order.status === "cancelled" ? (
                     <svg
                       className="orders-paid-check"
@@ -2718,11 +2725,12 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
-      {toast && (
-        <div className={`app-toast app-toast--${toast.type}`}>
-          {toast.message}
-        </div>
-      )}
+      {toast &&
+        toastSlot &&
+        createPortal(
+          <div className={`app-toast app-toast--${toast.type}`}>{toast.message}</div>,
+          toastSlot
+        )}
     </>
   );
 }

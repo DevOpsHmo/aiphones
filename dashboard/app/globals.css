@@ -1837,20 +1837,30 @@ body.login-lock {
   font-size: 20px;
   font-weight: 700;
   color: #16a34a;
-  line-height: 1;
+  line-height: 1.2;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  overflow: visible;
 }
 
 .orders-card-price.is-paid,
 .orders-card-price.is-cancelled {
   color: #9ca3af;
+  text-decoration: none;
+}
+
+.orders-card-price.is-paid .orders-price-amount,
+.orders-card-price.is-cancelled .orders-price-amount {
   text-decoration: line-through;
 }
 
 .orders-paid-check {
-  flex-shrink: 0;
+  display: block;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  overflow: visible;
 }
 
 .orders-card-total {
@@ -1878,6 +1888,10 @@ body.login-lock {
   padding: 3px 8px;
 }
 
+.orders-header-note:empty {
+  display: none;
+}
+
 .app-toast {
   position: fixed;
   left: 50%;
@@ -1892,6 +1906,27 @@ body.login-lock {
   font-size: 14px;
   font-weight: 600;
   text-align: center;
+}
+
+@media (min-width: 901px) {
+  .orders-header-note {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .app-toast {
+    position: static;
+    left: auto;
+    bottom: auto;
+    transform: none;
+    z-index: 1;
+    min-width: 0;
+    max-width: 240px;
+    padding: 8px 14px;
+    box-shadow: none;
+    white-space: nowrap;
+  }
 }
 
 .app-toast--success {
