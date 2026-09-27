@@ -9,6 +9,8 @@ import {
   updateLastOrderTool
 } from "./tools.js";
 import { config } from "./config.js";
+import { interruptionDecision } from "./turn-policy.js";
+import { wantsHuman } from "./human-transfer.js";
 
 function isPromptEcho(text) {
   const normalized = text.trim().toLowerCase();
@@ -53,14 +55,22 @@ export function createRealtimeSession({
   let transcript = "";
   let startedAt = Date.now();
   let timeWarned = false;
-  let assistantSpeaking = false;
   const callState = { orderPlaced: false, hangupScheduled: false };
 
   function redirectToHuman() {
-    if (openaiSocket.readyState === WebSocket.OPEN) {
-      openaiSocket.send(JSON.stringify({ type: "response.cancel" }));
-    }
-    transferToHumanTool(callSid, businessId).catch(error => {
+    transferToHumanTool(callSid).then(result => {
+      if (result?.success && !result.duplicate && openaiSocket.readyState === WebSocket.OPEN) {
+        openaiSocket.send(JSON.stringify({ type: "response.cancel" }));
+      }
+      if (result && result.success === false && result.spoken && openaiSocket.readyState === WebSocket.OPEN) {
+        openaiSocket.send(JSON.stringify({
+          type: "response.create",
+          response: {
+            instructions: `Di exactamente esta frase y sigue con el pedido: ${result.spoken}`
+          }
+        }));
+      }
+    }).catch(error => {
       console.error("No se pudo transferir:", error.message);
     });
   }
@@ -114,7 +124,7 @@ Hablas español mexicano natural, como una persona real en una pizzería de Herm
 
 Tu trabajo es contestar llamadas y tomar pedidos.
 
-Habla muy breve. UNA sola frase y UNA sola pregunta por turno. Di la frase completa, de principio a fin, sin cortarla ni empezar otra. Nunca juntes dos preguntas. No digas que vas a revisar el menú. La Pizza de Corazón no existe. Solo ofrece pizzas que estén en el menú. Pepperoni con champiñones sí se puede: es la pizza Peperoni más un extra de 25. Mediana pasa de 200 a 225, grande de 220 a 245, familiar de 250 a 275. Di un solo tamaño, por ejemplo: "Muy bien, pepperoni con champiñones subiría de 200 a 225, ¿de acuerdo?" Si dice que sí, sigue con ese precio y en create_order manda extra champinones. No menciones productos que no pidió, salvo la oferta de soda. No preguntes cómo paga. A domicilio el pago es efectivo. Precios solo con el número, por ejemplo "familiar, 250". Sin dólares, pesos ni signo. Conserva todo lo que el cliente ya dijo en esta llamada. No vuelvas a preguntar un dato que ya contestó.
+Habla muy breve. UNA sola frase y UNA sola pregunta por turno. Di la frase completa, de principio a fin, sin cortarla ni empezar otra. Nunca juntes dos preguntas. No digas que vas a revisar el menú. La Pizza de Corazón no existe. Solo ofrece pizzas que estén en el menú. Pepperoni con champiñones, piña, jamón, cereza o cualquier otro ingrediente que aparezca en la descripción de alguna pizza sí se puede. Cada extra son 25, y se suman. Mediana con piña y jamón pasa de 200 a 250. Pasa esos ingredientes en extras. Si preguntan qué trae una pizza, di solo los ingredientes de su descripción. El total lo calcula el servidor: di el campo spoken. No menciones productos que no pidió, salvo la oferta de soda. No preguntes cómo paga. A domicilio el pago es efectivo. Precios solo con el número, por ejemplo "familiar, 250". Sin dólares, pesos ni signo. Conserva todo lo que el cliente ya dijo en esta llamada. No vuelvas a preguntar un dato que ya contestó.
 
 1. Si hay pedido pendiente de menos de 10 minutos, di solo: "¿Sigue con su pedido anterior?" Si no, o si ya pasaron más de 10 minutos, es pedido nuevo. No digas nada más en ese turno.
 2. El saludo ya se dijo. No lo repitas. Si en la primera respuesta ya dijo producto, tamaño, domicilio o dirección, anótalo y pregunta solo lo que falte. Si es cliente conocido y dice que sí, usa ese nombre. Si dice "no soy Luis, soy Iván" o "soy otra persona", el nombre pasa a ser el nuevo. Pregunta solo "¿Su apellido?" No reinicies el pedido. No vuelvas a decir el nombre anterior. El cierre usa el nombre corregido.
@@ -123,7 +133,7 @@ Habla muy breve. UNA sola frase y UNA sola pregunta por turno. Di la frase compl
 5. "¿Domicilio o recoger?" solo si todavía no lo dijo. Si ya dijo domicilio, no lo preguntes otra vez. Si es recoger, no pidas dirección.
 6. Si en esta llamada ya dictó otra dirección, no ofrezcas la dirección guardada. Si no, y hay dirección anterior: "¿La enviamos a {dirección}?" Si dice que sí, úsala. Si es otra, pregunta solo "¿Cuál es el código postal?" No conviertas el código ni la colonia. Pasa las palabras tal cual a check_address. Confirma únicamente el código de 5 dígitos y el nombre de colonia que devuelva la herramienta. Nunca pidas deletrear. Si es válido, pregunta solo "¿Colonia?" y después solo "¿Calle y número?" Si hay varias colonias parecidas, ofrece solo esas. Confirma la dirección en una frase y espera un sí.
 7. Una sola vez: "¿Le ofrezco una soda?" Si dice que no, no la menciones. Si dice que sí, solo entonces: "¿Fresa, Coca o Coca Light, de 600 o de 2 litros?" 600 está en 30. 2 litros está en 50. Solo esas.
-8. Ejecuta create_order una sola vez, con el nombre corregido. Si responde que ya quedó guardado, no lo vuelvas a crear. Si corrige el nombre después de guardarlo, llama update_last_order con el nombre nuevo y no abras otro pedido. Di en una sola vez: "Muy bien, {nombre}. Tu pedido quedó listo: {pedido}. ¿Tiene alguna duda con tu pedido? Tu pedido llega en aproximadamente 30 minutos a domicilio." Si es para recoger, cambia solo el final: "Tu pedido estará listo en aproximadamente 30 minutos para recoger." Si pide repetir o el resumen, repite el pedido actual. No cuelgues. Si tiene una duda, respóndela en una frase y vuelve a preguntar. Si dice "no", "no, así está bien" o "no, es todo", di exactamente: "Gracias por marcar a Pizzería Hermosillo, que tenga un buen día. Hasta luego." Luego end_call.
+8. Ejecuta create_order una sola vez, con el nombre corregido. Si responde que ya quedó guardado, no lo vuelvas a crear. Di exactamente el texto del campo spoken que devolvió create_order. No cambies el total, el tamaño, la dirección ni el código postal. Si corrige el nombre después de guardarlo, llama update_last_order con el nombre nuevo y no abras otro pedido. Si pide repetir o el resumen, repite ese mismo texto. No cuelgues. Si tiene una duda, respóndela en una frase y vuelve a preguntar. Si dice "no", "no, así está bien" o "no, es todo", di exactamente: "Gracias por marcar a Pizzería Hermosillo, que tenga un buen día. Hasta luego." Luego end_call.
 
 CAMBIAR UN PEDIDO YA HECHO: get_last_order. Si dice que no es ese nombre, no cuelgues: pregunta el nombre correcto y llama update_last_order. Si sí es, modifica lo que pidió. "Listo, quedó modificado. ¿Algo más?"
 
@@ -238,10 +248,11 @@ ${menuText || "Menú no disponible."}
                         ]
                       },
                       extra: {
-                        type: "string",
-                        enum: [
-                          "champinones"
-                        ]
+                        type: "string"
+                      },
+                      extras: {
+                        type: "array",
+                        items: { type: "string" }
                       }
                     },
                     required: [
@@ -383,38 +394,6 @@ ${menuText || "Menú no disponible."}
 
         if (
           event.type ===
-          "input_audio_buffer.speech_started"
-        ) {
-          if (
-            !assistantSpeaking &&
-            twilioSocket.readyState ===
-            WebSocket.OPEN
-          ) {
-            twilioSocket.send(
-              JSON.stringify({
-                event: "clear",
-                streamSid
-              })
-            );
-          }
-        }
-
-        if (
-          event.type === "response.created" ||
-          event.type === "response.output_audio.delta" ||
-          event.type === "response.audio.delta"
-        ) {
-          assistantSpeaking = true;
-        }
-
-        if (event.type === "response.done") {
-          setTimeout(() => {
-            assistantSpeaking = false;
-          }, 1500);
-        }
-
-        if (
-          event.type ===
           "response.output_audio.delta" ||
           event.type ===
           "response.audio.delta"
@@ -444,8 +423,19 @@ ${menuText || "Menú no disponible."}
           if (event.transcript && !isPromptEcho(event.transcript)) {
             transcript +=
               `Cliente: ${event.transcript}\n`;
-            if (/\b(humano|persona|encargado|transfier)\w*/i.test(event.transcript)) {
+            const decision = interruptionDecision({
+              event: "transcript",
+              transcript: event.transcript
+            });
+            if (wantsHuman(event.transcript)) {
               redirectToHuman();
+            } else if (decision.cancelResponse) {
+              if (openaiSocket.readyState === WebSocket.OPEN) {
+                openaiSocket.send(JSON.stringify({ type: "response.cancel" }));
+              }
+              if (twilioSocket.readyState === WebSocket.OPEN) {
+                twilioSocket.send(JSON.stringify({ event: "clear", streamSid }));
+              }
             }
           }
         }
@@ -459,7 +449,7 @@ ${menuText || "Menú no disponible."}
           if (event.transcript) {
             transcript +=
               `IA: ${event.transcript}\n`;
-            if (/transfer|comunico|humano/i.test(event.transcript)) {
+            if (wantsHuman(event.transcript)) {
               redirectToHuman();
             }
             if (
@@ -632,13 +622,10 @@ async function handleToolCall(
     }
 
     else if (event.name === "transfer_to_human") {
-      if (socket.readyState === WebSocket.OPEN) {
+      result = await transferToHumanTool(callSid);
+      if (result?.success && !result.duplicate && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: "response.cancel" }));
       }
-      transferToHumanTool(callSid, businessId).catch(error => {
-        console.error("No se pudo transferir:", error.message);
-      });
-      result = { success: true };
     }
 
     else if (event.name === "end_call") {
@@ -704,7 +691,7 @@ async function handleToolCall(
     })
   );
 
-  if (event.name === "transfer_to_human") {
+  if (event.name === "transfer_to_human" && result?.success) {
     return;
   }
 

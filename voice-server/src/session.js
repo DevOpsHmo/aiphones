@@ -92,10 +92,6 @@ class CallSession {
     ai.on("audio.delta", (delta) =>
       this.sendTwilio({ event: "media", streamSid: this.streamSid, media: { payload: delta } })
     );
-    // Si el usuario interrumpe a la IA, limpiamos el audio pendiente en Twilio.
-    ai.on("speech_started", () =>
-      this.sendTwilio({ event: "clear", streamSid: this.streamSid })
-    );
     ai.on("transcript.assistant", (t) => this.assistantTranscript.push(t));
     ai.on("transcript.user", (t) => this.userTranscript.push(t));
     ai.on("response.done", (text) => this.onAiResponse(text));

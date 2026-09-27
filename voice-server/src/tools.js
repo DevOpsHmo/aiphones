@@ -4,6 +4,15 @@ import { fileURLToPath } from "url";
 import twilio from "twilio";
 import { config } from "./config.js";
 import { normalizePhone, supabase } from "./supabase.js";
+import { withCallLock } from "./call-lock.js";
+import { buildConfirmation, priceLine } from "./confirmation.js";
+import {
+  requestTransfer,
+  markTransferred,
+  markTransferFailed,
+  maskNumber,
+  transferTwiml
+} from "./human-transfer.js";
 
 const catalogPath = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -67,9 +76,17 @@ function itemNotes(size, sauce, extra) {
   return [size, sauce, topping].filter(Boolean).join(", ");
 }
 
+export function lineQuote({ size, extra, extras, quantity }) {
+  const priced = priceLine({ size, extra, extras, quantity: quantity ?? 1 });
+  if (!priced.ok) {
+    throw new Error(priced.error);
+  }
+  return { unit: priced.unit, total: priced.subtotal };
+}
+
 export function priceWithMushrooms(size) {
-  const base = pizzaPrice(size);
-  return { base, total: base + 25 };
+  const quote = lineQuote({ size, extra: "champinones", quantity: 1 });
+  return { base: quote.unit - 25, total: quote.total };
 }
 
 export async function getMenuTool(businessId) {
@@ -193,6 +210,41 @@ function postalChunks(atoms) {
   return groups;
 }
 
+const HOUSE_NUMBERS = {
+  ...SPANISH_NUMBERS,
+  cien: 100,
+  ciento: 100
+};
+
+export function streetNumber(value) {
+  const folded = foldText(value);
+  const digits = folded.match(/(\d+)\s*$/);
+  if (digits) {
+    return digits[1];
+  }
+  const tokens = folded.split(" ").filter(token => token && token !== "y" && token !== "numero" && token !== "casa" && token !== "calle");
+  const atoms = [];
+  for (const token of tokens) {
+    if (token in HOUSE_NUMBERS && HOUSE_NUMBERS[token] < 1000) {
+      atoms.push(HOUSE_NUMBERS[token]);
+    } else {
+      atoms.length = 0;
+    }
+  }
+  if (!atoms.length) {
+    return "";
+  }
+  if (atoms.length === 1) {
+    return String(atoms[0]);
+  }
+  const tens = atoms[atoms.length - 2];
+  const ones = atoms[atoms.length - 1];
+  if (tens >= 20 && tens % 10 === 0 && ones < 10) {
+    return String(tens + ones);
+  }
+  return String(atoms[atoms.length - 1]);
+}
+
 function fiveDigit(candidate) {
   const cp = String(candidate || "");
   if (!/^\d{5}$/.test(cp)) {
@@ -221,7 +273,7 @@ function insertions(cp) {
   return found;
 }
 
-export function parseSpokenPostalCode(value) {
+export function readPostalCode(value) {
   const folded = foldText(value)
     .replace(/\btrescientos\b/g, "tres ciento")
     .replace(/\bcuatrocientos\b/g, "cuatro ciento")
@@ -271,33 +323,39 @@ export function parseSpokenPostalCode(value) {
 
   const catalogHits = [...new Set(candidates.filter(inCatalog))];
   if (catalogHits.length === 1) {
-    return catalogHits[0];
+    return { code: catalogHits[0], options: [] };
   }
   if (catalogHits.length > 1) {
-    const spoken = catalogHits.find(cp => cp === joined);
-    return spoken || catalogHits[0];
+    return { code: "", options: catalogHits.slice(0, 4) };
   }
 
   const repaired = [...new Set(
     [joined, digits].flatMap(insertions)
   )];
   if (repaired.length === 1) {
-    return repaired[0];
+    return { code: repaired[0], options: [] };
   }
-  if (/\bciento\b/.test(folded)) {
-    const withOne = repaired.find(cp => /^\d{2}1\d{2}$/.test(cp));
-    if (withOne) {
-      return withOne;
+  if (repaired.length > 1) {
+    if (/\bciento\b/.test(folded)) {
+      const withOne = repaired.find(cp => /^\d{2}1\d{2}$/.test(cp));
+      if (withOne) {
+        return { code: withOne, options: [] };
+      }
     }
-  }
-  if (/\bcero\b/.test(folded)) {
-    const withZero = repaired.find(cp => /^\d{2}0\d{2}$/.test(cp));
-    if (withZero) {
-      return withZero;
+    if (/\bcero\b/.test(folded)) {
+      const withZero = repaired.find(cp => /^\d{2}0\d{2}$/.test(cp));
+      if (withZero) {
+        return { code: withZero, options: [] };
+      }
     }
+    return { code: "", options: repaired.slice(0, 4) };
   }
 
-  return "";
+  return { code: "", options: [] };
+}
+
+export function parseSpokenPostalCode(value) {
+  return readPostalCode(value).code;
 }
 
 function foldColony(value) {
@@ -378,7 +436,15 @@ export async function checkAddressTool({
   street,
   colony
 }) {
-  const cp = parseSpokenPostalCode(postalCode);
+  const reading = readPostalCode(postalCode);
+  if (reading.options.length > 1) {
+    return {
+      ok: false,
+      options: reading.options,
+      error: `Puede ser ${reading.options.join(" o ")}. Pregunta cuál de esos códigos es, sin elegir uno.`
+    };
+  }
+  const cp = reading.code;
   if (!/^\d{5}$/.test(cp)) {
     return {
       ok: false,
@@ -436,7 +502,7 @@ export async function checkAddressTool({
   };
 }
 
-export async function createOrderTool({
+async function saveOrder({
   businessId,
   callId,
   customerName,
@@ -587,13 +653,20 @@ export async function createOrderTool({
       ? String(item.size).toLowerCase()
       : null;
 
-    const extra = item.extra === "champinones" ? "champinones" : null;
+    const requested = [
+      ...(Array.isArray(item.extras) ? item.extras : []),
+      item.extra
+    ].filter(Boolean);
+    const priced = isPizza(product)
+      ? priceLine({ size, extras: requested, quantity: 1 })
+      : null;
+
+    if (priced && !priced.ok) {
+      throw new Error(priced.error);
+    }
 
     if (isPizza(product)) {
-      unitPrice = pizzaPrice(size);
-      if (extra) {
-        unitPrice += 25;
-      }
+      unitPrice = priced.unit;
     }
 
     if (needsSauce(product)) {
@@ -617,7 +690,11 @@ export async function createOrderTool({
       quantity,
       unit_price: unitPrice,
       subtotal,
-      notes: itemNotes(size, sauce, extra) || null
+      notes: itemNotes(
+        size,
+        sauce,
+        priced?.extras?.map(entry => entry.nombre).join(", ")
+      ) || null
     });
   }
 
@@ -692,14 +769,41 @@ export async function createOrderTool({
     throw itemsError;
   }
 
+  const confirmation = buildConfirmation({
+    customerName,
+    orderType,
+    address,
+    postalCode: (address || "").match(/\b(\d{5})\b/)?.[1] || "",
+    items: calculatedItems.map(item => {
+      const notes = (item.notes || "").split(",").map(part => part.trim()).filter(Boolean);
+      const extras = notes.slice(1).filter(part => part !== "bbq" && part !== "buffalo");
+      return {
+        size: notes[0],
+        extras,
+        quantity: item.quantity,
+        unit: item.unit_price
+      };
+    })
+  });
+
   return {
     success: true,
     order_id: order.id,
     total,
     currency: "MXN",
     payment_method: paymentMethod,
-    customer_name: customerName
+    customer_name: customerName,
+    spoken: confirmation.ok
+      ? confirmation.spoken
+      : `Muy bien, ${customerName}. Tu pedido quedó listo. Total ${total}.`
   };
+}
+
+export function createOrderTool(args) {
+  if (!args?.callId) {
+    return saveOrder(args);
+  }
+  return withCallLock(args.callId, () => saveOrder(args));
 }
 
 export async function getLastOrderTool({
@@ -892,30 +996,63 @@ export function humanTransferStarted(callSid) {
   return transfersStarted.has(callSid);
 }
 
-export async function transferToHumanTool(callSid, businessId) {
-  if (!callSid || transfersStarted.has(callSid)) {
-    return { success: false };
+export async function transferToHumanTool(callSid) {
+  if (!callSid) {
+    return { success: false, spoken: "En este momento no pude comunicarte con una persona. Permíteme continuar ayudándote." };
   }
-
+  const gate = requestTransfer(callSid);
+  console.log(JSON.stringify({
+    event: "transfer_requested",
+    callSid,
+    at: new Date().toISOString(),
+    state: gate.state
+  }));
+  if (!gate.accepted) {
+    return { success: true, duplicate: true, state: gate.state };
+  }
   transfersStarted.add(callSid);
-
-  const twiml =
-    "<Response><Dial timeout=\"30\"><Number>+526621383780</Number></Dial></Response>";
-
+  const number = config.humanTransferNumber;
+  if (!/^\+\d{10,15}$/.test(number)) {
+    markTransferFailed(callSid);
+    transfersStarted.delete(callSid);
+    console.log(JSON.stringify({ event: "transfer_failed", callSid, at: new Date().toISOString(), error: "numero" }));
+    return { success: false, spoken: "En este momento no pude comunicarte con una persona. Permíteme continuar ayudándote." };
+  }
+  let base = config.publicVoiceBaseUrl.trim().replace(/\/$/, "");
+  if (!/^https?:\/\//i.test(base)) {
+    base = `https://${base}`;
+  }
+  const twiml = transferTwiml(number, `${base}/twilio/transfer-result`);
+  console.log(JSON.stringify({
+    event: "transfer_started",
+    callSid,
+    at: new Date().toISOString(),
+    number: maskNumber(number)
+  }));
   try {
     await twilio(config.twilioAccountSid, config.twilioAuthToken)
       .calls(callSid)
       .update({ twiml });
   } catch (error) {
-    console.error(
-      "Twilio rechazó el desvío:",
-      error.code || "",
-      error.message
-    );
-    throw error;
+    markTransferFailed(callSid);
+    transfersStarted.delete(callSid);
+    console.log(JSON.stringify({
+      event: "transfer_failed",
+      callSid,
+      at: new Date().toISOString(),
+      number: maskNumber(number),
+      error: error.message
+    }));
+    return { success: false, spoken: "En este momento no pude comunicarte con una persona. Permíteme continuar ayudándote." };
   }
-
-  return { success: true, number: "+526621383780" };
+  markTransferred(callSid);
+  console.log(JSON.stringify({
+    event: "transfer_completed",
+    callSid,
+    at: new Date().toISOString(),
+    number: maskNumber(number)
+  }));
+  return { success: true, state: "TRANSFERRED" };
 }
 
 export async function endCallTool(callSid) {

@@ -1,5 +1,5 @@
 import { nextReply, MENU_PIZZAS } from "./call-flow.js";
-import { parseSpokenPostalCode, checkAddressTool, priceWithMushrooms } from "./tools.js";
+import { parseSpokenPostalCode, checkAddressTool, priceWithMushrooms, readPostalCode, lineQuote, streetNumber } from "./tools.js";
 
 const failures = [];
 
@@ -81,6 +81,42 @@ expect("colonia", colony.colony === "5 de Mayo" && colony.colony_match === true)
 expect("precio mediana", priceWithMushrooms("mediana").total === 225);
 expect("precio grande", priceWithMushrooms("grande").total === 245);
 expect("precio familiar", priceWithMushrooms("familiar").total === 275);
+
+const postalCases = [
+  ["ochenta y tres cero diez", "83010"],
+  ["ocho tres cero uno cero", "83010"],
+  ["ochenta y tres mil diez", "83010"],
+  ["83 010", "83010"],
+  ["83-010", "83010"],
+  ["83010", "83010"],
+  ["ochenta y tres ciento cincuenta y siete", "83157"],
+  ["ocho tres uno cinco siete", "83157"],
+  ["ochenta y tres mil ciento cincuenta y siete", "83157"],
+  ["83157", "83157"]
+];
+for (const [said, expected] of postalCases) {
+  expect(`cp ${said}`, parseSpokenPostalCode(said) === expected);
+}
+
+const ambiguous = readPostalCode("83157 ochenta y tres cero diez");
+expect("cp ambiguo", ambiguous.code === "" && ambiguous.options.length > 1 && ambiguous.options.every(cp => /^\d{5}$/.test(cp)));
+
+expect("doble cantidad", lineQuote({ size: "mediana", quantity: 2 }).total === 400);
+expect("extra no cambia base", lineQuote({ size: "mediana", extra: "cebolla", quantity: 1 }).unit === 200);
+expect("champi suma 25", lineQuote({ size: "grande", extra: "champinones", quantity: 1 }).total === 245);
+for (const bad of [0, -1, 51, 1.5]) {
+  let rejected = false;
+  try {
+    lineQuote({ size: "familiar", quantity: bad });
+  } catch {
+    rejected = true;
+  }
+  expect(`cantidad ${bad}`, rejected);
+}
+
+for (const said of ["Veracruz 56", "Veracruz #56", "Veracruz numero 56", "Veracruz cincuenta y seis", "calle Veracruz numero cincuenta y seis"]) {
+  expect(`numero ${said}`, streetNumber(said) === "56");
+}
 
 if (failures.length) {
   console.error(failures.slice(0, 20).join("\n"));

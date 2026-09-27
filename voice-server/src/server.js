@@ -100,7 +100,25 @@ app.post(
   (req, res) => {
     const response = new twilio.twiml.VoiceResponse();
     const dial = response.dial({ timeout: 30 });
-    dial.number("+526621383780");
+    dial.number(config.humanTransferNumber);
+    sendTwiml(res, response);
+  }
+);
+
+app.post(
+  "/twilio/transfer-result",
+  validateTwilioSignature,
+  (req, res) => {
+    const status = req.body.DialCallStatus || "";
+    const response = new twilio.twiml.VoiceResponse();
+    if (status === "completed" || status === "answered") {
+      response.hangup();
+    } else {
+      response.say(
+        { language: "es-MX" },
+        "En este momento no pude comunicarte con una persona. Permíteme continuar ayudándote."
+      );
+    }
     sendTwiml(res, response);
   }
 );

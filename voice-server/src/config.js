@@ -50,5 +50,8 @@ export const config = {
   validateTwilioSignature:
     process.env.VALIDATE_TWILIO_SIGNATURE === "true",
 
-  maxCallSeconds: 300
+  maxCallSeconds: 300,
+
+  humanTransferNumber:
+    process.env.HUMAN_TRANSFER_NUMBER || "+526621383780"
 };

@@ -1,3 +1,7 @@
+import { mushroomIntent, mentionedQuantity } from "./turn-policy.js";
+import { priceLine } from "./confirmation.js";
+import { matchIngredients } from "./menu-ingredients.js";
+
 export const MENU_PIZZAS = [
   "BBQ Chicken",
   "Chicken Alfredo",
@@ -59,17 +63,59 @@ export function nextReply(state, utterance) {
   if (size) {
     next.size = size;
   }
+  const quantity = mentionedQuantity(utterance);
+  if (quantity) {
+    next.quantity = quantity;
+  }
   const pizza = matchPizza(utterance);
-  if (/\bchampi/.test(text)) {
-    const sized = next.size || "mediana";
-    const base = { mediana: 200, grande: 220, familiar: 250 }[sized];
-    next.product = "Peperoni";
-    next.size = sized;
-    next.extra = "champinones";
+  if (pizza) {
+    next.product = pizza;
+  }
+  const topping = mushroomIntent(utterance);
+  if (topping === "remove") {
+    const found = matchIngredients(utterance).filter(name => !fold(next.product || "").includes(name));
+    next.extras = (next.extras || []).filter(name => !found.includes(name));
+    if (found.includes("champinones") || topping === "remove") {
+      next.extra = "";
+      next.extras = (next.extras || []).filter(name => name !== "champinones" && !found.includes(name));
+    }
+    const priced = priceLine({
+      size: next.size || "mediana",
+      extras: next.extras,
+      quantity: next.quantity || 1
+    });
     return {
       state: next,
       hangup: false,
-      say: `Muy bien, pepperoni con champiñones subiría de ${base} a ${base + 25}, ¿de acuerdo?`
+      say: `Sin champiñones queda en ${priced.subtotal}.`
+    };
+  }
+  if (topping === "unclear") {
+    return {
+      state: next,
+      hangup: false,
+      say: "¿Agrego los champiñones o se los quito?"
+    };
+  }
+  if (topping === "add" || matchIngredients(utterance).length) {
+    const found = matchIngredients(utterance).filter(name => !fold(next.product || "").includes(name));
+    const names = found.length ? found : ["champinones"];
+    const sized = next.size || "mediana";
+    next.extras = [...new Set([...(next.extras || []), ...names])];
+    if (next.extras.includes("champinones")) {
+      next.extra = "champinones";
+    }
+    next.product = next.product || "Peperoni";
+    next.size = sized;
+    const priced = priceLine({
+      size: sized,
+      extras: next.extras,
+      quantity: next.quantity || 1
+    });
+    return {
+      state: next,
+      hangup: false,
+      say: `Muy bien, con ${next.extras.join(" y ")} subiría de ${priced.base} a ${priced.subtotal}, ¿de acuerdo?`
     };
   }
   if (pizza) {
