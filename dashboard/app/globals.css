@@ -393,12 +393,14 @@ body.login-lock {
 
 .menu-board {
   display: grid;
-  gap: 28px;
+  gap: 32px;
+  width: 100%;
 }
 
 .menu-board h2 {
   margin: 0 0 12px;
-  font-size: 22px;
+  font-size: 18px;
+  font-weight: 650;
 }
 
 .menu-list {
@@ -406,39 +408,70 @@ body.login-lock {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .menu-list li {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   align-items: center;
-  padding: 14px 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
   background: #fff;
 }
 
-.menu-list li.is-off {
-  opacity: 0.55;
+.menu-list li.is-off strong,
+.menu-list li.is-off p {
+  color: #9ca3af;
 }
 
 .menu-list p {
-  margin: 4px 0 0;
-  color: #4b5563;
-  font-size: 14px;
+  margin: 2px 0 0;
+  color: #6b7280;
+  font-size: 13px;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .menu-blocked {
   color: #b45309;
 }
 
-.menu-list button,
+.menu-switch {
+  width: 51px;
+  height: 31px;
+  flex: 0 0 51px;
+  border: 0;
+  border-radius: 31px;
+  padding: 2px;
+  background: #e5e7eb;
+}
+
+.menu-switch span {
+  display: block;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s ease;
+}
+
+.menu-switch.is-on {
+  background: #6d28d9;
+}
+
+.menu-switch.is-on span {
+  transform: translateX(20px);
+}
+
 .menu-form button {
   border: 0;
   border-radius: 999px;
-  padding: 8px 14px;
+  padding: 10px 16px;
   background: #6d28d9;
   color: #fff;
   font-weight: 700;
@@ -450,18 +483,57 @@ body.login-lock {
   max-width: 420px;
 }
 
+.menu-prices {
+  max-width: none;
+}
+
 .menu-form label {
   display: grid;
   gap: 4px;
-  font-size: 14px;
+  font-size: 13px;
+  color: #4b5563;
 }
 
 .menu-form input,
-.menu-form select {
-  border: 1px solid #d1d5db;
+.menu-form select,
+.menu-list input {
+  width: 100%;
+  border: 1px solid #e5e7eb;
   border-radius: 10px;
   padding: 10px 12px;
   font: inherit;
+  background: #fff;
+}
+
+.menu-list input {
+  max-width: 120px;
+  margin-top: 8px;
+}
+
+@media (min-width: 700px) {
+  .menu-prices {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .menu-prices button {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+
+@media (min-width: 1100px) {
+  .menu-prices {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+    align-items: end;
+  }
+
+  .menu-prices button {
+    grid-column: auto;
+  }
+
+  .menu-products {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .menu-error {

@@ -21,6 +21,29 @@ type IngredientRow = {
   available: boolean;
 };
 
+function Switch({
+  on,
+  label,
+  onClick
+}: {
+  on: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`menu-switch${on ? " is-on" : ""}`}
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      onClick={onClick}
+    >
+      <span />
+    </button>
+  );
+}
+
 export default function MenuBoard() {
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [ingredients, setIngredients] = useState<IngredientRow[]>([]);
@@ -228,7 +251,7 @@ export default function MenuBoard() {
       {error && <p className="menu-error">{error}</p>}
       <section>
         <h2>Precios</h2>
-        <form className="menu-form" onSubmit={savePrices}>
+        <form className="menu-form menu-prices" onSubmit={savePrices}>
           <label>
             Mediana
             <input
@@ -284,7 +307,7 @@ export default function MenuBoard() {
       </section>
       <section>
         <h2>Productos</h2>
-        <ul className="menu-list">
+        <ul className="menu-list menu-products">
           {products.map(product => {
             const missing = ingredientsFromText(product.description || "").filter(item =>
               off.has(item)
@@ -311,9 +334,11 @@ export default function MenuBoard() {
                     />
                   )}
                 </div>
-                <button type="button" onClick={() => toggleProduct(product)}>
-                  {product.available ? "Disponible" : "Apagado"}
-                </button>
+                <Switch
+                  on={product.available}
+                  label={product.available ? `Apagar ${product.name}` : `Prender ${product.name}`}
+                  onClick={() => toggleProduct(product)}
+                />
               </li>
             );
           })}
@@ -363,9 +388,15 @@ export default function MenuBoard() {
           {ingredients.map(ingredient => (
             <li key={ingredient.id} className={ingredient.available ? "" : "is-off"}>
               <strong>{ingredientLabel(ingredient.name)}</strong>
-              <button type="button" onClick={() => toggleIngredient(ingredient)}>
-                {ingredient.available ? "Disponible" : "Apagado"}
-              </button>
+              <Switch
+                on={ingredient.available}
+                label={
+                  ingredient.available
+                    ? `Apagar ${ingredientLabel(ingredient.name)}`
+                    : `Prender ${ingredientLabel(ingredient.name)}`
+                }
+                onClick={() => toggleIngredient(ingredient)}
+              />
             </li>
           ))}
         </ul>
