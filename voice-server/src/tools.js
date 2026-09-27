@@ -778,10 +778,18 @@ export async function updateLastOrderTool({
   };
 }
 
+const transfersStarted = new Set();
+
+export function humanTransferStarted(callSid) {
+  return transfersStarted.has(callSid);
+}
+
 export async function transferToHumanTool(callSid, businessId) {
-  if (!callSid) {
+  if (!callSid || transfersStarted.has(callSid)) {
     return { success: false };
   }
+
+  transfersStarted.add(callSid);
 
   const { data, error } = await supabase
     .from("businesses")
@@ -793,17 +801,18 @@ export async function transferToHumanTool(callSid, businessId) {
     throw error;
   }
 
-  const digits = String(data?.overflow_phone || "").replace(/\D/g, "");
-  const overflow = digits.length === 10 ? `+52${digits}` : normalizePhone(data?.overflow_phone);
+  const digits = String(data?.overflow_phone || "526621383780").replace(/\D/g, "");
+  const overflow = digits.length === 10
+    ? `+52${digits}`
+    : digits
+      ? `+${digits}`
+      : "+526621383780";
 
-  if (!overflow) {
-    return { success: false, error: "No hay número de desborde." };
-  }
-
-  await new Promise(resolve => setTimeout(resolve, 4000));
+  await new Promise(resolve => setTimeout(resolve, 2500));
 
   const response = new twilio.twiml.VoiceResponse();
-  response.dial({ timeout: 30 }, overflow);
+  const dial = response.dial({ timeout: 30 });
+  dial.number(overflow);
 
   await twilio(config.twilioAccountSid, config.twilioAuthToken)
     .calls(callSid)
