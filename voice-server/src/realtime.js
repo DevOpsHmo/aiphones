@@ -445,6 +445,11 @@ ${menuText || "Menú no disponible."}
           if (event.transcript) {
             transcript +=
               `IA: ${event.transcript}\n`;
+            if (/transfer|comunico|humano/i.test(event.transcript)) {
+              transferToHumanTool(callSid, businessId).catch(error => {
+                console.error("No se pudo transferir:", error.message);
+              });
+            }
           }
         }
 

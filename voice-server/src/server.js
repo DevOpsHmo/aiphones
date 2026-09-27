@@ -93,6 +93,17 @@ const wss =
     path: "/twilio/media"
   });
 
+app.post(
+  "/twilio/overflow",
+  validateTwilioSignature,
+  (req, res) => {
+    const response = new twilio.twiml.VoiceResponse();
+    const dial = response.dial({ timeout: 30 });
+    dial.number("+526621383780");
+    sendTwiml(res, response);
+  }
+);
+
 app.get(
   "/health",
   (req, res) => {

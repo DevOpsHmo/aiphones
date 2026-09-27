@@ -791,34 +791,20 @@ export async function transferToHumanTool(callSid, businessId) {
 
   transfersStarted.add(callSid);
 
-  const { data, error } = await supabase
-    .from("businesses")
-    .select("overflow_phone")
-    .eq("id", businessId)
-    .single();
-
-  if (error) {
-    throw error;
+  let base = config.publicVoiceBaseUrl.trim().replace(/\/$/, "");
+  if (!/^https?:\/\//i.test(base)) {
+    base = `https://${base}`;
   }
-
-  const digits = String(data?.overflow_phone || "526621383780").replace(/\D/g, "");
-  const overflow = digits.length === 10
-    ? `+52${digits}`
-    : digits
-      ? `+${digits}`
-      : "+526621383780";
-
-  await new Promise(resolve => setTimeout(resolve, 2500));
-
-  const response = new twilio.twiml.VoiceResponse();
-  const dial = response.dial({ timeout: 30 });
-  dial.number(overflow);
+  base = base.replace(/^http:/i, "https:");
 
   await twilio(config.twilioAccountSid, config.twilioAuthToken)
     .calls(callSid)
-    .update({ twiml: response.toString() });
+    .update({
+      url: `${base}/twilio/overflow`,
+      method: "POST"
+    });
 
-  return { success: true };
+  return { success: true, number: "+526621383780" };
 }
 
 export async function endCallTool(callSid) {
@@ -827,6 +813,10 @@ export async function endCallTool(callSid) {
   }
 
   await new Promise(resolve => setTimeout(resolve, 8000));
+
+  if (humanTransferStarted(callSid)) {
+    return { success: true, skipped: true };
+  }
 
   await twilio(
     config.twilioAccountSid,
