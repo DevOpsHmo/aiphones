@@ -38,6 +38,18 @@ export default function KitchenCursor() {
       }, 320);
     }
 
+    function onBlank(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      if (!target) {
+        return;
+      }
+      if (target.closest("button, a, input, textarea, select, label, form, [role='button'], .orders-card, .menu-list li, .orders-nav, .orders-daypicker, .orders-header-right, [role='dialog']")) {
+        return;
+      }
+      spin();
+      window.dispatchEvent(new Event("kitchen-refresh"));
+    }
+
     function onKey(event: KeyboardEvent) {
       if (event.key !== "Enter" || event.repeat) {
         return;
@@ -46,14 +58,14 @@ export default function KitchenCursor() {
     }
 
     window.addEventListener("mousemove", move, { passive: true });
-    window.addEventListener("mousedown", spin);
+    window.addEventListener("mousedown", onBlank);
     window.addEventListener("keydown", onKey);
 
     return () => {
       window.cancelAnimationFrame(frameRef.current);
       window.clearTimeout(timerRef.current);
       window.removeEventListener("mousemove", move);
-      window.removeEventListener("mousedown", spin);
+      window.removeEventListener("mousedown", onBlank);
       window.removeEventListener("keydown", onKey);
     };
   }, []);

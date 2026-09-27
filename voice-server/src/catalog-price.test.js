@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { priceLine, buildConfirmation, reviseDraft, acceptSpoken } from "./confirmation.js";
-import { menuIngredients } from "./menu-ingredients.js";
+import { bakeNote, billableExtras, ingredientsFromText, menuIngredients } from "./menu-ingredients.js";
 import { nextReply } from "./call-flow.js";
 import { mushroomIntent } from "./turn-policy.js";
 
@@ -11,6 +11,43 @@ test("los extras salen de las pizzas del menu", () => {
   assert.ok(names.includes("jamon"));
   assert.ok(names.includes("cereza"));
   assert.equal(priceLine({ size: "mediana", extras: ["trufa"], quantity: 1 }).ok, false);
+});
+
+test("ingrediente que no viene en la pizza se cobra", () => {
+  assert.deepEqual(
+    billableExtras(["champinones"], "Pizza de peperoni."),
+    ["champinones"]
+  );
+  assert.deepEqual(
+    billableExtras(["pina"], "Jalapeños, chorizo, tocino, cebolla y frijoles."),
+    ["pina"]
+  );
+  assert.deepEqual(
+    billableExtras(["pina"], "Piña, jamón y cereza."),
+    []
+  );
+  assert.deepEqual(
+    billableExtras(["pepperoni"], "Pizza de peperoni."),
+    []
+  );
+});
+
+test("orilla y queso extra se cobran y doradita es nota", () => {
+  assert.deepEqual(
+    billableExtras(["orilla rellena de queso", "queso extra"], "Pizza de peperoni."),
+    ["orilla rellena de queso", "queso extra"]
+  );
+  assert.equal(bakeNote("bien doradita"), "Bien doradita");
+  assert.equal(bakeNote("un poco más en el horno"), "Bien doradita");
+  assert.equal(bakeNote("sin cebolla"), "");
+});
+
+test("pina apagada no se cobra y la hawaiana la usa", () => {
+  const catalog = menuIngredients().filter(name => name !== "pina");
+  const priced = priceLine({ size: "mediana", extra: "piña", quantity: 1, catalog });
+  assert.equal(priced.ok, false);
+  assert.match(priced.error, /pina/);
+  assert.ok(ingredientsFromText("Piña, jamón y cereza.").includes("pina"));
 });
 
 for (const [size, base] of [["mediana", 200], ["grande", 220], ["familiar", 250]]) {

@@ -51,6 +51,8 @@ export function ingredientsFromText(description) {
   return found;
 }
 
+const SPECIAL_EXTRAS = ["orilla rellena de queso", "queso extra"];
+
 export function menuIngredients(descriptions = DESCRIPTIONS) {
   const all = [];
   for (const description of descriptions) {
@@ -60,7 +62,23 @@ export function menuIngredients(descriptions = DESCRIPTIONS) {
       }
     }
   }
+  for (const name of SPECIAL_EXTRAS) {
+    if (!all.includes(name)) {
+      all.push(name);
+    }
+  }
   return all;
+}
+
+export function bakeNote(value) {
+  const text = foldIngredient(value);
+  if (!text) {
+    return "";
+  }
+  if (/\bdorad|\bbien cocid|\bmas horno|\bmas tiempo|\bhorno\b/.test(text)) {
+    return "Bien doradita";
+  }
+  return "";
 }
 
 export function matchIngredient(said, catalog = menuIngredients()) {
@@ -86,6 +104,34 @@ export function matchIngredients(utterance, catalog = menuIngredients()) {
     }
   }
   return found;
+}
+
+const SAME_INGREDIENT = [
+  ["pepperoni", "peperoni"]
+];
+
+function alreadyOnPizza(official, builtIn) {
+  if (builtIn.has(official)) {
+    return true;
+  }
+  return SAME_INGREDIENT.some(
+    group => group.includes(official) && group.some(name => builtIn.has(name))
+  );
+}
+
+export function billableExtras(requested, description, catalog = menuIngredients()) {
+  const builtIn = new Set(ingredientsFromText(description));
+  const extras = [];
+  for (const said of requested || []) {
+    const official = matchIngredient(said, catalog);
+    if (!official || alreadyOnPizza(official, builtIn)) {
+      continue;
+    }
+    if (!extras.includes(official)) {
+      extras.push(official);
+    }
+  }
+  return extras;
 }
 
 export const EXTRA_PRICE = 25;

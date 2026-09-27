@@ -2,24 +2,30 @@ import { matchIngredient, EXTRA_PRICE } from "./menu-ingredients.js";
 
 const SIZE_PRICES = { mediana: 200, grande: 220, familiar: 250 };
 
-export function priceLine({ size, extra, extras, quantity }) {
+export function priceLine({ size, extra, extras, quantity, catalog, prices, extraPrice }) {
   const qty = Number(quantity);
   if (!Number.isInteger(qty) || qty < 1 || qty > 50) {
     return { ok: false, error: "Cantidad inválida" };
   }
-  const base = SIZE_PRICES[size];
+  const sizePrices = prices || SIZE_PRICES;
+  const toppingPrice = Number(extraPrice ?? EXTRA_PRICE);
+  const base = sizePrices[size];
   if (!base) {
     return { ok: false, error: "Tamaño inválido" };
   }
   const requested = [...new Set([...(extras || []), extra].filter(Boolean))];
   const priced = [];
   for (const name of requested) {
-    const official = matchIngredient(name);
+    const official = matchIngredient(name, catalog);
     if (!official) {
+      const known = matchIngredient(name);
+      if (known && catalog) {
+        return { ok: false, error: `${known} no está disponible. Di que no se puede agregar.` };
+      }
       return { ok: false, error: "Extra inválido" };
     }
     if (!priced.some(item => item.nombre === official)) {
-      priced.push({ nombre: official, precio: EXTRA_PRICE });
+      priced.push({ nombre: official, precio: toppingPrice });
     }
   }
   const extrasTotal = priced.reduce((sum, item) => sum + item.precio, 0);
@@ -40,19 +46,40 @@ export function priceLine({ size, extra, extras, quantity }) {
 export function buildConfirmation(draft) {
   const lines = [];
   let total = 0;
+  const grandeLines = (draft.items || []).filter(item => item.size === "grande");
+  const grandeCount = grandeLines.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+  const pairPromo = grandeLines.length >= 2 && grandeCount === 2;
+  const sizePrices = draft.prices || SIZE_PRICES;
+  const extraPrice = draft.extraPrice ?? EXTRA_PRICE;
+  const promoPair = Number(draft.promoPair ?? 400);
   for (const item of draft.items || []) {
-    const priced = priceLine(item);
+    if (!sizePrices[item.size]) {
+      const qty = Number(item.quantity);
+      const unit = Number(item.unit);
+      if (!Number.isInteger(qty) || qty < 1 || !Number.isFinite(unit)) {
+        return { ok: false, error: "Bebida inválida" };
+      }
+      total += unit * qty;
+      lines.push(`${qty} ${item.name || "refresco"}`);
+      continue;
+    }
+    const priced = priceLine({ ...item, prices: sizePrices, extraPrice });
     if (!priced.ok) {
       return priced;
     }
-    if (priced.unit !== item.unit && item.unit != null) {
+    const promoOff = pairPromo && item.size === "grande"
+      ? sizePrices.grande - promoPair / 2
+      : 0;
+    const expected = priced.unit - promoOff;
+    if (item.unit != null && Number(item.unit) !== expected) {
       return { ok: false, error: "El precio no coincide con el servidor" };
     }
-    total += priced.subtotal;
+    total += expected * priced.quantity;
     const extras = priced.extras
-      .map(item => (item.nombre === "champinones" ? "champiñones" : item.nombre))
+      .map(entry => (entry.nombre === "champinones" ? "champiñones" : entry.nombre))
       .join(" y ");
-    lines.push(`${priced.quantity} pizza ${priced.size}${extras ? ` con ${extras}` : ""} ${priced.subtotal}`);
+    const pizzaName = item.name ? ` de ${item.name}` : "";
+    lines.push(`${priced.quantity} pizza${pizzaName} ${priced.size}${extras ? ` con ${extras}` : ""}`);
   }
   if (!lines.length) {
     return { ok: false, error: "Pedido incompleto" };
@@ -80,8 +107,8 @@ export function buildConfirmation(draft) {
     .replace(/,\s*$/, "")
     .trim();
   const place = draft.orderType === "delivery"
-    ? ` A ${street}. Código ${spokenCode}. Listo, tu pedido ha sido confirmado y llegará en aproximadamente 30 minutos a tu domicilio. Gracias por marcar a Pizzería Hermosillo, que tengas un buen día. Hasta luego.`
-    : " Para recoger. Listo, tu pedido ha sido confirmado y estará listo en aproximadamente 30 minutos. Gracias por marcar a Pizzería Hermosillo, que tengas un buen día. Hasta luego.";
+    ? ` A ${street}. Código ${spokenCode}. Su pedido llegará a su domicilio en aproximadamente 30 minutos. Muchas gracias por llamar a Pizzería Hermosillo. Que tenga buen día. Hasta luego.`
+    : " Para recoger. Estará listo en aproximadamente 30 minutos. Muchas gracias por llamar a Pizzería Hermosillo. Que tenga buen día. Hasta luego.";
   return {
     ok: true,
     version: draft.version || 1,
@@ -89,7 +116,7 @@ export function buildConfirmation(draft) {
     lines,
     postalCode: draft.postalCode || "",
     address: draft.address || "",
-    spoken: `Muy bien, ${draft.customerName}. Tu pedido: ${lines.join(", ")}. Total ${total}.${place}`
+    spoken: `Muy bien, ${draft.customerName}, su pedido ha quedado confirmado: ${lines.join(", ")}. Total ${total}.${place}`
   };
 }
 

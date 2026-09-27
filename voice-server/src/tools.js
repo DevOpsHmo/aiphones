@@ -6,6 +6,7 @@ import { config } from "./config.js";
 import { normalizePhone, supabase } from "./supabase.js";
 import { withCallLock } from "./call-lock.js";
 import { buildConfirmation, priceLine } from "./confirmation.js";
+import { bakeNote, billableExtras, foldIngredient, ingredientsFromText, menuIngredients } from "./menu-ingredients.js";
 import {
   requestTransfer,
   markTransferred,
@@ -71,9 +72,10 @@ function pizzaPrice(size) {
   return price;
 }
 
-function itemNotes(size, sauce, extra) {
+function itemNotes(size, sauce, extra, note) {
   const topping = extra === "champinones" ? "champiñones" : extra;
-  return [size, sauce, topping].filter(Boolean).join(", ");
+  const baked = bakeNote(note);
+  return [size, sauce, topping, baked].filter(Boolean).join(", ");
 }
 
 export function lineQuote({ size, extra, extras, quantity }) {
@@ -87,6 +89,55 @@ export function lineQuote({ size, extra, extras, quantity }) {
 export function priceWithMushrooms(size) {
   const quote = lineQuote({ size, extra: "champinones", quantity: 1 });
   return { base: quote.unit - 25, total: quote.total };
+}
+
+async function unavailableIngredientNames(businessId) {
+  const { data, error } = await supabase
+    .from("menu_ingredients")
+    .select("name,available")
+    .eq("business_id", businessId);
+  if (error) {
+    console.error("menu_ingredients", error.message);
+    return new Set();
+  }
+  return new Set(
+    (data || [])
+      .filter(row => row.available === false)
+      .map(row => foldIngredient(row.name))
+  );
+}
+
+const DEFAULT_MENU_PRICES = {
+  mediana: 200,
+  grande: 220,
+  familiar: 250,
+  extra: 25,
+  promoPair: 400
+};
+
+export async function loadMenuPrices(businessId) {
+  const { data, error } = await supabase
+    .from("menu_settings")
+    .select("mediana,grande,familiar,extra,promo_pair")
+    .eq("business_id", businessId)
+    .maybeSingle();
+  if (error || !data) {
+    return { ...DEFAULT_MENU_PRICES };
+  }
+  return {
+    mediana: Number(data.mediana) || DEFAULT_MENU_PRICES.mediana,
+    grande: Number(data.grande) || DEFAULT_MENU_PRICES.grande,
+    familiar: Number(data.familiar) || DEFAULT_MENU_PRICES.familiar,
+    extra: Number(data.extra) || DEFAULT_MENU_PRICES.extra,
+    promoPair: Number(data.promo_pair) || DEFAULT_MENU_PRICES.promoPair
+  };
+}
+
+function blockedIngredients(product, unavailable) {
+  if (!isPizza(product)) {
+    return [];
+  }
+  return ingredientsFromText(product.description).filter(name => unavailable.has(name));
 }
 
 export async function getMenuTool(businessId) {
@@ -104,12 +155,24 @@ export async function getMenuTool(businessId) {
     throw error;
   }
 
+  const unavailable = await unavailableIngredientNames(businessId);
+  const menuPrices = await loadMenuPrices(businessId);
+  const sizePrices = {
+    mediana: menuPrices.mediana,
+    grande: menuPrices.grande,
+    familiar: menuPrices.familiar
+  };
+  const products = (data || []).filter(product => blockedIngredients(product, unavailable).length === 0);
+
   return {
-    pizza_sizes: SIZE_PRICES,
-    products: (data || []).map(product => ({
+    pizza_sizes: sizePrices,
+    extra_price: menuPrices.extra,
+    promo_pair: menuPrices.promoPair,
+    unavailableIngredients: [...unavailable],
+    products: products.map(product => ({
       ...product,
       price: isPizza(product) ? null : Number(product.price),
-      sizes: isPizza(product) ? SIZE_PRICES : undefined,
+      sizes: isPizza(product) ? sizePrices : undefined,
       sauce_options: needsSauce(product)
         ? ["bbq", "buffalo"]
         : undefined
@@ -118,8 +181,13 @@ export async function getMenuTool(businessId) {
 }
 
 export function formatMenuForPrompt(menu) {
+  const allowed = menuIngredients().filter(
+    name => !(menu.unavailableIngredients || []).includes(name)
+  );
   const lines = [
-    "Pizzas: mediana 200, grande 220, familiar 250. Di el número solo, por ejemplo: la pizza grande está en 220. Nunca digas dólares, pesos ni el signo de dinero."
+    `Pizzas: mediana ${menu.pizza_sizes?.mediana ?? 200}, grande ${menu.pizza_sizes?.grande ?? 220}, familiar ${menu.pizza_sizes?.familiar ?? 250}. Extra ${menu.extra_price ?? 25}. Dos pizzas grandes ${menu.promo_pair ?? 400}. Di el número solo. Nunca digas dólares, pesos ni el signo de dinero.`,
+    `Extras permitidos: ${allowed.join(", ") || "ninguno"}.`,
+    "Si piden un ingrediente que no está en extras permitidos, di que no está disponible. No armes una pizza que no esté en esta lista."
   ];
 
   for (const product of menu.products || []) {
@@ -215,6 +283,49 @@ const HOUSE_NUMBERS = {
   cien: 100,
   ciento: 100
 };
+
+export function formatHeardStreet(utterance) {
+  const number = streetNumber(utterance);
+  if (!number) {
+    return "";
+  }
+  const name = String(utterance || "")
+    .replace(/[.]/g, " ")
+    .replace(/\b(n[uú]mero|num|no|casa|calle)\b/gi, " ")
+    .replace(/\d+/g, " ")
+    .replace(/\b(cero|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|y)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (name.length < 4) {
+    return "";
+  }
+  return `${name} ${number}`;
+}
+
+export function lockStreet(address, heardStreet) {
+  const heard = String(heardStreet || "").trim();
+  if (!heard) {
+    return address || "";
+  }
+  const heardName = foldText(heard.replace(/\s+\d+$/, ""));
+  const current = String(address || "");
+  if (heardName && foldText(current).includes(heardName)) {
+    return current;
+  }
+  const parts = current.split(",").map(part => part.trim()).filter(Boolean);
+  const streetIndex = parts.findIndex(
+    part => /\d/.test(part) && !/c\.?\s*p/i.test(part) && !/hermosillo|sonora/i.test(part)
+  );
+  if (streetIndex >= 0) {
+    parts[streetIndex] = heard;
+    return parts.join(", ");
+  }
+  if (!parts.length) {
+    return heard;
+  }
+  parts.splice(1, 0, heard);
+  return parts.join(", ");
+}
 
 export function streetNumber(value) {
   const folded = foldText(value);
@@ -603,7 +714,7 @@ async function saveOrder({
     await supabase
       .from("products")
       .select(
-        "id,name,price,available,business_id,category"
+        "id,name,description,price,available,business_id,category"
       )
       .eq("business_id", businessId)
       .in("id", productIds);
@@ -621,6 +732,14 @@ async function saveOrder({
     );
   }
 
+  const unavailable = await unavailableIngredientNames(businessId);
+  const menuPrices = await loadMenuPrices(businessId);
+  const sizePrices = {
+    mediana: menuPrices.mediana,
+    grande: menuPrices.grande,
+    familiar: menuPrices.familiar
+  };
+  const allowedExtras = menuIngredients().filter(name => !unavailable.has(name));
   const calculatedItems = [];
   let total = 0;
 
@@ -638,6 +757,13 @@ async function saveOrder({
     if (!product.available) {
       throw new Error(
         `El producto ${product.name} no está disponible.`
+      );
+    }
+
+    const missing = blockedIngredients(product, unavailable);
+    if (missing.length) {
+      throw new Error(
+        `${product.name} no está disponible porque falta ${missing.join(", ")}. Di que no se puede pedir.`
       );
     }
 
@@ -664,8 +790,18 @@ async function saveOrder({
       ...(Array.isArray(item.extras) ? item.extras : []),
       item.extra
     ].filter(Boolean);
+    const extras = isPizza(product)
+      ? billableExtras(requested, product.description, allowedExtras)
+      : [];
     const priced = isPizza(product)
-      ? priceLine({ size, extras: requested, quantity: 1 })
+      ? priceLine({
+        size,
+        extras,
+        quantity: 1,
+        catalog: allowedExtras,
+        prices: sizePrices,
+        extraPrice: menuPrices.extra
+      })
       : null;
 
     if (priced && !priced.ok) {
@@ -700,9 +836,28 @@ async function saveOrder({
       notes: itemNotes(
         size,
         sauce,
-        priced?.extras?.map(entry => entry.nombre).join(", ")
+        priced?.extras?.map(entry => entry.nombre).join(", "),
+        item.note || item.comment
       ) || null
     });
+  }
+
+  const grandeLines = calculatedItems.filter(item => String(item.notes || "").split(",")[0].trim() === "grande");
+  const grandeUnits = grandeLines.reduce((sum, item) => sum + item.quantity, 0);
+  if (grandeLines.length >= 2 && grandeUnits === 2) {
+    for (const item of calculatedItems) {
+      const size = String(item.notes || "").split(",")[0].trim();
+      if (size !== "grande") {
+        continue;
+      }
+      const cut = (menuPrices.grande - menuPrices.promoPair / 2) * item.quantity;
+      item.subtotal -= cut;
+      item.unit_price = item.subtotal / item.quantity;
+      total -= cut;
+      item.notes = item.notes
+        ? `${item.notes}, promoción dos grandes`
+        : "promoción dos grandes";
+    }
   }
 
   const { data: customer, error: customerError } =
@@ -783,14 +938,18 @@ async function saveOrder({
     postalCode: (address || "").match(/\b(\d{5})\b/)?.[1] || "",
     items: calculatedItems.map(item => {
       const notes = (item.notes || "").split(",").map(part => part.trim()).filter(Boolean);
-      const extras = notes.slice(1).filter(part => part !== "bbq" && part !== "buffalo");
+      const extras = notes.slice(1).filter(part => part !== "bbq" && part !== "buffalo" && part !== "Bien doradita" && !part.startsWith("promoción"));
       return {
+        name: item.name,
         size: notes[0],
         extras,
         quantity: item.quantity,
         unit: item.unit_price
       };
-    })
+    }),
+    prices: sizePrices,
+    extraPrice: menuPrices.extra,
+    promoPair: menuPrices.promoPair
   });
 
   return {

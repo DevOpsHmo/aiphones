@@ -189,8 +189,7 @@ app.post(
         if (overflow) {
           response.dial(
             {
-              timeout: 30,
-              timeLimit: config.maxCallSeconds
+              timeout: 30
             },
             overflow
           );
@@ -343,28 +342,6 @@ wss.on(
               callSid
             );
 
-            limitTimer = setTimeout(() => {
-              if (!callSid || humanTransferStarted(callSid)) {
-                return;
-              }
-
-              client
-                .calls(callSid)
-                .update({
-                  status: "completed"
-                })
-                .catch(error => {
-                  console.error(
-                    "No se pudo cortar la llamada a los 5 min:",
-                    error.message
-                  );
-                });
-            }, config.maxCallSeconds * 1000);
-
-            warningTimer = setTimeout(() => {
-              realtime?.warnTimeUp?.();
-            }, (config.maxCallSeconds - 30) * 1000);
-
             let previousTranscript = "";
             let knownName = "";
             let knownAddress = "";
@@ -512,10 +489,7 @@ wss.on(
             callId,
             transcript:
               realtime.getTranscript(),
-            durationSeconds: Math.min(
-              config.maxCallSeconds,
-              realtime.getDurationSeconds()
-            )
+            durationSeconds: realtime.getDurationSeconds()
           });
         }
       } catch (error) {

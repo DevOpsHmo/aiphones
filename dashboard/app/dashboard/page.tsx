@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
 import StatsBoard from "./StatsBoard";
+import MenuBoard from "./MenuBoard";
 
 type OrderItem = {
   name: string;
@@ -837,7 +838,7 @@ export default function DashboardPage() {
     const [year, month] = todayKey.split("-").map(Number);
     return { year, month: month - 1 };
   });
-  const [view, setView] = useState<"orders" | "stats">("orders");
+  const [view, setView] = useState<"orders" | "stats" | "menu">("orders");
   const [navOpen, setNavOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
@@ -1477,6 +1478,7 @@ export default function DashboardPage() {
     window.addEventListener("focus", wake);
     window.addEventListener("pageshow", wake);
     window.addEventListener("online", wake);
+    window.addEventListener("kitchen-refresh", wake);
 
     return () => {
       window.clearInterval(timer);
@@ -1484,6 +1486,7 @@ export default function DashboardPage() {
       window.removeEventListener("focus", wake);
       window.removeEventListener("pageshow", wake);
       window.removeEventListener("online", wake);
+      window.removeEventListener("kitchen-refresh", wake);
       void supabase.removeChannel(channel);
     };
   }, [loadOrders, loadUsage, loadOrderById, loadCalls]);
@@ -1641,13 +1644,20 @@ export default function DashboardPage() {
               >
                 Dashboard
               </button>
+              <button
+                type="button"
+                className={view === "menu" ? "is-active" : ""}
+                onClick={() => setView("menu")}
+              >
+                Menú
+              </button>
             </div>
             <button
               type="button"
               className="orders-nav-trigger"
               onClick={() => setNavOpen(open => !open)}
             >
-              {view === "stats" ? "Dashboard" : "Pedidos"}
+              {view === "stats" ? "Dashboard" : view === "menu" ? "Menú" : "Pedidos"}
             </button>
             {navOpen && (
               <ul className="orders-nav-menu">
@@ -1673,6 +1683,18 @@ export default function DashboardPage() {
                     }}
                   >
                     Dashboard
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    className={view === "menu" ? "is-active" : ""}
+                    onClick={() => {
+                      setView("menu");
+                      setNavOpen(false);
+                    }}
+                  >
+                    Menú
                   </button>
                 </li>
               </ul>
@@ -1708,7 +1730,9 @@ export default function DashboardPage() {
         </div>
 
         <div className="orders-daypicker">
-          {view === "stats" ? (
+          {view === "menu" ? (
+            <p className="orders-daypicker-trigger is-static">Menú</p>
+          ) : view === "stats" ? (
             <p className="orders-daypicker-trigger is-static" suppressHydrationWarning>
               {formatDayHeading(todayKey)}
             </p>
@@ -1937,7 +1961,9 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {view === "stats" ? (
+      {view === "menu" ? (
+        <MenuBoard />
+      ) : view === "stats" ? (
         <StatsBoard
           orders={orders}
           calls={calls}

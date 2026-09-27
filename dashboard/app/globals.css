@@ -343,14 +343,14 @@ body.login-lock {
 .orders-nav-tabs {
   display: none;
   align-items: baseline;
-  gap: 18px;
+  gap: 14px;
 }
 
 .orders-nav-tabs button {
   border: 0;
   padding: 0;
   background: transparent;
-  font-size: 32px;
+  font-size: 26px;
   font-weight: 700;
   line-height: 1.15;
   color: #9ca3af;
@@ -389,6 +389,87 @@ body.login-lock {
   .orders-nav-trigger {
     display: none;
   }
+}
+
+.menu-board {
+  display: grid;
+  gap: 28px;
+}
+
+.menu-board h2 {
+  margin: 0 0 12px;
+  font-size: 22px;
+}
+
+.menu-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.menu-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.menu-list li.is-off {
+  opacity: 0.55;
+}
+
+.menu-list p {
+  margin: 4px 0 0;
+  color: #4b5563;
+  font-size: 14px;
+}
+
+.menu-blocked {
+  color: #b45309;
+}
+
+.menu-list button,
+.menu-form button {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: #6d28d9;
+  color: #fff;
+  font-weight: 700;
+}
+
+.menu-form {
+  display: grid;
+  gap: 10px;
+  max-width: 420px;
+}
+
+.menu-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.menu-form input,
+.menu-form select {
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.menu-error {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
 .orders-nav-menu,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { parseSpokenPostalCode, readPostalCode, lineQuote, streetNumber } from "./tools.js";
+import { parseSpokenPostalCode, readPostalCode, lineQuote, streetNumber, formatHeardStreet, lockStreet } from "./tools.js";
 import { nextReply } from "./call-flow.js";
 import { interruptionDecision, mushroomIntent, serverPrice } from "./turn-policy.js";
 
@@ -67,6 +67,17 @@ for (let index = 0; index < 100; index += 1) {
     assert.equal(streetNumber(`Veracruz ${said}`), expected);
   });
 }
+
+test("la calle oida reemplaza la que inventa el modelo", () => {
+  assert.equal(formatHeardStreet("Lázaro Cárdenas número uno."), "Lázaro Cárdenas 1");
+  assert.equal(
+    lockStreet(
+      "ISSSTE Federal, Néstor Cárdenas 1, C.P. 83157, Hermosillo, Sonora",
+      "Lázaro Cárdenas 1"
+    ),
+    "ISSSTE Federal, Lázaro Cárdenas 1, C.P. 83157, Hermosillo, Sonora"
+  );
+});
 
 const addressForms = [
   "Veracruz 56",
