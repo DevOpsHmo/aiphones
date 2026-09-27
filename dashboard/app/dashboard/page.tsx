@@ -1388,6 +1388,12 @@ export default function DashboardPage() {
       }
     }
 
+    const refreshLive = () => {
+      void loadOrders();
+      void loadCalls();
+      loadUsage();
+    };
+
     const channel = supabase
       .channel("orders-live")
       .on(
@@ -1401,6 +1407,18 @@ export default function DashboardPage() {
           setView("orders");
           setSelectedDay(hermosilloDateKey());
           await loadOrders();
+          loadUsage();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "calls"
+        },
+        () => {
+          void loadCalls();
           loadUsage();
         }
       )
@@ -1449,14 +1467,23 @@ export default function DashboardPage() {
       )
       .subscribe();
 
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") {
-        void loadOrders();
-      }
-    }, 4000);
+    const timer = window.setInterval(refreshLive, 3000);
+
+    function wake() {
+      refreshLive();
+    }
+
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("focus", wake);
+    window.addEventListener("pageshow", wake);
+    window.addEventListener("online", wake);
 
     return () => {
       window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("focus", wake);
+      window.removeEventListener("pageshow", wake);
+      window.removeEventListener("online", wake);
       void supabase.removeChannel(channel);
     };
   }, [loadOrders, loadUsage, loadOrderById, loadCalls]);
