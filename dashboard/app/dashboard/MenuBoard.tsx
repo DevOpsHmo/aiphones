@@ -42,6 +42,73 @@ function PriceStep({
   );
 }
 
+function TrashButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button type="button" className="menu-delete" aria-label={label} onClick={onClick}>
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9z" />
+      </svg>
+    </button>
+  );
+}
+
+function IngredientPicker({
+  ingredients,
+  picked,
+  onChange
+}: {
+  ingredients: IngredientRow[];
+  picked: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    function close(event: MouseEvent) {
+      const node = document.getElementById("pizza-ingredients");
+      if (node && !node.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    window.addEventListener("mousedown", close);
+    return () => window.removeEventListener("mousedown", close);
+  }, [open]);
+
+  function toggle(name: string) {
+    onChange(picked.includes(name) ? picked.filter(item => item !== name) : [...picked, name]);
+  }
+
+  return (
+    <div className={`ingredient-picker${open ? " is-open" : ""}`} id="pizza-ingredients">
+      <button type="button" className="ingredient-picker-trigger" onClick={() => setOpen(current => !current)}>
+        {picked.length === 0 ? "Ingredientes" : picked.map(ingredientLabel).join(", ")}
+      </button>
+      {open && (
+        <ul className="ingredient-picker-menu">
+          {ingredients.map(ingredient => {
+            const selected = picked.includes(ingredient.name);
+            return (
+              <li key={ingredient.id}>
+                <button
+                  type="button"
+                  className={selected ? "is-picked" : ""}
+                  onClick={() => toggle(ingredient.name)}
+                >
+                  <span />
+                  {ingredientLabel(ingredient.name)}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function Switch({
   on,
   label,
@@ -76,6 +143,7 @@ export default function MenuBoard() {
   const [price, setPrice] = useState("30");
   const [picked, setPicked] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [savingPrices, setSavingPrices] = useState(false);
   const [sizePrices, setSizePrices] = useState({
     mediana: "200",
     grande: "220",
@@ -265,9 +333,11 @@ export default function MenuBoard() {
 
   async function savePrices(event: React.FormEvent) {
     event.preventDefault();
-    if (!businessId) {
+    if (!businessId || savingPrices) {
       return;
     }
+    setSavingPrices(true);
+    window.dispatchEvent(new Event("kitchen-spin"));
     const supabase = createClient();
     const row = {
       business_id: businessId,
@@ -287,6 +357,7 @@ export default function MenuBoard() {
           : saveError.message
         : ""
     );
+    setSavingPrices(false);
   }
 
   async function saveProductPrice(product: ProductRow, nextPrice: string) {
@@ -311,7 +382,7 @@ export default function MenuBoard() {
     <div className="menu-board">
       {error && <p className="menu-error">{error}</p>}
       <div className="menu-top">
-      <section>
+      <section className="menu-prices-panel">
         <h2>Precios</h2>
         <form className="menu-form menu-prices" onSubmit={savePrices}>
           {([
@@ -329,7 +400,10 @@ export default function MenuBoard() {
               />
             </label>
           ))}
-          <button type="submit">Guardar precios</button>
+          <button type="submit" className={savingPrices ? "is-busy" : ""} disabled={savingPrices}>
+            {savingPrices && <span className="menu-save-spin" aria-hidden="true" />}
+            Guardar precios
+          </button>
         </form>
       </section>
       <section>
@@ -353,20 +427,7 @@ export default function MenuBoard() {
             <option value="Promociones">Promoción</option>
           </select>
           {category === "Pizzas" && (
-            <select
-              name="pizza-ingredients"
-              multiple
-              value={picked}
-              onChange={event =>
-                setPicked(Array.from(event.target.selectedOptions, option => option.value))
-              }
-            >
-              {ingredients.map(ingredient => (
-                <option key={ingredient.id} value={ingredient.name}>
-                  {ingredientLabel(ingredient.name)}
-                </option>
-              ))}
-            </select>
+            <IngredientPicker ingredients={ingredients} picked={picked} onChange={setPicked} />
           )}
           {(category === "Bebidas" || category === "Promociones") && (
             <>
@@ -412,14 +473,7 @@ export default function MenuBoard() {
                   )}
                 </div>
                 <div className="menu-row-actions">
-                <button
-                  type="button"
-                  className="menu-delete"
-                  aria-label={`Eliminar ${product.name}`}
-                  onClick={() => deleteProduct(product)}
-                >
-                  Eliminar
-                </button>
+                <TrashButton label={`Eliminar ${product.name}`} onClick={() => deleteProduct(product)} />
                 <Switch
                   on={product.available}
                   label={product.available ? `Apagar ${product.name}` : `Prender ${product.name}`}
@@ -438,14 +492,10 @@ export default function MenuBoard() {
             <li key={ingredient.id} className={ingredient.available ? "" : "is-off"}>
               <strong>{ingredientLabel(ingredient.name)}</strong>
               <div className="menu-row-actions">
-              <button
-                type="button"
-                className="menu-delete"
-                aria-label={`Eliminar ${ingredientLabel(ingredient.name)}`}
+              <TrashButton
+                label={`Eliminar ${ingredientLabel(ingredient.name)}`}
                 onClick={() => deleteIngredient(ingredient)}
-              >
-                Eliminar
-              </button>
+              />
               <Switch
                 on={ingredient.available}
                 label={

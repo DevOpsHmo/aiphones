@@ -1731,7 +1731,7 @@ export default function DashboardPage() {
 
         <div className="orders-daypicker">
           {view === "menu" ? (
-            <p className="orders-daypicker-trigger is-static">Menú</p>
+            <p className="orders-daypicker-trigger is-static">Pizzeria Hermosillo</p>
           ) : view === "stats" ? (
             <p className="orders-daypicker-trigger is-static" suppressHydrationWarning>
               {formatDayHeading(todayKey)}

@@ -530,16 +530,144 @@ body.login-lock {
 }
 
 .menu-delete {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
   border: 0;
-  border-radius: 999px;
-  padding: 8px 12px;
-  background: #dc2626;
-  color: #fff;
-  font-weight: 700;
+  border-radius: 10px;
+  padding: 0;
+  background: transparent;
+  color: #dc2626;
 }
 
-.menu-form select[multiple] {
-  min-height: 120px;
+.menu-delete svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+.menu-form .price-step button {
+  width: auto;
+  border-radius: 0;
+  padding: 6px 0;
+  background: transparent;
+  color: #6d28d9;
+}
+
+.menu-prices > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+
+.menu-prices > button:active,
+.menu-prices > button.is-busy {
+  transform: scale(0.97);
+  filter: brightness(0.92);
+}
+
+.menu-save-spin {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: page-spinner-spin 0.7s linear infinite;
+}
+
+.ingredient-picker {
+  position: relative;
+}
+
+.menu-form .ingredient-picker-trigger {
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 10px 36px 10px 12px;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24'%3E%3Cpath fill='%236b7280' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E") no-repeat right 12px center;
+  color: #111827;
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ingredient-picker.is-open .ingredient-picker-trigger {
+  border-color: #6d28d9;
+  box-shadow: 0 0 0 3px rgba(109, 40, 217, 0.15);
+}
+
+.ingredient-picker-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  margin: 0;
+  padding: 6px;
+  overflow: auto;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(17, 24, 39, 0.12);
+}
+
+.menu-form .ingredient-picker-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: transparent;
+  color: #111827;
+  font: inherit;
+  text-align: left;
+}
+
+.menu-form .ingredient-picker-menu button span {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.menu-form .ingredient-picker-menu button.is-picked {
+  background: #f5f3ff;
+}
+
+.menu-form .ingredient-picker-menu button.is-picked span {
+  border-color: #6d28d9;
+  background: #6d28d9 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='white' d='M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z'/%3E%3C/svg%3E") center / 14px no-repeat;
+}
+
+@media (max-width: 699px) {
+  .menu-prices-panel {
+    text-align: center;
+  }
+
+  .menu-prices {
+    justify-items: center;
+  }
+
+  .menu-prices label {
+    justify-items: center;
+    text-align: center;
+  }
+
+  .menu-prices .price-step,
+  .menu-prices > button {
+    margin-inline: auto;
+  }
 }
 
 .menu-form label {
@@ -575,7 +703,7 @@ body.login-lock {
     grid-template-columns: 1fr 1fr;
   }
 
-  .menu-prices button {
+  .menu-prices > button {
     grid-column: 1 / -1;
     justify-self: start;
   }

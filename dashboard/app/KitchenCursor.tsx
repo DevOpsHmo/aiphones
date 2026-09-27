@@ -57,6 +57,7 @@ export default function KitchenCursor() {
       spin();
     }
 
+    window.addEventListener("kitchen-spin", spin);
     window.addEventListener("mousemove", move, { passive: true });
     window.addEventListener("mousedown", onBlank);
     window.addEventListener("keydown", onKey);
@@ -64,6 +65,7 @@ export default function KitchenCursor() {
     return () => {
       window.cancelAnimationFrame(frameRef.current);
       window.clearTimeout(timerRef.current);
+      window.removeEventListener("kitchen-spin", spin);
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mousedown", onBlank);
       window.removeEventListener("keydown", onKey);
