@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
 import StatsBoard from "./StatsBoard";
 
@@ -1353,6 +1353,26 @@ export default function DashboardPage() {
     cancelEditOrderNumber();
   }
 
+  const seenOrderIds = useRef<Set<string> | null>(null);
+
+  useEffect(() => {
+    const ids = orders.map(order => order.id);
+    if (seenOrderIds.current === null) {
+      seenOrderIds.current = new Set(ids);
+      return;
+    }
+
+    const hasNew = ids.some(id => !seenOrderIds.current?.has(id));
+    for (const id of ids) {
+      seenOrderIds.current.add(id);
+    }
+
+    if (hasNew) {
+      setView("orders");
+      setSelectedDay(hermosilloDateKey());
+    }
+  }, [orders]);
+
   useEffect(() => {
     loadOrders();
     loadUsage();
@@ -1374,16 +1394,10 @@ export default function DashboardPage() {
           schema: "public",
           table: "orders"
         },
-        async payload => {
-          const full = await loadOrderById(
-            (payload.new as { id: string }).id
-          );
-          if (full) {
-            setOrders(current => [
-              full,
-              ...current.filter(o => o.id !== full.id)
-            ]);
-          }
+        async () => {
+          setView("orders");
+          setSelectedDay(hermosilloDateKey());
+          await loadOrders();
           loadUsage();
         }
       )
@@ -1432,7 +1446,14 @@ export default function DashboardPage() {
       )
       .subscribe();
 
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void loadOrders();
+      }
+    }, 4000);
+
     return () => {
+      window.clearInterval(timer);
       void supabase.removeChannel(channel);
     };
   }, [loadOrders, loadUsage, loadOrderById, loadCalls]);
