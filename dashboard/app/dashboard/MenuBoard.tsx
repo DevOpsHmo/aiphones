@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
-import { ingredientLabel, ingredientsFromText } from "../../lib/menu-ingredients";
+import { foldIngredient, ingredientLabel, ingredientsFromText } from "../../lib/menu-ingredients";
 
 type ProductRow = {
   id: string;
@@ -20,6 +20,27 @@ type IngredientRow = {
   name: string;
   available: boolean;
 };
+
+function PriceStep({
+  value,
+  onChange
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const amount = Math.max(0, Number(value) || 0);
+  return (
+    <div className="price-step">
+      <button type="button" aria-label="Bajar precio" onClick={() => onChange(String(Math.max(0, amount - 1)))}>
+        −
+      </button>
+      <span>${amount}</span>
+      <button type="button" aria-label="Subir precio" onClick={() => onChange(String(amount + 1))}>
+        +
+      </button>
+    </div>
+  );
+}
 
 function Switch({
   on,
@@ -51,8 +72,9 @@ export default function MenuBoard() {
   const [error, setError] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [category, setCategory] = useState<"Pizzas" | "Bebidas">("Pizzas");
+  const [category, setCategory] = useState<"Pizzas" | "Bebidas" | "Ingrediente" | "Promociones">("Pizzas");
   const [price, setPrice] = useState("30");
+  const [picked, setPicked] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [sizePrices, setSizePrices] = useState({
     mediana: "200",
@@ -167,35 +189,74 @@ export default function MenuBoard() {
     }
     setSaving(true);
     const supabase = createClient();
-    const drinkPrice = Number(price);
+    if (category === "Ingrediente") {
+      const { error: insertError } = await supabase.from("menu_ingredients").insert({
+        business_id: businessId,
+        name: foldIngredient(name),
+        available: true
+      });
+      setSaving(false);
+      if (insertError) {
+        setError(insertError.message);
+        return;
+      }
+      setName("");
+      void load();
+      return;
+    }
+    const pizzaDescription = picked.map(ingredientLabel).join(", ");
+    const nextDescription = category === "Pizzas" ? pizzaDescription : description.trim();
+    const nextPrice = category === "Pizzas" ? 0 : Number(price);
     const { error: insertError } = await supabase.from("products").insert({
       business_id: businessId,
       name: name.trim(),
-      description: description.trim(),
+      description: nextDescription,
       category,
-      price: category === "Bebidas" ? drinkPrice : 0,
+      price: nextPrice,
       available: true
     });
+    setSaving(false);
     if (insertError) {
       setError(insertError.message);
-      setSaving(false);
       return;
-    }
-    const found = ingredientsFromText(description);
-    if (found.length) {
-      await supabase.from("menu_ingredients").upsert(
-        found.map(ingredient => ({
-          business_id: businessId,
-          name: ingredient,
-          available: true
-        })),
-        { onConflict: "business_id,name", ignoreDuplicates: true }
-      );
     }
     setName("");
     setDescription("");
-    setSaving(false);
+    setPicked([]);
     void load();
+  }
+
+  async function deleteProduct(product: ProductRow) {
+    const supabase = createClient();
+    const { error: deleteError } = await supabase.from("products").delete().eq("id", product.id);
+    if (deleteError) {
+      setError(
+        /foreign key|violates/i.test(deleteError.message)
+          ? `${product.name} ya está en un pedido. Apágala en lugar de borrarla.`
+          : /policy|42501/i.test(deleteError.message)
+            ? "Falta el permiso de borrar. Pega supabase/migration_menu_delete.sql en Supabase."
+            : deleteError.message
+      );
+      return;
+    }
+    setProducts(current => current.filter(item => item.id !== product.id));
+  }
+
+  async function deleteIngredient(ingredient: IngredientRow) {
+    const supabase = createClient();
+    const { error: deleteError } = await supabase
+      .from("menu_ingredients")
+      .delete()
+      .eq("id", ingredient.id);
+    if (deleteError) {
+      setError(
+        /policy|42501/i.test(deleteError.message)
+          ? "Falta el permiso de borrar. Pega supabase/migration_menu_delete.sql en Supabase."
+          : deleteError.message
+      );
+      return;
+    }
+    setIngredients(current => current.filter(item => item.id !== ingredient.id));
   }
 
   function isPizza(product: ProductRow) {
@@ -249,62 +310,81 @@ export default function MenuBoard() {
   return (
     <div className="menu-board">
       {error && <p className="menu-error">{error}</p>}
+      <div className="menu-top">
       <section>
         <h2>Precios</h2>
         <form className="menu-form menu-prices" onSubmit={savePrices}>
-          <label>
-            Mediana
-            <input
-              name="price-mediana"
-              type="number"
-              min="0"
-              value={sizePrices.mediana}
-              onChange={event => setSizePrices(current => ({ ...current, mediana: event.target.value }))}
-            />
-          </label>
-          <label>
-            Grande
-            <input
-              name="price-grande"
-              type="number"
-              min="0"
-              value={sizePrices.grande}
-              onChange={event => setSizePrices(current => ({ ...current, grande: event.target.value }))}
-            />
-          </label>
-          <label>
-            Familiar
-            <input
-              name="price-familiar"
-              type="number"
-              min="0"
-              value={sizePrices.familiar}
-              onChange={event => setSizePrices(current => ({ ...current, familiar: event.target.value }))}
-            />
-          </label>
-          <label>
-            Extra
-            <input
-              name="price-extra"
-              type="number"
-              min="0"
-              value={sizePrices.extra}
-              onChange={event => setSizePrices(current => ({ ...current, extra: event.target.value }))}
-            />
-          </label>
-          <label>
-            Dos grandes
-            <input
-              name="price-promo"
-              type="number"
-              min="0"
-              value={sizePrices.promo_pair}
-              onChange={event => setSizePrices(current => ({ ...current, promo_pair: event.target.value }))}
-            />
-          </label>
+          {([
+            ["mediana", "Mediana"],
+            ["grande", "Grande"],
+            ["familiar", "Familiar"],
+            ["extra", "Extra"],
+            ["promo_pair", "Dos grandes"]
+          ] as const).map(([key, label]) => (
+            <label key={key}>
+              {label}
+              <PriceStep
+                value={sizePrices[key]}
+                onChange={next => setSizePrices(current => ({ ...current, [key]: next }))}
+              />
+            </label>
+          ))}
           <button type="submit">Guardar precios</button>
         </form>
       </section>
+      <section>
+        <h2>Agregar</h2>
+        <form className="menu-form" onSubmit={addProduct}>
+          <input
+            name="product-name"
+            placeholder="Nombre"
+            value={name}
+            onChange={event => setName(event.target.value)}
+            required
+          />
+          <select
+            name="product-category"
+            value={category}
+            onChange={event => setCategory(event.target.value as typeof category)}
+          >
+            <option value="Pizzas">Pizza</option>
+            <option value="Bebidas">Bebida</option>
+            <option value="Ingrediente">Ingrediente</option>
+            <option value="Promociones">Promoción</option>
+          </select>
+          {category === "Pizzas" && (
+            <select
+              name="pizza-ingredients"
+              multiple
+              value={picked}
+              onChange={event =>
+                setPicked(Array.from(event.target.selectedOptions, option => option.value))
+              }
+            >
+              {ingredients.map(ingredient => (
+                <option key={ingredient.id} value={ingredient.name}>
+                  {ingredientLabel(ingredient.name)}
+                </option>
+              ))}
+            </select>
+          )}
+          {(category === "Bebidas" || category === "Promociones") && (
+            <>
+              <input
+                name="product-description"
+                placeholder="Descripción"
+                value={description}
+                onChange={event => setDescription(event.target.value)}
+              />
+              <PriceStep value={price} onChange={setPrice} />
+            </>
+          )}
+          <button type="submit" disabled={saving || !businessId}>
+            Agregar
+          </button>
+        </form>
+      </section>
+      </div>
       <section>
         <h2>Productos</h2>
         <ul className="menu-list menu-products">
@@ -325,62 +405,31 @@ export default function MenuBoard() {
                     </p>
                   )}
                   {!isPizza(product) && (
-                    <input
-                      name={`price-${product.id}`}
-                      type="number"
-                      min="0"
-                      defaultValue={Number(product.price)}
-                      onBlur={event => saveProductPrice(product, event.target.value)}
+                    <PriceStep
+                      value={String(product.price)}
+                      onChange={next => saveProductPrice(product, next)}
                     />
                   )}
                 </div>
+                <div className="menu-row-actions">
+                <button
+                  type="button"
+                  className="menu-delete"
+                  aria-label={`Eliminar ${product.name}`}
+                  onClick={() => deleteProduct(product)}
+                >
+                  Eliminar
+                </button>
                 <Switch
                   on={product.available}
                   label={product.available ? `Apagar ${product.name}` : `Prender ${product.name}`}
                   onClick={() => toggleProduct(product)}
                 />
+                </div>
               </li>
             );
           })}
         </ul>
-      </section>
-      <section>
-        <h2>Producto nuevo</h2>
-        <form className="menu-form" onSubmit={addProduct}>
-          <input
-            name="product-name"
-            placeholder="Nombre"
-            value={name}
-            onChange={event => setName(event.target.value)}
-            required
-          />
-          <select
-            name="product-category"
-            value={category}
-            onChange={event => setCategory(event.target.value as "Pizzas" | "Bebidas")}
-          >
-            <option value="Pizzas">Pizza</option>
-            <option value="Bebidas">Bebida</option>
-          </select>
-          <input
-            name="product-description"
-            placeholder="Descripción o ingredientes"
-            value={description}
-            onChange={event => setDescription(event.target.value)}
-          />
-          {category === "Bebidas" && (
-            <input
-              name="product-price"
-              type="number"
-              min="0"
-              value={price}
-              onChange={event => setPrice(event.target.value)}
-            />
-          )}
-          <button type="submit" disabled={saving || !businessId}>
-            Agregar
-          </button>
-        </form>
       </section>
       <section>
         <h2>Ingredientes</h2>
@@ -388,6 +437,15 @@ export default function MenuBoard() {
           {ingredients.map(ingredient => (
             <li key={ingredient.id} className={ingredient.available ? "" : "is-off"}>
               <strong>{ingredientLabel(ingredient.name)}</strong>
+              <div className="menu-row-actions">
+              <button
+                type="button"
+                className="menu-delete"
+                aria-label={`Eliminar ${ingredientLabel(ingredient.name)}`}
+                onClick={() => deleteIngredient(ingredient)}
+              >
+                Eliminar
+              </button>
               <Switch
                 on={ingredient.available}
                 label={
@@ -397,6 +455,7 @@ export default function MenuBoard() {
                 }
                 onClick={() => toggleIngredient(ingredient)}
               />
+              </div>
             </li>
           ))}
         </ul>
