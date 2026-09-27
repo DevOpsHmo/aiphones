@@ -431,6 +431,11 @@ function matchColonies(colony, colonias) {
     options: ranked.slice(0, 4).map(item => item.name)
   };
 }
+function spellPostalCode(cp) {
+  const words = ["cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve"];
+  return String(cp || "").split("").map(digit => words[Number(digit)] || digit).join(", ");
+}
+
 export async function checkAddressTool({
   postalCode,
   street,
@@ -466,7 +471,7 @@ export async function checkAddressTool({
       ok: true,
       postal_code_valid: true,
       address: `C.P. ${cp}, Hermosillo, Sonora`,
-      note: "El código postal es de Hermosillo. Pregunta solo cuál es la colonia. No menciones ni sugieras colonias."
+      note: `El código es de Hermosillo. Di el código dígito por dígito: ${spellPostalCode(cp)}. Pregunta solo cuál es la colonia.`
     };
   }
 
@@ -484,8 +489,8 @@ export async function checkAddressTool({
         .filter(Boolean)
         .join(", "),
       note: options.length
-        ? `El código ${cp} es de Hermosillo. No pidas deletrear. Ofrece solo estas colonias: ${options.join(", ")}.`
-        : `El código ${cp} es de Hermosillo. No pidas deletrear. Pregunta otra vez cuál es la colonia.`
+        ? `Di el código dígito por dígito: ${spellPostalCode(cp)}. Ofrece solo estas colonias: ${options.join(", ")}.`
+        : `Di el código dígito por dígito: ${spellPostalCode(cp)}. Pregunta otra vez cuál es la colonia.`
     };
   }
 
@@ -498,7 +503,9 @@ export async function checkAddressTool({
     address: [dictatedStreet, match, `C.P. ${cp}`, "Hermosillo, Sonora"]
       .filter(Boolean)
       .join(", "),
-    note: `Confirmado. Di exactamente el código ${cp} y la colonia ${match}. No pidas deletrear.`
+    note: dictatedStreet
+      ? `Confirmado. Di el código dígito por dígito: ${spellPostalCode(cp)}. Colonia ${match}. Calle ${dictatedStreet}.`
+      : `Colonia ${match}. Di el código dígito por dígito: ${spellPostalCode(cp)}. Pregunta solo: ¿Calle y número? No confirmes el domicilio todavía.`
   };
 }
 
@@ -570,10 +577,10 @@ async function saveOrder({
 
   if (
     orderType === "delivery" &&
-    !address?.trim()
+    (!address?.trim() || !/\d/.test(address))
   ) {
     throw new Error(
-      "La dirección es obligatoria para delivery."
+      "Falta la calle y el número. Pregunta solo: ¿Calle y número?"
     );
   }
 
@@ -890,17 +897,10 @@ export async function updateLastOrderTool({
   const given = (customerName || "").trim();
   let savedName = last.customer_name;
 
-  if (given && expected !== given.toLowerCase()) {
-    const { error: nameError } = await supabase
-      .from("customers")
-      .update({ name: given })
-      .eq("id", last.customer_id);
-
-    if (nameError) {
-      throw nameError;
-    }
-
-    savedName = given;
+  if (given && expected && expected !== given.toLowerCase()) {
+    throw new Error(
+      `El pedido reciente está a nombre de ${last.customer_name}. No lo cambies. Pregunta cuál pedido hay que modificar.`
+    );
   }
 
   const item = (last.items || [])[0];

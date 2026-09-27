@@ -67,8 +67,8 @@ export function buildConfirmation(draft) {
     return { ok: false, error: "El total dicho no es el del servidor" };
   }
   const place = draft.orderType === "delivery"
-    ? ` Domicilio ${draft.address}, C.P. ${draft.postalCode}.`
-    : " Para recoger.";
+    ? ` Domicilio ${draft.address}, C.P. ${draft.postalCode}. Listo, tu pedido ha sido confirmado y llegará en aproximadamente 30 minutos a tu domicilio. Gracias por marcar a Pizzería Hermosillo, que tengas un buen día. Hasta luego.`
+    : " Para recoger. Listo, tu pedido ha sido confirmado y estará listo en aproximadamente 30 minutos. Gracias por marcar a Pizzería Hermosillo, que tengas un buen día. Hasta luego.";
   return {
     ok: true,
     version: draft.version || 1,

@@ -880,12 +880,15 @@ export default function DashboardPage() {
           order.customers?.name,
           order.order_number,
           order.address,
-          ...(order.order_items || []).map(item => item.name)
+          order.payment_method,
+          order.total,
+          order.status,
+          ...(order.order_items || []).flatMap(item => [item.name, item.notes])
         ]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
-        return haystack.includes(query);
+        return query.split(/\s+/).every(word => haystack.includes(word));
       })
       .sort((a, b) => {
         const na = Number.parseInt(a.order_number, 10);
