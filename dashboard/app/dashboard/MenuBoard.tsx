@@ -22,9 +22,11 @@ type IngredientRow = {
 };
 
 function PriceStep({
+  name,
   value,
   onChange
 }: {
+  name: string;
   value: string;
   onChange: (next: string) => void;
 }) {
@@ -53,7 +55,10 @@ function PriceStep({
       <span className="price-step-amount">
         $
         <input
+          id={name}
+          name={name}
           aria-label="Precio"
+          autoComplete="off"
           inputMode="numeric"
           value={text}
           onFocus={() => {
@@ -134,7 +139,7 @@ function IngredientPicker({
       </button>
       {open && (
         <ul className="ingredient-picker-menu">
-          {ingredients.map(ingredient => {
+          {ingredients.filter(ingredient => ingredient.name !== "queso").map(ingredient => {
             const selected = picked.includes(ingredient.name);
             return (
               <li key={ingredient.id}>
@@ -192,7 +197,7 @@ function Switch({
   );
 }
 
-export default function MenuBoard() {
+export default function MenuBoard({ query }: { query: string }) {
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [ingredients, setIngredients] = useState<IngredientRow[]>([]);
   const [businessId, setBusinessId] = useState("");
@@ -209,7 +214,6 @@ export default function MenuBoard() {
   const [comboDrink, setComboDrink] = useState("");
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
-  const [query, setQuery] = useState("");
   const [savingPrices, setSavingPrices] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<
     { kind: "product"; item: ProductRow } | { kind: "ingredient"; item: IngredientRow } | null
@@ -358,6 +362,9 @@ export default function MenuBoard() {
     let nextName = name.trim();
     let nextDescription = description.trim();
     if (category === "Pizzas") {
+      if (!/^pizza\b/i.test(nextName)) {
+        nextName = `Pizza ${nextName}`;
+      }
       nextDescription = picked.map(ingredientLabel).join(", ");
     }
     if (category === "Bebidas") {
@@ -583,6 +590,7 @@ export default function MenuBoard() {
             <div className="price-field" key={key}>
               <span>{label}</span>
               <PriceStep
+                name={`price-${key}`}
                 value={sizePrices[key]}
                 onChange={next => setSizePrices(current => ({ ...current, [key]: next }))}
               />
@@ -628,7 +636,7 @@ export default function MenuBoard() {
                   </option>
                 ))}
               </select>
-              <PriceStep value={price} onChange={setPrice} />
+              <PriceStep name="product-price" value={price} onChange={setPrice} />
             </>
           )}
           {category === "Promociones" && (
@@ -685,7 +693,7 @@ export default function MenuBoard() {
                     ))}
                 </select>
               )}
-              <PriceStep value={price} onChange={setPrice} />
+              <PriceStep name="product-price" value={price} onChange={setPrice} />
             </>
           )}
           <button type="submit" className={`menu-save${saving ? " is-busy" : ""}`} disabled={saving || !businessId}>
@@ -695,19 +703,16 @@ export default function MenuBoard() {
         </form>
       </section>
       </div>
-      <input
-        className="menu-search"
-        name="menu-search"
-        placeholder="Buscar"
-        value={query}
-        onChange={event => setQuery(event.target.value)}
-      />
       {([
         ["Pizzas", listed.filter(item => isPizza(item))],
         ["Bebidas", listed.filter(item => item.category === "Bebidas")],
         ["Promociones", listed.filter(item => item.category === "Promociones")]
       ] as const).map(([title, rows]) => {
-        const visible = rows.filter(item => item.name.toLowerCase().includes(query.trim().toLowerCase()));
+        const needle = query.trim().toLowerCase();
+        const visible = rows.filter(item => item.name.toLowerCase().includes(needle));
+        if (needle && visible.length === 0) {
+          return null;
+        }
         return (
           <section key={title}>
             <h2>{title === "Promociones" ? "Promociones" : title}</h2>
@@ -761,10 +766,15 @@ export default function MenuBoard() {
           </section>
         );
       })}
+      {ingredients.some(ingredient =>
+        ingredientLabel(ingredient.name).toLowerCase().includes(query.trim().toLowerCase())
+      ) && (
       <section>
         <h2>Ingredientes</h2>
-        <ul className="menu-list">
-          {ingredients.map(ingredient => (
+        <ul className="menu-list menu-ingredients">
+          {ingredients.filter(ingredient =>
+            ingredientLabel(ingredient.name).toLowerCase().includes(query.trim().toLowerCase())
+          ).map(ingredient => (
             <li key={ingredient.id} className={ingredient.available ? "" : "is-off"}>
               <strong>{ingredientLabel(ingredient.name)}</strong>
               <div className="menu-row-actions">
@@ -796,6 +806,7 @@ export default function MenuBoard() {
           ))}
         </ul>
       </section>
+      )}
       {toast && <p className="app-toast app-toast--success">{toast}</p>}
       {editing && (
         <div className="notice-overlay" onClick={() => setEditing(null)}>
@@ -824,6 +835,7 @@ export default function MenuBoard() {
             )}
             {editing.kind === "product" && !editing.pizza && (
               <PriceStep
+                name="edit-price"
                 value={editing.price}
                 onChange={next => setEditing(current => (current && current.kind === "product" ? { ...current, price: next } : current))}
               />

@@ -7,6 +7,8 @@ html,
 body {
   margin: 0;
   padding: 0;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
   background: #ffffff;
   color: #111827;
   font-family:
@@ -267,8 +269,30 @@ body.login-lock {
 }
 
 @media (min-width: 1200px) {
+  .orders-page {
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .orders-chrome {
+    flex-shrink: 0;
+  }
+
   .orders-body {
-    display: contents;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .orders-body.is-stats {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 }
 
@@ -858,6 +882,12 @@ body.login-lock {
     flex-wrap: wrap;
     align-items: flex-end;
     gap: 12px 18px;
+  }
+}
+
+@media (min-width: 700px) {
+  .menu-ingredients {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
 
