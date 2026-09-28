@@ -242,33 +242,10 @@ function DayPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<string[]>([]);
-  const [narrow, setNarrow] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
   const selected = days.length ? days : WEEKDAYS.map(([key]) => key);
   const label = selected.length === WEEKDAYS.length
     ? "Todos los días"
     : WEEKDAYS.filter(([key]) => selected.includes(key)).map(([, name]) => name).join(", ");
-
-  useEffect(() => {
-    const media = window.matchMedia("(max-width: 699px)");
-    const apply = () => setNarrow(media.matches);
-    apply();
-    media.addEventListener("change", apply);
-    return () => media.removeEventListener("change", apply);
-  }, []);
-
-  useEffect(() => {
-    if (!open || narrow) {
-      return;
-    }
-    function close(event: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-    window.addEventListener("mousedown", close);
-    return () => window.removeEventListener("mousedown", close);
-  }, [open, narrow]);
 
   function toggleDay(key: string, current: string[], commit: (next: string[]) => void) {
     const picked = current.includes(key);
@@ -277,37 +254,18 @@ function DayPicker({
   }
 
   return (
-    <div className={`ingredient-picker day-picker${open && !narrow ? " is-open" : ""}`} ref={rootRef}>
+    <div className="ingredient-picker day-picker">
       <button
         type="button"
         className="ingredient-picker-trigger"
         onClick={() => {
           setDraft(selected);
-          setOpen(current => !current);
+          setOpen(true);
         }}
       >
         {label}
       </button>
-      {open && !narrow && (
-        <ul className="ingredient-picker-menu">
-          {WEEKDAYS.map(([key, name]) => {
-            const picked = selected.includes(key);
-            return (
-              <li key={key}>
-                <button
-                  type="button"
-                  className={picked ? "is-picked" : ""}
-                  onClick={() => toggleDay(key, selected, onChange)}
-                >
-                  <span />
-                  {name}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {open && narrow && createPortal(
+      {open && createPortal(
         <div className="notice-overlay day-dialog-overlay" onClick={() => setOpen(false)}>
           <div
             className="notice-dialog day-dialog"
