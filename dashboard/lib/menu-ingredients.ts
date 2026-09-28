@@ -74,6 +74,18 @@ export function ingredientsFromText(description: string) {
   return found;
 }
 
+export function descriptionHasIngredient(description: string, ingredientName: string) {
+  const key = foldIngredient(ingredientName);
+  if (!key) {
+    return false;
+  }
+  if (ingredientsFromText(description).includes(key)) {
+    return true;
+  }
+  const blob = ` ${foldIngredient(ingredientDescription(description))} `;
+  return blob.includes(` ${key} `);
+}
+
 export function ingredientLabel(name: string) {
   return LABELS[name] || name.charAt(0).toUpperCase() + name.slice(1);
 }

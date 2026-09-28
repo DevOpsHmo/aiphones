@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createClient } from "../../lib/supabase/client";
-import { foldIngredient, ingredientDescription, ingredientLabel } from "../../lib/menu-ingredients";
+import { descriptionHasIngredient, foldIngredient, ingredientDescription, ingredientLabel } from "../../lib/menu-ingredients";
 import { loadSessionBusiness } from "../../lib/session-business";
 
 type ProductRow = {
@@ -398,7 +398,27 @@ export default function MenuBoard({
     window.setTimeout(() => setToast(""), 1600);
   }
 
+  function blockingIngredients(product: ProductRow) {
+    if (!isPizza(product)) {
+      return [];
+    }
+    return ingredients.filter(
+      item => !item.available && descriptionHasIngredient(product.description || "", item.name)
+    );
+  }
+
+  function productIsOffered(product: ProductRow) {
+    return product.available && blockingIngredients(product).length === 0;
+  }
+
   async function toggleProduct(product: ProductRow) {
+    const missing = blockingIngredients(product);
+    if (missing.length) {
+      setError(
+        `Prende ${missing.map(item => ingredientLabel(item.name)).join(", ")} para ofrecer ${product.name.replace(/\b(?:medianas?|grandes?|familiares?|chicas?|individuales?|\d+\s*pulgadas|pulgadas)\b/gi, " ").replace(/\s+/g, " ").trim()}.`
+      );
+      return;
+    }
     const supabase = createClient();
     const available = !product.available;
     setProducts(current =>
@@ -429,7 +449,9 @@ export default function MenuBoard({
     if (updateError) {
       setError(updateError.message);
       void load();
+      return;
     }
+    flashSaved();
   }
 
   async function addProduct(event: React.FormEvent) {
@@ -850,7 +872,7 @@ export default function MenuBoard({
                 {visible.map(product => (
                   <li
                     key={product.id}
-                    className={product.available ? "" : "is-off"}
+                    className={productIsOffered(product) ? "" : "is-off"}
                     onClick={() =>
                       setEditing({
                         kind: "product",
@@ -881,8 +903,8 @@ export default function MenuBoard({
                     )}
                     <div className="menu-row-actions" onClick={event => event.stopPropagation()}>
                       <Switch
-                        on={product.available}
-                        label={product.available ? `Apagar ${product.name}` : `Prender ${product.name}`}
+                        on={productIsOffered(product)}
+                        label={productIsOffered(product) ? `Apagar ${product.name}` : `Prender ${product.name}`}
                         onClick={() => toggleProduct(product)}
                       />
                     </div>

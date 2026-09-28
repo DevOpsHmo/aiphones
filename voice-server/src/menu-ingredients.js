@@ -58,6 +58,18 @@ export function ingredientsFromText(description) {
   return found;
 }
 
+export function descriptionHasIngredient(description, ingredientName) {
+  const key = foldIngredient(ingredientName);
+  if (!key) {
+    return false;
+  }
+  if (ingredientsFromText(description).includes(key)) {
+    return true;
+  }
+  const blob = ` ${foldIngredient(ingredientDescription(description))} `;
+  return blob.includes(` ${key} `);
+}
+
 const SPECIAL_EXTRAS = ["orilla rellena de queso", "queso extra"];
 
 export function menuIngredients(descriptions = DESCRIPTIONS) {

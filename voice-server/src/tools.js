@@ -6,7 +6,7 @@ import { config } from "./config.js";
 import { normalizePhone, supabase } from "./supabase.js";
 import { withCallLock } from "./call-lock.js";
 import { buildConfirmation, priceLine } from "./confirmation.js";
-import { bakeNote, billableExtras, foldIngredient, ingredientDescription, ingredientsFromText, menuIngredients } from "./menu-ingredients.js";
+import { bakeNote, billableExtras, descriptionHasIngredient, foldIngredient, ingredientDescription, ingredientsFromText, menuIngredients } from "./menu-ingredients.js";
 import {
   requestTransfer,
   markTransferred,
@@ -180,7 +180,7 @@ function blockedIngredients(product, unavailable) {
   if (!isPizza(product)) {
     return [];
   }
-  return ingredientsFromText(product.description).filter(name => unavailable.has(name));
+  return [...unavailable].filter(name => descriptionHasIngredient(product.description || "", name));
 }
 
 export async function getMenuTool(businessId) {
