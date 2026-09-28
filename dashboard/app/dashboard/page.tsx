@@ -877,6 +877,7 @@ export default function DashboardPage() {
     message: string;
   } | null>(null);
   const toastSlotRef = useRef<HTMLDivElement>(null);
+  const ordersBodyRef = useRef<HTMLDivElement>(null);
   const [toastSlot, setToastSlot] = useState<HTMLDivElement | null>(null);
   useLayoutEffect(() => {
     setToastSlot(toastSlotRef.current);
@@ -1685,6 +1686,14 @@ export default function DashboardPage() {
     };
   }, [overlayOpen, view]);
 
+  useLayoutEffect(() => {
+    const body = ordersBodyRef.current;
+    if (body) {
+      body.scrollTop = 0;
+    }
+    window.scrollTo(0, 0);
+  }, [view]);
+
   useEffect(() => {
     setNowTick(Date.now());
     const timer = window.setInterval(() => setNowTick(Date.now()), 1000);
@@ -2083,7 +2092,7 @@ export default function DashboardPage() {
       <div id="orders-chrome-extra" />
       </div>
 
-      <div className={`orders-body${view === "stats" ? " is-stats" : ""}`}>
+      <div ref={ordersBodyRef} className={`orders-body${view === "stats" ? " is-stats" : ""}`}>
       {loadError && (
         <div
           style={{

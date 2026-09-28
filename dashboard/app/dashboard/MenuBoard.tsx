@@ -872,7 +872,7 @@ export default function MenuBoard({
     <div className="menu-board">
       {error && <p className="menu-error">{error}</p>}
       <div className="menu-top">
-      <section className="menu-panel menu-prices-panel">
+      {!query.trim() && <section className="menu-panel menu-prices-panel">
         <h2>Precios</h2>
         <form className="menu-form menu-prices" onSubmit={savePrices}>
           {([
@@ -895,7 +895,7 @@ export default function MenuBoard({
             {savingPrices && <span className="menu-save-spin" aria-hidden="true" />}
           </button>
         </form>
-      </section>
+      </section>}
       <section className="menu-panel">
         <h2>Agregar</h2>
         <form className="menu-form" onSubmit={addProduct}>
