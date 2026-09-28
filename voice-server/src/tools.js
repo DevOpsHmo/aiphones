@@ -158,6 +158,27 @@ const DEFAULT_MENU_PRICES = {
   promoPair: 400
 };
 
+export async function loadPaymentFlags(businessId) {
+  const flags = { card: true, transfer: true };
+  if (!businessId) {
+    return flags;
+  }
+  const { data } = await supabase
+    .from("products")
+    .select("name,available")
+    .eq("business_id", businessId)
+    .eq("category", "Ajustes");
+  for (const row of data || []) {
+    if (row.name === "pago-tarjeta") {
+      flags.card = row.available !== false;
+    }
+    if (row.name === "pago-transferencia") {
+      flags.transfer = row.available !== false;
+    }
+  }
+  return flags;
+}
+
 export async function loadMenuPrices(businessId) {
   const { data, error } = await supabase
     .from("menu_settings")
@@ -228,14 +249,17 @@ export async function getMenuTool(businessId) {
     familiar: menuPrices.familiar
   };
   const products = withoutSizedPizzaCopies(data || []).filter(
-    product => blockedIngredients(product, unavailable).length === 0
+    product => product.category !== "Ajustes"
+      && blockedIngredients(product, unavailable).length === 0
       && (product.category !== "Promociones" || promoActiveToday(product.description))
   );
+  const payments = await loadPaymentFlags(businessId);
 
   return {
     pizza_sizes: sizePrices,
     extra_price: menuPrices.extra,
     promo_pair: menuPrices.promoPair,
+    payments,
     unavailableIngredients: [...unavailable],
     products: products.map(product => ({
       ...product,
@@ -260,7 +284,13 @@ export function formatMenuForPrompt(menu) {
     name => !(menu.unavailableIngredients || []).includes(name)
   );
   const promos = (menu.products || []).filter(product => product.category === "Promociones");
+  const cardOn = menu.payments?.card !== false;
+  const transferOn = menu.payments?.transfer !== false;
+  const paymentLine = !cardOn && !transferOn
+    ? "Pagos: solo efectivo. Di exactamente: Por el momento solo aceptamos pagos en efectivo. No ofrezcas tarjeta ni transferencia."
+    : `Pagos: efectivo${cardOn ? ", tarjeta" : ""}${transferOn ? ", transferencia" : ""}. Ofrece solo esos. No menciones un método que no esté aquí.`;
   const lines = [
+    paymentLine,
     `Pizzas: mediana ${menu.pizza_sizes?.mediana ?? 200}, grande ${menu.pizza_sizes?.grande ?? 220}, familiar ${menu.pizza_sizes?.familiar ?? 250}. Extra ${menu.extra_price ?? 25}. Di el número solo. Nunca digas dólares, pesos ni el signo de dinero.`,
     promos.length
       ? `Promociones de hoy, hay que decirlas todas juntas si preguntan: ${promos.map(product => `${product.name} por ${Number(product.price).toFixed(0)}`).join("; ")}.`
@@ -739,6 +769,13 @@ async function saveOrder({
   }
 
   paymentMethod = paymentMethod || "efectivo";
+  const payments = await loadPaymentFlags(businessId);
+  if (paymentMethod === "tarjeta" && !payments.card) {
+    throw new Error("La tarjeta está apagada. Di que por el momento no se puede pagar con tarjeta.");
+  }
+  if (paymentMethod === "transferencia" && !payments.transfer) {
+    throw new Error("La transferencia está apagada. Di que por el momento no se puede pagar con transferencia.");
+  }
   orderType = orderType || "delivery";
 
   if (!customerName?.trim()) {
@@ -1015,6 +1052,7 @@ async function saveOrder({
     customerName,
     orderType,
     address,
+    paymentMethod,
     postalCode: (address || "").match(/\b(\d{5})\b/)?.[1] || "",
     items: calculatedItems.map(item => {
       const notes = (item.notes || "").split(",").map(part => part.trim()).filter(Boolean);

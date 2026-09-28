@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { createClient } from "../../lib/supabase/client";
+import { loadSessionBusiness } from "../../lib/session-business";
 
 type StatsOrder = {
   id: string;
@@ -164,7 +166,72 @@ export default function StatsBoard({
   const [pickerYear, setPickerYear] = useState(() =>
     Number(today.slice(0, 4))
   );
+  const [payCard, setPayCard] = useState(true);
+  const [payTransfer, setPayTransfer] = useState(true);
+  const [payIds, setPayIds] = useState<{ card: string; transfer: string }>({ card: "", transfer: "" });
   const activeOrders = orders.filter(order => !order.deleted_at);
+
+  useEffect(() => {
+    const supabase = createClient();
+    void (async () => {
+      const business = await loadSessionBusiness(supabase);
+      if (!business?.id) {
+        return;
+      }
+      const businessId = business.id;
+      async function ensure(name: string) {
+        const { data } = await supabase
+          .from("products")
+          .select("id,available")
+          .eq("business_id", businessId)
+          .eq("category", "Ajustes")
+          .eq("name", name)
+          .maybeSingle();
+        if (data) {
+          return data;
+        }
+        const { data: created } = await supabase
+          .from("products")
+          .insert({
+            business_id: businessId,
+            name,
+            description: "",
+            category: "Ajustes",
+            price: 0,
+            available: true
+          })
+          .select("id,available")
+          .single();
+        return created;
+      }
+      const card = await ensure("pago-tarjeta");
+      const transfer = await ensure("pago-transferencia");
+      setPayIds({ card: card?.id || "", transfer: transfer?.id || "" });
+      setPayCard(card?.available !== false);
+      setPayTransfer(transfer?.available !== false);
+    })();
+  }, []);
+
+  async function togglePay(kind: "card" | "transfer") {
+    const id = kind === "card" ? payIds.card : payIds.transfer;
+    if (!id) {
+      return;
+    }
+    const next = kind === "card" ? !payCard : !payTransfer;
+    if (kind === "card") {
+      setPayCard(next);
+    } else {
+      setPayTransfer(next);
+    }
+    const { error } = await createClient().from("products").update({ available: next }).eq("id", id);
+    if (error) {
+      if (kind === "card") {
+        setPayCard(!next);
+      } else {
+        setPayTransfer(!next);
+      }
+    }
+  }
 
   const weekEnd = addDays(weekStart, 6);
 
@@ -334,6 +401,34 @@ export default function StatsBoard({
 
   return (
     <div className="stats-board">
+      <div className="stats-payments">
+        <div className="stats-pay">
+          <span>Tarjeta</span>
+          <button
+            type="button"
+            className={`menu-switch${payCard ? " is-on" : ""}`}
+            role="switch"
+            aria-checked={payCard}
+            aria-label={payCard ? "Apagar pagos con tarjeta" : "Prender pagos con tarjeta"}
+            onClick={() => void togglePay("card")}
+          >
+            <span />
+          </button>
+        </div>
+        <div className="stats-pay">
+          <span>Transferencia</span>
+          <button
+            type="button"
+            className={`menu-switch${payTransfer ? " is-on" : ""}`}
+            role="switch"
+            aria-checked={payTransfer}
+            aria-label={payTransfer ? "Apagar pagos con transferencia" : "Prender pagos con transferencia"}
+            onClick={() => void togglePay("transfer")}
+          >
+            <span />
+          </button>
+        </div>
+      </div>
       {chromeNode ? createPortal(periodBar, chromeNode) : periodBar}
 
       {picker &&

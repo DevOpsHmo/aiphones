@@ -554,6 +554,31 @@ body.login-lock {
   color: #b45309;
 }
 
+.stats-payments {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.stats-pay {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid #ddd6fe;
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-weight: 700;
+}
+
+@media (max-width: 700px) {
+  .stats-payments {
+    flex-direction: column;
+  }
+}
+
 .menu-switch {
   width: 51px;
   height: 31px;

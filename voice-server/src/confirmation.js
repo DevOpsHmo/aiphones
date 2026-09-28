@@ -106,9 +106,14 @@ export function buildConfirmation(draft) {
     .replace(/,\s*,/g, ", ")
     .replace(/,\s*$/, "")
     .trim();
+  const pay = draft.paymentMethod === "tarjeta"
+    ? "con tarjeta"
+    : draft.paymentMethod === "transferencia"
+      ? "por transferencia"
+      : "en efectivo";
   const place = draft.orderType === "delivery"
-    ? ` A ${street}. Código ${spokenCode}. El pago es en efectivo. Su pedido llegará a su domicilio en aproximadamente 30 minutos. Muchas gracias por llamar a Pizzería Hermosillo. Que tenga buen día. Hasta luego.`
-    : " Para recoger. Estará listo en aproximadamente 30 minutos. Muchas gracias por llamar a Pizzería Hermosillo. Que tenga buen día. Hasta luego.";
+    ? ` A ${street}. Código ${spokenCode}. El pago es ${pay}. Su pedido llegará a su domicilio en aproximadamente 30 minutos. Muchas gracias por llamar a Pizzería Hermosillo. Que tenga buen día. Hasta luego.`
+    : ` Para recoger. El pago es ${pay}. Estará listo en aproximadamente 30 minutos. Muchas gracias por llamar a Pizzería Hermosillo. Que tenga buen día. Hasta luego.`;
   return {
     ok: true,
     version: draft.version || 1,
