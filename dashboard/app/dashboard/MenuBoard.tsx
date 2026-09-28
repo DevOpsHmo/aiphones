@@ -466,7 +466,7 @@ export default function MenuBoard({
         fallback = fallback.eq("business_id", business.id);
       }
       const retry = await fallback;
-      ingredientRows = retry.data;
+      ingredientRows = (retry.data || []).map(row => ({ ...row, extra_price: null }));
       ingredientError = retry.error;
     }
     if (ingredientError) {
