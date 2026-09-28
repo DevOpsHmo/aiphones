@@ -241,6 +241,8 @@ function DayPicker({
   onChange: (next: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<string[]>([]);
+  const [narrow, setNarrow] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const selected = days.length ? days : WEEKDAYS.map(([key]) => key);
   const label = selected.length === WEEKDAYS.length
@@ -248,7 +250,15 @@ function DayPicker({
     : WEEKDAYS.filter(([key]) => selected.includes(key)).map(([, name]) => name).join(", ");
 
   useEffect(() => {
-    if (!open) {
+    const media = window.matchMedia("(max-width: 699px)");
+    const apply = () => setNarrow(media.matches);
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, []);
+
+  useEffect(() => {
+    if (!open || narrow) {
       return;
     }
     function close(event: MouseEvent) {
@@ -258,14 +268,27 @@ function DayPicker({
     }
     window.addEventListener("mousedown", close);
     return () => window.removeEventListener("mousedown", close);
-  }, [open]);
+  }, [open, narrow]);
+
+  function toggleDay(key: string, current: string[], commit: (next: string[]) => void) {
+    const picked = current.includes(key);
+    const next = picked ? current.filter(day => day !== key) : [...current, key];
+    commit(next.length ? next : current);
+  }
 
   return (
-    <div className={`ingredient-picker day-picker${open ? " is-open" : ""}`} ref={rootRef}>
-      <button type="button" className="ingredient-picker-trigger" onClick={() => setOpen(current => !current)}>
+    <div className={`ingredient-picker day-picker${open && !narrow ? " is-open" : ""}`} ref={rootRef}>
+      <button
+        type="button"
+        className="ingredient-picker-trigger"
+        onClick={() => {
+          setDraft(selected);
+          setOpen(current => !current);
+        }}
+      >
         {label}
       </button>
-      {open && (
+      {open && !narrow && (
         <ul className="ingredient-picker-menu">
           {WEEKDAYS.map(([key, name]) => {
             const picked = selected.includes(key);
@@ -274,10 +297,7 @@ function DayPicker({
                 <button
                   type="button"
                   className={picked ? "is-picked" : ""}
-                  onClick={() => {
-                    const next = picked ? selected.filter(day => day !== key) : [...selected, key];
-                    onChange(next.length ? next : [...selected]);
-                  }}
+                  onClick={() => toggleDay(key, selected, onChange)}
                 >
                   <span />
                   {name}
@@ -286,6 +306,51 @@ function DayPicker({
             );
           })}
         </ul>
+      )}
+      {open && narrow && createPortal(
+        <div className="notice-overlay day-dialog-overlay" onClick={() => setOpen(false)}>
+          <div
+            className="notice-dialog day-dialog"
+            role="dialog"
+            aria-label="Días de la promoción"
+            onClick={event => event.stopPropagation()}
+          >
+            <h2>Días</h2>
+            <ul className="ingredient-picker-menu">
+              {WEEKDAYS.map(([key, name]) => {
+                const picked = draft.includes(key);
+                return (
+                  <li key={key}>
+                    <button
+                      type="button"
+                      className={picked ? "is-picked" : ""}
+                      onClick={() => toggleDay(key, draft, setDraft)}
+                    >
+                      <span />
+                      {name}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="notice-actions">
+              <button type="button" className="notice-btn notice-btn-cancel" onClick={() => setOpen(false)}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="notice-btn notice-btn-save"
+                onClick={() => {
+                  onChange(draft.length ? draft : selected);
+                  setOpen(false);
+                }}
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

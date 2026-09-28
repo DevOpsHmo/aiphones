@@ -859,6 +859,36 @@ body.login-lock {
   max-width: 100%;
 }
 
+.day-dialog-overlay {
+  z-index: 40;
+}
+
+.day-dialog {
+  display: grid;
+  gap: 12px;
+}
+
+.day-dialog h2 {
+  margin: 0;
+}
+
+.day-dialog .ingredient-picker-menu {
+  position: static;
+  max-height: none;
+  margin: 0;
+  box-shadow: none;
+}
+
+.day-dialog .notice-actions {
+  margin-top: 0;
+}
+
+.day-dialog .notice-btn-save {
+  border: 0;
+  background: #6d28d9;
+  color: white;
+}
+
 .menu-form .day-picker .ingredient-picker-trigger {
   box-sizing: border-box;
   max-width: 100%;
@@ -906,7 +936,8 @@ body.login-lock {
   box-shadow: 0 16px 40px rgba(17, 24, 39, 0.12);
 }
 
-.menu-form .ingredient-picker-menu button {
+.menu-form .ingredient-picker-menu button,
+.day-dialog .ingredient-picker-menu button {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -920,7 +951,8 @@ body.login-lock {
   text-align: left;
 }
 
-.menu-form .ingredient-picker-menu button span {
+.menu-form .ingredient-picker-menu button span,
+.day-dialog .ingredient-picker-menu button span {
   width: 18px;
   height: 18px;
   flex: 0 0 18px;
@@ -929,11 +961,13 @@ body.login-lock {
   background: #fff;
 }
 
-.menu-form .ingredient-picker-menu button.is-picked {
+.menu-form .ingredient-picker-menu button.is-picked,
+.day-dialog .ingredient-picker-menu button.is-picked {
   background: #f5f3ff;
 }
 
-.menu-form .ingredient-picker-menu button.is-picked span {
+.menu-form .ingredient-picker-menu button.is-picked span,
+.day-dialog .ingredient-picker-menu button.is-picked span {
   border-color: #6d28d9;
   background: #6d28d9 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='white' d='M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z'/%3E%3C/svg%3E") center / 14px no-repeat;
 }
