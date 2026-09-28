@@ -7,14 +7,46 @@ import StatsBoard from "./StatsBoard";
 import MenuBoard from "./MenuBoard";
 import { loadSessionBusiness } from "../../lib/session-business";
 
-function searchClearRef(setValue: (value: string) => void) {
-  return (node: HTMLInputElement | null) => {
-    if (!node || node.dataset.clearBound === "1") {
-      return;
-    }
-    node.dataset.clearBound = "1";
-    node.addEventListener("search", () => setValue(node.value));
-  };
+function SearchField({
+  id,
+  name,
+  placeholder,
+  value,
+  onChange
+}: {
+  id: string;
+  name: string;
+  placeholder: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="orders-search-field">
+      <input
+        id={id}
+        name={name}
+        type="text"
+        autoComplete="off"
+        className="orders-search-input"
+        autoFocus
+        placeholder={placeholder}
+        value={value}
+        onChange={event => onChange(event.target.value)}
+      />
+      {value && (
+        <button
+          type="button"
+          className="orders-search-clear"
+          aria-label="Borrar búsqueda"
+          onClick={() => onChange("")}
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+            <path d="M2 2l8 8M10 2L2 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
 }
 
 type OrderItem = {
@@ -1602,7 +1634,7 @@ export default function DashboardPage() {
       if (target && !target.closest(".orders-status-filter")) {
         setStatusMenuOpen(false);
       }
-      if (target && !target.closest(".orders-search") && !target.closest(".orders-search-input")) {
+      if (target && !target.closest(".orders-search") && !target.closest(".orders-search-field")) {
         setSearchOpen(false);
       }
     }
@@ -1915,17 +1947,12 @@ export default function DashboardPage() {
                 </button>
               </div>
               {searchOpen && (
-                <input
+                <SearchField
                   id="order-search"
                   name="order-search"
-                  type="search"
-                  autoComplete="off"
-                  className="orders-search-input"
-                  autoFocus
                   placeholder="Buscar pedido…"
                   value={searchQuery}
-                  onChange={event => setSearchQuery(event.target.value)}
-                  ref={searchClearRef(setSearchQuery)}
+                  onChange={setSearchQuery}
                 />
               )}
               <div className="orders-status-filter">
@@ -1983,17 +2010,12 @@ export default function DashboardPage() {
                 </button>
               </div>
               {callSearchOpen && (
-                <input
+                <SearchField
                   id="call-search"
                   name="call-search"
-                  type="search"
-                  autoComplete="off"
-                  className="orders-search-input"
-                  autoFocus
                   placeholder="Buscar cliente o dirección…"
                   value={callQuery}
-                  onChange={event => setCallQuery(event.target.value)}
-                  ref={searchClearRef(setCallQuery)}
+                  onChange={setCallQuery}
                 />
               )}
             </>
@@ -2021,17 +2043,12 @@ export default function DashboardPage() {
                 </button>
               </div>
               {menuSearchOpen && (
-                <input
+                <SearchField
                   id="menu-search"
                   name="menu-search"
-                  type="search"
-                  autoComplete="off"
-                  className="orders-search-input"
-                  autoFocus
                   placeholder="Buscar en el menú…"
                   value={menuQuery}
-                  onChange={event => setMenuQuery(event.target.value)}
-                  ref={searchClearRef(setMenuQuery)}
+                  onChange={setMenuQuery}
                 />
               )}
             </>

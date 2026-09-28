@@ -1055,14 +1055,41 @@ body.login-lock {
   font-weight: 700;
 }
 
+.orders-search-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
 .orders-search-input {
   width: 180px;
   height: 40px;
   border: 1px solid #7c3aed;
   border-radius: 8px;
-  padding: 0 12px;
+  padding: 0 30px 0 12px;
   font-size: 13px;
   outline: none;
+}
+
+.orders-search-input::-webkit-search-cancel-button,
+.orders-search-input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
+.orders-search-clear {
+  position: absolute;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: transparent;
+  color: #6b7280;
+  display: grid;
+  place-items: center;
 }
 
 .orders-search-input:focus,
@@ -2608,15 +2635,20 @@ body.login-lock {
     padding-bottom: 52px;
   }
 
-  .orders-search-input {
+  .orders-search-field {
     position: absolute;
     left: 0;
     right: 0;
     bottom: 0;
     width: 100%;
+    z-index: 6;
+  }
+
+  .orders-search-input {
+    position: static;
+    width: 100%;
     max-width: none;
     height: 42px;
-    z-index: 6;
   }
 
   .orders-search {
