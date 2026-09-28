@@ -854,6 +854,22 @@ body.login-lock {
   position: relative;
 }
 
+.notice-dialog .day-picker {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.menu-form .day-picker .ingredient-picker-trigger {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.day-picker .ingredient-picker-menu {
+  max-height: none;
+  overflow: visible;
+}
+
 .menu-form .ingredient-picker-trigger {
   width: 100%;
   border: 1px solid #e5e7eb;

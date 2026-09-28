@@ -261,7 +261,7 @@ function DayPicker({
   }, [open]);
 
   return (
-    <div className={`ingredient-picker${open ? " is-open" : ""}`} ref={rootRef}>
+    <div className={`ingredient-picker day-picker${open ? " is-open" : ""}`} ref={rootRef}>
       <button type="button" className="ingredient-picker-trigger" onClick={() => setOpen(current => !current)}>
         {label}
       </button>
