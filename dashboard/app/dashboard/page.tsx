@@ -7,6 +7,16 @@ import StatsBoard from "./StatsBoard";
 import MenuBoard from "./MenuBoard";
 import { loadSessionBusiness } from "../../lib/session-business";
 
+function searchClearRef(setValue: (value: string) => void) {
+  return (node: HTMLInputElement | null) => {
+    if (!node || node.dataset.clearBound === "1") {
+      return;
+    }
+    node.dataset.clearBound = "1";
+    node.addEventListener("search", () => setValue(node.value));
+  };
+}
+
 type OrderItem = {
   name: string;
   quantity: number;
@@ -1915,7 +1925,7 @@ export default function DashboardPage() {
                   placeholder="Buscar pedido…"
                   value={searchQuery}
                   onChange={event => setSearchQuery(event.target.value)}
-                  onSearch={event => setSearchQuery(event.currentTarget.value)}
+                  ref={searchClearRef(setSearchQuery)}
                 />
               )}
               <div className="orders-status-filter">
@@ -1983,7 +1993,7 @@ export default function DashboardPage() {
                   placeholder="Buscar cliente o dirección…"
                   value={callQuery}
                   onChange={event => setCallQuery(event.target.value)}
-                  onSearch={event => setCallQuery(event.currentTarget.value)}
+                  ref={searchClearRef(setCallQuery)}
                 />
               )}
             </>
@@ -2021,7 +2031,7 @@ export default function DashboardPage() {
                   placeholder="Buscar en el menú…"
                   value={menuQuery}
                   onChange={event => setMenuQuery(event.target.value)}
-                  onSearch={event => setMenuQuery(event.currentTarget.value)}
+                  ref={searchClearRef(setMenuQuery)}
                 />
               )}
             </>
