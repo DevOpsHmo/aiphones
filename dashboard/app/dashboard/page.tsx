@@ -1915,6 +1915,7 @@ export default function DashboardPage() {
                   placeholder="Buscar pedido…"
                   value={searchQuery}
                   onChange={event => setSearchQuery(event.target.value)}
+                  onSearch={event => setSearchQuery(event.currentTarget.value)}
                 />
               )}
               <div className="orders-status-filter">
@@ -1982,6 +1983,7 @@ export default function DashboardPage() {
                   placeholder="Buscar cliente o dirección…"
                   value={callQuery}
                   onChange={event => setCallQuery(event.target.value)}
+                  onSearch={event => setCallQuery(event.currentTarget.value)}
                 />
               )}
             </>
@@ -2019,6 +2021,7 @@ export default function DashboardPage() {
                   placeholder="Buscar en el menú…"
                   value={menuQuery}
                   onChange={event => setMenuQuery(event.target.value)}
+                  onSearch={event => setMenuQuery(event.currentTarget.value)}
                 />
               )}
             </>
