@@ -1127,7 +1127,7 @@ export default function MenuBoard({
             />
             {editing.kind === "ingredient" && (
               <label>
-                Extra, vacío usa el general ({sizePrices.extra})
+                Extra, vacío usa el general (${sizePrices.extra})
                 <PriceStep
                   name="ingredient-extra-price"
                   allowEmpty
