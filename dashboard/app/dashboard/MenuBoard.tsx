@@ -404,6 +404,7 @@ export default function MenuBoard({
   const [price, setPrice] = useState("30");
   const [picked, setPicked] = useState<string[]>([]);
   const [volume, setVolume] = useState(DRINK_SIZES[3]);
+  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
   const [promoKind, setPromoKind] = useState<"pizzas" | "combo">("pizzas");
   const [promoCount, setPromoCount] = useState("2");
   const [promoSize, setPromoSize] = useState<(typeof PIZZA_SIZES)[number]>("grande");
@@ -519,6 +520,10 @@ export default function MenuBoard({
     }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  useEffect(() => {
+    setPortalRoot(document.body);
+  }, []);
 
   function flashSaved() {
     setToast("Guardado");
@@ -1108,7 +1113,7 @@ export default function MenuBoard({
           <p className="app-toast app-toast--success">{toast}</p>,
           toastSlot
         )}
-      {editing && (
+      {editing && portalRoot && createPortal(
         <div className="notice-overlay" onClick={() => setEditing(null)}>
           <form
             className="notice-dialog menu-form"
@@ -1185,9 +1190,10 @@ export default function MenuBoard({
               </button>
             </div>
           </form>
-        </div>
+        </div>,
+        portalRoot
       )}
-      {pendingDelete && (
+      {pendingDelete && portalRoot && createPortal(
         <div className="notice-overlay" onClick={() => setPendingDelete(null)}>
           <div
             className="notice-dialog"
@@ -1225,7 +1231,8 @@ export default function MenuBoard({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        portalRoot
       )}
     </div>
   );

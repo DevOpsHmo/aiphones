@@ -944,7 +944,12 @@ body.login-lock {
   }
 
   .menu-prices {
+    display: grid;
+    grid-template-columns: max-content max-content;
+    justify-content: center;
     justify-items: center;
+    align-items: start;
+    gap: 16px 28px;
   }
 
   .menu-prices .price-field {
@@ -952,8 +957,8 @@ body.login-lock {
     text-align: center;
   }
 
-  .menu-prices .price-step,
   .menu-prices > button {
+    grid-column: 1 / -1;
     margin-inline: auto;
   }
 }
@@ -2075,18 +2080,31 @@ body.login-lock {
 
 .notice-overlay {
   position: fixed;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 100svh;
+  max-height: 100svh;
   background: rgba(17, 24, 39, 0.45);
-  display: grid;
-  place-items: center;
-  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding:
+    max(16px, env(safe-area-inset-top))
+    16px
+    max(16px, env(safe-area-inset-bottom));
   z-index: 30;
+  overflow: auto;
   overscroll-behavior: contain;
 }
 
 .notice-dialog {
   width: 100%;
   max-width: 380px;
+  max-height: 100%;
+  margin: auto;
+  overflow: auto;
   background: white;
   border-radius: 16px;
   padding: 24px;
