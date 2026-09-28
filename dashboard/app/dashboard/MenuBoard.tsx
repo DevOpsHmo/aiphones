@@ -414,9 +414,6 @@ export default function MenuBoard({
   async function toggleProduct(product: ProductRow) {
     const missing = blockingIngredients(product);
     if (missing.length) {
-      setError(
-        `Prende ${missing.map(item => ingredientLabel(item.name)).join(", ")} para ofrecer ${product.name.replace(/\b(?:medianas?|grandes?|familiares?|chicas?|individuales?|\d+\s*pulgadas|pulgadas)\b/gi, " ").replace(/\s+/g, " ").trim()}.`
-      );
       return;
     }
     const supabase = createClient();
