@@ -2897,6 +2897,12 @@ body.login-lock {
   }
 }
 
+@media (max-width: 700px) {
+  .orders-body {
+    padding-bottom: calc(36px + env(safe-area-inset-bottom));
+  }
+}
+
 @media (display-mode: standalone) {
   .orders-page,
   .orders-page.is-stats {

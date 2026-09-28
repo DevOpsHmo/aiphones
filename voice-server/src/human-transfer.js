@@ -44,7 +44,7 @@ export function maskNumber(number) {
   return `${digits.slice(0, 4)}******${digits.slice(-3)}`;
 }
 
-export function transferTwiml(number, actionUrl) {
+export function transferTwiml(number, actionUrl, callerId) {
   const safe = String(number || "");
   if (!/^\+\d{10,15}$/.test(safe)) {
     throw new Error("Número de transferencia inválido");
@@ -52,5 +52,8 @@ export function transferTwiml(number, actionUrl) {
   const action = actionUrl
     ? ` action="${actionUrl}" method="POST"`
     : "";
-  return `<Response><Dial timeout="30"${action}><Number>${safe}</Number></Dial></Response>`;
+  const from = /^\+\d{10,15}$/.test(String(callerId || "")) && callerId !== safe
+    ? ` callerId="${callerId}"`
+    : "";
+  return `<Response><Say language="es-MX">Claro, lo comunico con alguien de la pizzería.</Say><Dial timeout="30"${from}${action}><Number>${safe}</Number></Dial></Response>`;
 }

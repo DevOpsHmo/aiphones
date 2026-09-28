@@ -176,6 +176,28 @@ export async function loadMenuPrices(businessId) {
   };
 }
 
+function promoDayKeys(description) {
+  const match = String(description || "").match(/\[\[dias:([a-z,]*)\]\]/);
+  return match ? match[1].split(",").filter(Boolean) : [];
+}
+
+function promoActiveToday(description) {
+  const days = promoDayKeys(description);
+  if (!days.length) {
+    return true;
+  }
+  const short = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Hermosillo",
+    weekday: "short"
+  }).format(new Date());
+  const today = { Sun: "dom", Mon: "lun", Tue: "mar", Wed: "mie", Thu: "jue", Fri: "vie", Sat: "sab" };
+  return days.includes(today[short] || "");
+}
+
+function stripPromoDays(description) {
+  return String(description || "").replace(/\s*\[\[dias:[a-z,]*\]\]\s*/g, " ").replace(/\s+/g, " ").trim();
+}
+
 function blockedIngredients(product, unavailable) {
   if (!isPizza(product)) {
     return [];
@@ -207,6 +229,7 @@ export async function getMenuTool(businessId) {
   };
   const products = withoutSizedPizzaCopies(data || []).filter(
     product => blockedIngredients(product, unavailable).length === 0
+      && (product.category !== "Promociones" || promoActiveToday(product.description))
   );
 
   return {
@@ -222,7 +245,7 @@ export async function getMenuTool(businessId) {
             .replace(/\s+/g, " ")
             .trim()
         : product.name,
-      description: isPizza(product) ? ingredientDescription(product.description) : product.description,
+      description: isPizza(product) ? ingredientDescription(product.description) : stripPromoDays(product.description),
       price: isPizza(product) ? null : Number(product.price),
       sizes: isPizza(product) ? sizePrices : undefined,
       sauce_options: needsSauce(product)
@@ -236,8 +259,12 @@ export function formatMenuForPrompt(menu) {
   const allowed = menuIngredients().filter(
     name => !(menu.unavailableIngredients || []).includes(name)
   );
+  const promos = (menu.products || []).filter(product => product.category === "Promociones");
   const lines = [
-    `Pizzas: mediana ${menu.pizza_sizes?.mediana ?? 200}, grande ${menu.pizza_sizes?.grande ?? 220}, familiar ${menu.pizza_sizes?.familiar ?? 250}. Extra ${menu.extra_price ?? 25}. Dos pizzas grandes ${menu.promo_pair ?? 400}. Di el número solo. Nunca digas dólares, pesos ni el signo de dinero.`,
+    `Pizzas: mediana ${menu.pizza_sizes?.mediana ?? 200}, grande ${menu.pizza_sizes?.grande ?? 220}, familiar ${menu.pizza_sizes?.familiar ?? 250}. Extra ${menu.extra_price ?? 25}. Di el número solo. Nunca digas dólares, pesos ni el signo de dinero.`,
+    promos.length
+      ? `Promociones de hoy, hay que decirlas todas juntas si preguntan: ${promos.map(product => `${product.name} por ${Number(product.price).toFixed(0)}`).join("; ")}.`
+      : "Hoy no hay promociones.",
     `Extras permitidos: ${allowed.join(", ") || "ninguno"}.`,
     "Si piden un ingrediente que no está en extras permitidos, di que no está disponible. No armes una pizza que no esté en esta lista."
   ];
@@ -705,7 +732,8 @@ async function saveOrder({
         order_id: existing.id,
         order_number: existing.order_number,
         total: existing.total,
-        note: "Este pedido ya quedó guardado. No lo vuelvas a crear. Sigue con la despedida."
+        spoken: `Su pedido ya quedó confirmado. Total ${existing.total}. Llegará en aproximadamente 30 minutos. Muchas gracias por llamar a Pizzería Hermosillo. Hasta luego.`,
+        note: "Este pedido ya quedó guardado. No lo vuelvas a crear. Di spoken y despídete."
       };
     }
   }
@@ -806,7 +834,7 @@ async function saveOrder({
       );
     }
 
-    if (!product.available) {
+    if (!product.available || (product.category === "Promociones" && !promoActiveToday(product.description))) {
       throw new Error(
         `El producto ${product.name} no está disponible.`
       );
@@ -1084,6 +1112,53 @@ export async function getLastOrderTool({
   return { found: false };
 }
 
+const ORDER_STATUS_SPOKEN = {
+  preparing: "Tu pedido sigue preparándose, pero pronto se lo daremos al repartidor y saldrá directo a tu domicilio a entregarlo. ¿Tienes alguna duda?",
+  delivering: "El repartidor ya salió con tu pedido. En menos de 10 minutos deberá estar en tu domicilio. ¿Tienes alguna duda?"
+};
+
+export async function orderStatusTool({ businessId, callerPhone }) {
+  const phone = normalizePhone(callerPhone);
+  if (!businessId || !phone) {
+    return { found: false, spoken: "No encuentro un pedido de hoy en este teléfono." };
+  }
+
+  const day = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Hermosillo" }).format(new Date());
+  const start = new Date(`${day}T00:00:00-07:00`).toISOString();
+  const { data: orders, error } = await supabase
+    .from("orders")
+    .select("id,customer_id,status,created_at,deleted_at")
+    .eq("business_id", businessId)
+    .gte("created_at", start)
+    .is("deleted_at", null)
+    .neq("status", "cancelled")
+    .order("created_at", { ascending: false })
+    .limit(12);
+
+  if (error) {
+    throw error;
+  }
+
+  for (const order of orders || []) {
+    const { data: customer } = await supabase
+      .from("customers")
+      .select("phone")
+      .eq("id", order.customer_id)
+      .maybeSingle();
+    if (normalizePhone(customer?.phone) !== phone) {
+      continue;
+    }
+    const status = order.status || "new";
+    return {
+      found: true,
+      status,
+      spoken: ORDER_STATUS_SPOKEN[status] || "Tu pedido ya está registrado. ¿Tienes alguna duda?"
+    };
+  }
+
+  return { found: false, spoken: "No encuentro un pedido de hoy en este teléfono." };
+}
+
 export async function updateLastOrderTool({
   businessId,
   callerPhone,
@@ -1207,6 +1282,11 @@ export function humanTransferStarted(callSid) {
   return transfersStarted.has(callSid);
 }
 
+export function abandonHumanTransfer(callSid) {
+  markTransferFailed(callSid);
+  transfersStarted.delete(callSid);
+}
+
 export async function transferToHumanTool(callSid) {
   if (!callSid) {
     return { success: false, spoken: "No pudieron tomar la llamada. Yo sigo con su pedido." };
@@ -1222,7 +1302,18 @@ export async function transferToHumanTool(callSid) {
     return { success: true, duplicate: true, state: gate.state };
   }
   transfersStarted.add(callSid);
-  const number = config.humanTransferNumber;
+  const number = /^\+\d{10,15}$/.test(config.humanTransferNumber)
+    ? config.humanTransferNumber
+    : "+526621383780";
+  let callerId = "";
+  try {
+    const live = await twilio(config.twilioAccountSid, config.twilioAuthToken)
+      .calls(callSid)
+      .fetch();
+    callerId = normalizePhone(live.to);
+  } catch {
+    callerId = "";
+  }
   if (!/^\+\d{10,15}$/.test(number)) {
     markTransferFailed(callSid);
     transfersStarted.delete(callSid);
@@ -1233,7 +1324,7 @@ export async function transferToHumanTool(callSid) {
   if (!/^https?:\/\//i.test(base)) {
     base = `https://${base}`;
   }
-  const twiml = transferTwiml(number, `${base}/twilio/transfer-result`);
+  const twiml = transferTwiml(number, `${base}/twilio/transfer-result`, callerId);
   console.log(JSON.stringify({
     event: "transfer_started",
     callSid,

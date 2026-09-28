@@ -176,6 +176,113 @@ const DRINK_SIZES = [
 
 const PIZZA_SIZES = ["mediana", "grande", "familiar"] as const;
 
+const WEEKDAYS = [
+  ["lun", "Lunes"],
+  ["mar", "Martes"],
+  ["mie", "Miércoles"],
+  ["jue", "Jueves"],
+  ["vie", "Viernes"],
+  ["sab", "Sábado"],
+  ["dom", "Domingo"]
+] as const;
+
+function promoDayKeys(description: string) {
+  const match = String(description || "").match(/\[\[dias:([a-z,]*)\]\]/);
+  return match ? match[1].split(",").filter(Boolean) : [];
+}
+
+function withoutPromoDays(description: string) {
+  return String(description || "").replace(/\s*\[\[dias:[a-z,]*\]\]\s*/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function withPromoDays(description: string, days: string[]) {
+  const clean = withoutPromoDays(description);
+  const unique = WEEKDAYS.map(([key]) => key).filter(key => days.includes(key));
+  if (!unique.length || unique.length === WEEKDAYS.length) {
+    return clean;
+  }
+  return `${clean}${clean ? " " : ""}[[dias:${unique.join(",")}]]`;
+}
+
+function promoActiveToday(description: string) {
+  const days = promoDayKeys(description);
+  if (!days.length) {
+    return true;
+  }
+  const short = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Hermosillo",
+    weekday: "short"
+  }).format(new Date());
+  const today: Record<string, string> = {
+    Sun: "dom",
+    Mon: "lun",
+    Tue: "mar",
+    Wed: "mie",
+    Thu: "jue",
+    Fri: "vie",
+    Sat: "sab"
+  };
+  return days.includes(today[short] || "");
+}
+
+function DayPicker({
+  days,
+  onChange
+}: {
+  days: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const selected = days.length ? days : WEEKDAYS.map(([key]) => key);
+  const label = selected.length === WEEKDAYS.length
+    ? "Todos los días"
+    : WEEKDAYS.filter(([key]) => selected.includes(key)).map(([, name]) => name).join(", ");
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    function close(event: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    window.addEventListener("mousedown", close);
+    return () => window.removeEventListener("mousedown", close);
+  }, [open]);
+
+  return (
+    <div className={`ingredient-picker${open ? " is-open" : ""}`} ref={rootRef}>
+      <button type="button" className="ingredient-picker-trigger" onClick={() => setOpen(current => !current)}>
+        {label}
+      </button>
+      {open && (
+        <ul className="ingredient-picker-menu">
+          {WEEKDAYS.map(([key, name]) => {
+            const picked = selected.includes(key);
+            return (
+              <li key={key}>
+                <button
+                  type="button"
+                  className={picked ? "is-picked" : ""}
+                  onClick={() => {
+                    const next = picked ? selected.filter(day => day !== key) : [...selected, key];
+                    onChange(next.length ? next : [...selected]);
+                  }}
+                >
+                  <span />
+                  {name}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function MenuSelect({
   name,
   value,
@@ -301,7 +408,7 @@ export default function MenuBoard({
     { kind: "product"; item: ProductRow } | { kind: "ingredient"; item: IngredientRow } | null
   >(null);
   const [editing, setEditing] = useState<
-    | { kind: "product"; id: string; name: string; description: string; price: string; pizza: boolean }
+    | { kind: "product"; id: string; name: string; description: string; price: string; pizza: boolean; promo: boolean; days: string[] }
     | { kind: "ingredient"; id: string; name: string }
     | null
   >(null);
@@ -408,12 +515,15 @@ export default function MenuBoard({
   }
 
   function productIsOffered(product: ProductRow) {
+    if (product.category === "Promociones" && !promoActiveToday(product.description || "")) {
+      return false;
+    }
     return product.available && blockingIngredients(product).length === 0;
   }
 
   async function toggleProduct(product: ProductRow) {
     const missing = blockingIngredients(product);
-    if (missing.length) {
+    if (missing.length || (product.category === "Promociones" && !promoActiveToday(product.description || ""))) {
       return;
     }
     const supabase = createClient();
@@ -609,7 +719,9 @@ export default function MenuBoard({
       .from("products")
       .update({
         name: editing.name.trim(),
-        description: editing.description.trim(),
+        description: editing.promo
+          ? withPromoDays(editing.description, editing.days)
+          : editing.description.trim(),
         ...(editing.pizza ? {} : { price: Number.isFinite(nextPrice) ? nextPrice : 0 })
       })
       .eq("id", editing.id);
@@ -624,7 +736,9 @@ export default function MenuBoard({
           ? {
               ...item,
               name: editing.name.trim(),
-              description: editing.description.trim(),
+              description: editing.promo
+                ? withPromoDays(editing.description, editing.days)
+                : editing.description.trim(),
               price: editing.pizza ? item.price : Number.isFinite(nextPrice) ? nextPrice : 0
             }
           : item
@@ -875,9 +989,11 @@ export default function MenuBoard({
                         kind: "product",
                         id: product.id,
                         name: product.name,
-                        description: product.description || "",
+                        description: withoutPromoDays(product.description || ""),
                         price: String(product.price),
-                        pizza: isPizza(product)
+                        pizza: isPizza(product),
+                        promo: product.category === "Promociones",
+                        days: promoDayKeys(product.description || "")
                       })
                     }
                   >
@@ -989,6 +1105,12 @@ export default function MenuBoard({
                 name="edit-price"
                 value={editing.price}
                 onChange={next => setEditing(current => (current && current.kind === "product" ? { ...current, price: next } : current))}
+              />
+            )}
+            {editing.kind === "product" && editing.promo && (
+              <DayPicker
+                days={editing.days}
+                onChange={days => setEditing(current => (current && current.kind === "product" ? { ...current, days } : current))}
               />
             )}
             <div className="notice-actions">

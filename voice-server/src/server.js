@@ -18,12 +18,14 @@ import {
   findUnfinishedCall,
   getBusinessByTwilioPhone,
   getMonthUsageSeconds,
-  normalizePhone
+  normalizePhone,
+  supabase
 } from "./supabase.js";
 import {
   formatMenuForPrompt,
   getMenuTool,
   refreshHermosilloCatalog,
+  abandonHumanTransfer,
   humanTransferStarted
 } from "./tools.js";
 
@@ -108,15 +110,55 @@ app.post(
 app.post(
   "/twilio/transfer-result",
   validateTwilioSignature,
-  (req, res) => {
+  async (req, res) => {
     const status = req.body.DialCallStatus || "";
+    const callSid = req.body.CallSid || "";
     const response = new twilio.twiml.VoiceResponse();
     if (status === "completed" || status === "answered") {
       response.hangup();
-    } else {
+      sendTwiml(res, response);
+      return;
+    }
+
+    abandonHumanTransfer(callSid);
+    console.log(JSON.stringify({
+      event: "transfer_unanswered",
+      callSid,
+      at: new Date().toISOString(),
+      status
+    }));
+
+    try {
+      const { data: previous } = await supabase
+        .from("calls")
+        .select("id,business_id,caller_phone")
+        .eq("twilio_call_sid", callSid)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!previous?.id || !previous.business_id) {
+        throw new Error("No hay llamada para retomar");
+      }
+      const { error: reopenError } = await supabase
+        .from("calls")
+        .update({ status: "in_progress", ended_at: null })
+        .eq("id", previous.id);
+      if (reopenError) {
+        throw reopenError;
+      }
+      const connect = response.connect();
+      const stream = connect.stream({
+        url: toWssUrl(config.publicVoiceBaseUrl, "/twilio/media")
+      });
+      stream.parameter({ name: "callId", value: previous.id });
+      stream.parameter({ name: "callerPhone", value: previous.caller_phone || "" });
+      stream.parameter({ name: "businessId", value: previous.business_id });
+      stream.parameter({ name: "resume", value: "transfer" });
+    } catch (error) {
+      console.error("No se pudo retomar la llamada:", error.message);
       response.say(
         { language: "es-MX" },
-        "No pudieron tomar la llamada. Yo sigo con su pedido."
+        "No pudieron tomar la llamada. Sigo con su pedido."
       );
     }
     sendTwiml(res, response);
@@ -398,7 +440,8 @@ wss.on(
                 previousTranscript,
                 knownName,
                 knownAddress,
-                menuText
+                menuText,
+                resumeTransfer: params.resume === "transfer"
               });
 
             return;

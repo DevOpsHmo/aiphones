@@ -946,15 +946,23 @@ export default function DashboardPage() {
         return query.split(/\s+/).every(word => haystack.includes(word));
       })
       .sort((a, b) => {
+        const rank = (status: string) => {
+          const index = STATUS_OPTIONS.findIndex(option => option.value === status);
+          return index === -1 ? STATUS_OPTIONS.length : index;
+        };
+        const byStatus = rank(a.status) - rank(b.status);
+        if (byStatus !== 0) {
+          return byStatus;
+        }
         const na = Number.parseInt(a.order_number, 10);
         const nb = Number.parseInt(b.order_number, 10);
         const aNum = Number.isFinite(na) ? na : Number.MAX_SAFE_INTEGER;
         const bNum = Number.isFinite(nb) ? nb : Number.MAX_SAFE_INTEGER;
         if (aNum !== bNum) {
-          return aNum - bNum;
+          return bNum - aNum;
         }
         return (
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
       });
   }, [orders, selectedDay, statusFilter, searchQuery]);
