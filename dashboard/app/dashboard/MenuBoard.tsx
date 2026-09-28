@@ -874,8 +874,7 @@ export default function MenuBoard({
             ["mediana", "Mediana"],
             ["grande", "Grande"],
             ["familiar", "Familiar"],
-            ["extra", "Extra"],
-            ["promo_pair", "Dos grandes"]
+            ["extra", "Extra"]
           ] as const).map(([key, label]) => (
             <div className="price-field" key={key}>
               <span>{label}</span>
