@@ -21,27 +21,35 @@ type IngredientRow = {
   business_id: string;
   name: string;
   available: boolean;
+  extra_price?: number | null;
 };
 
 function PriceStep({
   name,
   value,
-  onChange
+  onChange,
+  allowEmpty = false
 }: {
   name: string;
   value: string;
   onChange: (next: string) => void;
+  allowEmpty?: boolean;
 }) {
   const [text, setText] = useState(value);
   const editing = useRef(false);
 
   useEffect(() => {
     if (!editing.current) {
-      setText(String(Math.max(0, Number(value) || 0)));
+      setText(allowEmpty && value === "" ? "" : String(Math.max(0, Number(value) || 0)));
     }
-  }, [value]);
+  }, [value, allowEmpty]);
 
   function commit(next: string) {
+    if (allowEmpty && String(next).trim() === "") {
+      setText("");
+      onChange("");
+      return;
+    }
     const clean = String(Math.max(0, Math.floor(Number(next) || 0)));
     setText(clean);
     onChange(clean);
@@ -409,7 +417,7 @@ export default function MenuBoard({
   >(null);
   const [editing, setEditing] = useState<
     | { kind: "product"; id: string; name: string; description: string; price: string; pizza: boolean; promo: boolean; days: string[] }
-    | { kind: "ingredient"; id: string; name: string }
+    | { kind: "ingredient"; id: string; name: string; extraPrice: string }
     | null
   >(null);
   const [sizePrices, setSizePrices] = useState({
@@ -443,12 +451,24 @@ export default function MenuBoard({
 
     let ingredientsQuery = supabase
       .from("menu_ingredients")
-      .select("id,business_id,name,available")
+      .select("id,business_id,name,available,extra_price")
       .order("name");
     if (business?.id) {
       ingredientsQuery = ingredientsQuery.eq("business_id", business.id);
     }
-    const { data: ingredientRows, error: ingredientError } = await ingredientsQuery;
+    let { data: ingredientRows, error: ingredientError } = await ingredientsQuery;
+    if (ingredientError && /extra_price|PGRST204/i.test(ingredientError.message)) {
+      let fallback = supabase
+        .from("menu_ingredients")
+        .select("id,business_id,name,available")
+        .order("name");
+      if (business?.id) {
+        fallback = fallback.eq("business_id", business.id);
+      }
+      const retry = await fallback;
+      ingredientRows = retry.data;
+      ingredientError = retry.error;
+    }
     if (ingredientError) {
       setError(
         /menu_ingredients|schema cache|PGRST205|42P01/i.test(ingredientError.message)
@@ -697,17 +717,30 @@ export default function MenuBoard({
     const supabase = createClient();
     if (editing.kind === "ingredient") {
       const nextName = foldIngredient(editing.name);
+      const typed = editing.extraPrice.trim();
+      const extraPrice = typed === "" ? null : Number(typed);
       const { error: updateError } = await supabase
         .from("menu_ingredients")
-        .update({ name: nextName })
+        .update({
+          name: nextName,
+          extra_price: extraPrice != null && Number.isFinite(extraPrice) ? extraPrice : null
+        })
         .eq("id", editing.id);
       if (updateError) {
-        setError(updateError.message);
+        setError(
+          /extra_price|schema cache|PGRST204/i.test(updateError.message)
+            ? "Falta el precio por ingrediente. Pega supabase/migration_ingredient_extra_price.sql en Supabase."
+            : updateError.message
+        );
         setSavingEdit(false);
         return;
       }
       setIngredients(current =>
-        current.map(item => (item.id === editing.id ? { ...item, name: nextName } : item))
+        current.map(item => (
+          item.id === editing.id
+            ? { ...item, name: nextName, extra_price: extraPrice != null && Number.isFinite(extraPrice) ? extraPrice : null }
+            : item
+        ))
       );
       setSavingEdit(false);
       setEditing(null);
@@ -1046,7 +1079,8 @@ export default function MenuBoard({
                   setEditing({
                     kind: "ingredient",
                     id: ingredient.id,
-                    name: ingredientLabel(ingredient.name)
+                    name: ingredientLabel(ingredient.name),
+                    extraPrice: ingredient.extra_price == null ? "" : String(ingredient.extra_price)
                   })
                 }
               />
@@ -1091,6 +1125,17 @@ export default function MenuBoard({
               onChange={event => setEditing({ ...editing, name: event.target.value })}
               required
             />
+            {editing.kind === "ingredient" && (
+              <label>
+                Extra, vacío usa el general ({sizePrices.extra})
+                <PriceStep
+                  name="ingredient-extra-price"
+                  allowEmpty
+                  value={editing.extraPrice}
+                  onChange={next => setEditing(current => (current && current.kind === "ingredient" ? { ...current, extraPrice: next } : current))}
+                />
+              </label>
+            )}
             {editing.kind === "product" && (
               <textarea
                 name="edit-description"

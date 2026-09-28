@@ -134,6 +134,27 @@ export function priceWithMushrooms(size) {
   return { base: quote.unit - 25, total: quote.total };
 }
 
+async function loadExtraPrices(businessId) {
+  if (!businessId) {
+    return {};
+  }
+  const { data, error } = await supabase
+    .from("menu_ingredients")
+    .select("name,extra_price")
+    .eq("business_id", businessId);
+  if (error) {
+    return {};
+  }
+  const prices = {};
+  for (const row of data || []) {
+    if (row.extra_price == null || !Number.isFinite(Number(row.extra_price))) {
+      continue;
+    }
+    prices[foldIngredient(row.name)] = Number(row.extra_price);
+  }
+  return prices;
+}
+
 async function unavailableIngredientNames(businessId) {
   const { data, error } = await supabase
     .from("menu_ingredients")
@@ -254,10 +275,12 @@ export async function getMenuTool(businessId) {
       && (product.category !== "Promociones" || promoActiveToday(product.description))
   );
   const payments = await loadPaymentFlags(businessId);
+  const extraPrices = await loadExtraPrices(businessId);
 
   return {
     pizza_sizes: sizePrices,
     extra_price: menuPrices.extra,
+    extra_prices: extraPrices,
     promo_pair: menuPrices.promoPair,
     payments,
     unavailableIngredients: [...unavailable],
@@ -295,7 +318,11 @@ export function formatMenuForPrompt(menu) {
     promos.length
       ? `Promociones de hoy, hay que decirlas todas juntas si preguntan: ${promos.map(product => `${product.name} por ${Number(product.price).toFixed(0)}`).join("; ")}.`
       : "Hoy no hay promociones.",
-    `Extras permitidos: ${allowed.join(", ") || "ninguno"}.`,
+    `Extras permitidos: ${allowed.join(", ") || "ninguno"}. Extra general ${menu.extra_price ?? 25}.${
+      Object.keys(menu.extra_prices || {}).length
+        ? ` Precio propio: ${Object.entries(menu.extra_prices).map(([name, price]) => `${name} ${price}`).join(", ")}.`
+        : ""
+    } Si un extra no tiene precio propio, di el extra general.`,
     "Si piden un ingrediente que no está en extras permitidos, di que no está disponible. No armes una pizza que no esté en esta lista."
   ];
 
@@ -857,6 +884,7 @@ async function saveOrder({
     familiar: menuPrices.familiar
   };
   const allowedExtras = menuIngredients().filter(name => !unavailable.has(name));
+  const extraPrices = await loadExtraPrices(businessId);
   const calculatedItems = [];
   let total = 0;
 
@@ -917,7 +945,8 @@ async function saveOrder({
         quantity: 1,
         catalog: allowedExtras,
         prices: sizePrices,
-        extraPrice: menuPrices.extra
+        extraPrice: menuPrices.extra,
+        extraPrices
       })
       : null;
 
@@ -1067,6 +1096,7 @@ async function saveOrder({
     }),
     prices: sizePrices,
     extraPrice: menuPrices.extra,
+    extraPrices,
     promoPair: menuPrices.promoPair
   });
 

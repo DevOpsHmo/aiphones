@@ -1719,7 +1719,13 @@ export default function DashboardPage() {
               <button
                 type="button"
                 className={view === "orders" ? "is-active" : ""}
-                onClick={() => setView("orders")}
+                onClick={() => {
+                  if (view !== "orders") {
+                    setSelectedDay(hermosilloDateKey());
+                    setCalendarOpen(false);
+                  }
+                  setView("orders");
+                }}
               >
                 Pedidos
               </button>
@@ -1752,6 +1758,10 @@ export default function DashboardPage() {
                     type="button"
                     className={view === "orders" ? "is-active" : ""}
                     onClick={() => {
+                      if (view !== "orders") {
+                        setSelectedDay(hermosilloDateKey());
+                        setCalendarOpen(false);
+                      }
                       setView("orders");
                       setNavOpen(false);
                     }}

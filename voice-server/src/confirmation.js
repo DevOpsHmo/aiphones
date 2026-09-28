@@ -2,7 +2,7 @@ import { matchIngredient, EXTRA_PRICE } from "./menu-ingredients.js";
 
 const SIZE_PRICES = { mediana: 200, grande: 220, familiar: 250 };
 
-export function priceLine({ size, extra, extras, quantity, catalog, prices, extraPrice }) {
+export function priceLine({ size, extra, extras, quantity, catalog, prices, extraPrice, extraPrices }) {
   const qty = Number(quantity);
   if (!Number.isInteger(qty) || qty < 1 || qty > 50) {
     return { ok: false, error: "Cantidad inválida" };
@@ -25,7 +25,9 @@ export function priceLine({ size, extra, extras, quantity, catalog, prices, extr
       return { ok: false, error: "Extra inválido" };
     }
     if (!priced.some(item => item.nombre === official)) {
-      priced.push({ nombre: official, precio: toppingPrice });
+      const own = extraPrices?.[official];
+      const price = own != null && Number.isFinite(Number(own)) ? Number(own) : toppingPrice;
+      priced.push({ nombre: official, precio: price });
     }
   }
   const extrasTotal = priced.reduce((sum, item) => sum + item.precio, 0);
@@ -63,7 +65,7 @@ export function buildConfirmation(draft) {
       lines.push(`${qty} ${item.name || "refresco"}`);
       continue;
     }
-    const priced = priceLine({ ...item, prices: sizePrices, extraPrice });
+    const priced = priceLine({ ...item, prices: sizePrices, extraPrice, extraPrices: draft.extraPrices });
     if (!priced.ok) {
       return priced;
     }
