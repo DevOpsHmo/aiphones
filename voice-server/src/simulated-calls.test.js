@@ -51,21 +51,29 @@ test("simulacion 5 ciento 50 no es una calle", () => {
   );
 });
 
-test("simulacion 6 el cierre repite orden precio y 30 minutos", () => {
+test("simulacion 6 el cierre pide un si antes de confirmar", () => {
   const call = play([
-    "Ernesto",
+    "Ricardo.",
     "peperoni",
     "mediana",
     "no",
     "domicilio",
-    "83157",
+    "ochenta y tres ciento cincuenta y siete",
     "Issste Federal",
     "Lázaro Cárdenas número 1"
   ]);
-  assert.match(call.said.at(-1), /Excelente/);
-  assert.match(call.said.at(-1), /quedó confirmado/);
-  assert.match(call.said.at(-1), /30 minutos/);
-  assert.match(call.said.at(-1), /Pizzería Hermosillo/);
+  assert.equal(call.state.name, "Ricardo");
+  assert.equal(call.state.postalCode, "83157");
+  assert.match(call.said.at(-1), /Está de acuerdo/);
+  const yes = play(["sí"], call.state);
+  assert.equal(yes.state.agreed, true);
+  assert.match(yes.said.at(-1), /confirmado con éxito/);
+  assert.match(yes.said.at(-1), /30 minutos/);
+});
+
+test("simulacion 11 si se enoja transfiere a un humano", () => {
+  const call = play(["ya te lo dije tres veces"], { name: "Ricardo", postalCode: "" });
+  assert.equal(call.said[0], "Disculpe, lo transferiré con un humano.");
 });
 
 test("simulacion 7 recoger no pide direccion", () => {

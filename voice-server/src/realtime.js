@@ -1,6 +1,7 @@
 import WebSocket from "ws";
 import {
   createOrderTool,
+  getMenuTool,
   endCallTool,
   transferToHumanTool,
   humanTransferStarted,
@@ -559,6 +560,12 @@ ${menuText || "Menú no disponible."}
           event.type === "response.cancelled"
         ) {
           assistantSpeaking = false;
+          if (event.type === "response.done" && callState.closeWhenSpoken && !callState.hangupScheduled) {
+            callState.hangupScheduled = true;
+            endCallTool(callSid).catch(error => {
+              console.error("No se pudo colgar:", error.message);
+            });
+          }
         }
 
         if (
@@ -634,7 +641,45 @@ ${menuText || "Menú no disponible."}
             } else {
               const turn = orderedTurn(callState.flow || {}, event.transcript);
               callState.flow = turn.state;
-              if (turn.say) {
+              if (turn.transfer) {
+                callState.transferAsked = true;
+                speakExact(turn.say);
+                redirectToHuman();
+              } else if (turn.save && !callState.orderPlaced) {
+                const flow = turn.state;
+                getMenuTool(businessId).then(menu => {
+                  const product = (menu.products || []).find(item =>
+                    String(item.name || "").toLowerCase().includes(String(flow.product || "").toLowerCase())
+                  );
+                  if (!product) {
+                    speakExact("No encontré esa pizza en el menú. ¿Cuál desea?");
+                    return null;
+                  }
+                  return createOrderTool({
+                    businessId,
+                    callId,
+                    customerName: flow.name,
+                    customerPhone: callerPhone,
+                    orderType: "delivery",
+                    street: flow.street,
+                    colony: flow.colony,
+                    postalCode: flow.postalCode,
+                    address: `${flow.street}, ${flow.colony}, C.P. ${flow.postalCode}, Hermosillo, Sonora`,
+                    items: [{ product_id: product.id, quantity: 1, size: flow.size }],
+                    confirmed: true,
+                    paymentMethod: "efectivo"
+                  });
+                }).then(result => {
+                  if (result?.success) {
+                    callState.orderPlaced = true;
+                    callState.closeWhenSpoken = true;
+                    speakExact(turn.say);
+                  }
+                }).catch(error => {
+                  console.error("No se pudo guardar el pedido confirmado:", error.message);
+                  speakExact("No pude dejar listo el pedido. ¿Me confirma otra vez?");
+                });
+              } else if (turn.say) {
                 if (assistantSpeaking) {
                   stopTalking();
                 }

@@ -1,6 +1,7 @@
 import { mushroomIntent, mentionedQuantity } from "./turn-policy.js";
 import { buildConfirmation, paymentForOrder, priceLine } from "./confirmation.js";
 import { matchIngredients } from "./menu-ingredients.js";
+import { parseSpokenPostalCode } from "./tools.js";
 
 export const MENU_PIZZAS = [
   "BBQ Chicken",
@@ -337,7 +338,15 @@ export function orderedTurn(state, utterance) {
     unavailable: [],
     ...state
   };
-  const text = fold(utterance);
+  const text = fold(utterance).replace(/[.,!?¿¡]/g, " ").replace(/\s+/g, " ").trim();
+  if (/\b(ya te lo dije|no entiendes|no me escuch|estoy harto|confund|tres veces|cuatro veces)\b/.test(text)) {
+    return {
+      state: next,
+      hangup: false,
+      transfer: true,
+      say: "Disculpe, lo transferiré con un humano."
+    };
+  }
   if (/\b(agregar|otra pizza|pedido anterior)\b/.test(text)) {
     return { state: next, hangup: false, say: "¿Qué pizza desea agregar? Las que ya tenía se quedan." };
   }
@@ -370,6 +379,9 @@ export function orderedTurn(state, utterance) {
     next.fulfillment = "pickup";
   }
   if (!next.product) {
+    if (/\bpizza\b/.test(text)) {
+      return { state: next, hangup: false, say: "No manejamos esa. Tenemos mexicana, peperoni y deluxe. ¿Cuál desea?" };
+    }
     return { state: next, hangup: false, say: "¿Qué desea ordenar?" };
   }
   if (!next.size) {
@@ -392,16 +404,16 @@ export function orderedTurn(state, utterance) {
     });
     return { state: next, hangup: false, say: confirmation.spoken };
   }
-  const postal = text.match(/\b(\d{5})\b/);
+  const postal = text.match(/\b(\d{5})\b/)?.[1] || parseSpokenPostalCode(utterance);
   if (!next.postalCode) {
-    if (postal) {
-      next.postalCode = postal[1];
+    if (/^\d{5}$/.test(postal)) {
+      next.postalCode = postal;
     } else {
       return { state: next, hangup: false, say: "¿Cuál es el código postal?" };
     }
   }
   if (!next.colony) {
-    if (/\b(montecarlo|issste|modelo|centro)\b/.test(text)) {
+    if (text.length > 2 && !/^\d+$/.test(text) && !parseSpokenPostalCode(utterance)) {
       next.colony = utterance.trim();
     } else {
       return { state: next, hangup: false, say: `Muy bien ${next.name}, ¿y la colonia cuál es?` };
@@ -414,13 +426,24 @@ export function orderedTurn(state, utterance) {
       return { state: next, hangup: false, say: "¿Cuál es la calle y el número?" };
     }
   }
-  const confirmation = buildConfirmation({
-    customerName: next.name,
-    orderType: "delivery",
-    address: `${next.street}, ${next.colony}`,
-    postalCode: next.postalCode,
-    paymentMethod: "efectivo",
-    items: [{ name: next.product, size: next.size, quantity: 1 }]
-  });
-  return { state: next, hangup: false, say: confirmation.spoken };
+  if (!next.agreed) {
+    if (/\b(si|correcto|de acuerdo|esta bien)\b/.test(text) && next.askedAgree) {
+      next.agreed = true;
+    } else if (!next.askedAgree) {
+      next.askedAgree = true;
+      return {
+        state: next,
+        hangup: false,
+        say: `Su pedido es una pizza ${next.size} de ${next.product}, a domicilio, en ${next.street}, colonia ${next.colony}, código ${next.postalCode}. ¿Está de acuerdo?`
+      };
+    } else {
+      return { state: next, hangup: false, say: "¿Está de acuerdo con su pedido?" };
+    }
+  }
+  return {
+    state: next,
+    hangup: false,
+    save: true,
+    say: "Su pedido quedó confirmado con éxito. Llegará a su domicilio en aproximadamente 30 minutos. Que tenga buen día y gracias por llamar a Pizzería Hermosillo."
+  };
 }
