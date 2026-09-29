@@ -79,6 +79,7 @@ export function createRealtimeSession({
   let instructionBase = "";
   let assistantSpeaking = false;
   let speakingSince = 0;
+  let activeResponseId = "";
 
   function stopTalking() {
     assistantSpeaking = false;
@@ -161,7 +162,8 @@ export function createRealtimeSession({
               threshold: 0.9,
               prefix_padding_ms: 300,
               silence_duration_ms: 700,
-              interrupt_response: true
+              create_response: false,
+              interrupt_response: false
             }
           },
 
@@ -496,6 +498,7 @@ ${menuText || "Menú no disponible."}
         if (event.type === "response.created") {
           assistantSpeaking = true;
           speakingSince = Date.now();
+          activeResponseId = event.response?.id || "";
         }
 
         if (
@@ -512,6 +515,9 @@ ${menuText || "Menú no disponible."}
           "response.audio.delta"
         ) {
           assistantSpeaking = true;
+          if (activeResponseId && event.response_id && event.response_id !== activeResponseId) {
+            return;
+          }
           if (
             twilioSocket.readyState ===
             WebSocket.OPEN &&
