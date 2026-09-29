@@ -15,6 +15,7 @@ import { config } from "./config.js";
 import { interruptionDecision } from "./turn-policy.js";
 import { wantsHuman } from "./human-transfer.js";
 import { emptyFacts, factsInstructions, lockFacts, orderedTurn } from "./call-flow.js";
+import { emptyPcmState, isPcmFormat, pcmToPcmuBase64 } from "./phone-audio.js";
 
 function isPromptEcho(text) {
   const normalized = text.trim().toLowerCase();
@@ -80,6 +81,12 @@ export function createRealtimeSession({
   let assistantSpeaking = false;
   let speakingSince = 0;
   let activeResponseId = "";
+  let outputFormat = "audio/pcmu";
+  let outputRate = 8000;
+  let sessionReady = false;
+  let greetingSent = false;
+  const pcmState = emptyPcmState();
+  const inboundQueue = [];
 
   function stopTalking() {
     assistantSpeaking = false;
@@ -89,6 +96,51 @@ export function createRealtimeSession({
     if (twilioSocket.readyState === WebSocket.OPEN) {
       twilioSocket.send(JSON.stringify({ event: "clear", streamSid }));
     }
+  }
+
+  function noteAudioFormat(format) {
+    if (!format) return;
+    const type = typeof format === "string" ? format : format.type;
+    if (!type || type === outputFormat) return;
+    outputFormat = type;
+    outputRate = (typeof format === "object" && format.rate)
+      || (isPcmFormat(type) ? 24000 : 8000);
+    pcmState.carry = Buffer.alloc(0);
+    pcmState.acc = 0;
+    pcmState.accCount = 0;
+    console.log(JSON.stringify({
+      event: "openai_audio_format",
+      format: outputFormat,
+      rate: outputRate
+    }));
+  }
+
+  function payloadForTwilio(delta) {
+    if (typeof delta !== "string" || !delta) return "";
+    if (!isPcmFormat(outputFormat)) return delta;
+    return pcmToPcmuBase64(delta, pcmState, outputRate || 24000);
+  }
+
+  function sendInbound(payload) {
+    if (!payload || openaiSocket.readyState !== WebSocket.OPEN) return;
+    openaiSocket.send(JSON.stringify({
+      type: "input_audio_buffer.append",
+      audio: payload
+    }));
+  }
+
+  function sendGreeting() {
+    if (greetingSent || openaiSocket.readyState !== WebSocket.OPEN) return;
+    greetingSent = true;
+    openaiSocket.send(JSON.stringify({
+      type: "response.create",
+      response: {
+        output_modalities: ["audio"],
+        instructions: resumeTransfer
+          ? "Di exactamente esta frase completa y después guarda silencio hasta que el cliente hable: No pudieron tomar la llamada. Sigo con su pedido. ¿Qué desea ordenar?"
+          : "Di exactamente esta frase completa y después guarda silencio hasta que el cliente hable: Hola, bienvenido a Pizzería Hermosillo. ¿Cuál es su nombre?"
+      }
+    }));
   }
 
   function speakExact(phrase) {
@@ -174,8 +226,6 @@ export function createRealtimeSession({
             voice: "marin"
           }
         },
-
-        temperature: 0.2,
 
         instructions: `
 Eres la asistente telefónica de ${
@@ -468,22 +518,11 @@ ${menuText || "Menú no disponible."}
     );
 
     setTimeout(() => {
-      if (
-        openaiSocket.readyState ===
-        WebSocket.OPEN
-      ) {
-        openaiSocket.send(
-          JSON.stringify({
-            type: "response.create",
-            response: {
-              instructions: resumeTransfer
-                ? "Di exactamente esta frase completa y después guarda silencio hasta que el cliente hable: No pudieron tomar la llamada. Sigo con su pedido. ¿Qué desea ordenar?"
-                : "Di exactamente esta frase completa y después guarda silencio hasta que el cliente hable: Hola, bienvenido a Pizzería Hermosillo. ¿Cuál es su nombre?"
-            }
-          })
-        );
+      if (!greetingSent) {
+        console.error("OpenAI no confirmó el audio; se envía el saludo igual");
+        sendGreeting();
       }
-    }, 300);
+    }, 1500);
   });
 
   openaiSocket.on(
@@ -495,7 +534,21 @@ ${menuText || "Menú no disponible."}
             raw.toString()
           );
 
+        if (event.type === "session.updated") {
+          const confirmed = event.session?.audio?.output?.format || event.session?.output_audio_format;
+          console.log(JSON.stringify({
+            event: "openai_session_audio",
+            format: typeof confirmed === "string" ? confirmed : confirmed?.type || outputFormat,
+            rate: confirmed?.rate || outputRate
+          }));
+          noteAudioFormat(confirmed);
+          sessionReady = true;
+          while (inboundQueue.length) sendInbound(inboundQueue.shift());
+          sendGreeting();
+        }
+
         if (event.type === "response.created") {
+          noteAudioFormat(event.response?.audio?.output?.format || event.response?.output_audio_format);
           assistantSpeaking = true;
           speakingSince = Date.now();
           activeResponseId = event.response?.id || "";
@@ -518,18 +571,18 @@ ${menuText || "Menú no disponible."}
           if (activeResponseId && event.response_id && event.response_id !== activeResponseId) {
             return;
           }
+          const payload = payloadForTwilio(event.delta);
           if (
             twilioSocket.readyState ===
             WebSocket.OPEN &&
-            event.delta
+            payload
           ) {
             twilioSocket.send(
               JSON.stringify({
                 event: "media",
                 streamSid,
                 media: {
-                  payload:
-                    event.delta
+                  payload
                 }
               })
             );
@@ -555,6 +608,11 @@ ${menuText || "Menú no disponible."}
               openaiSocket.send(JSON.stringify({
                 type: "session.update",
                 session: {
+                  type: "realtime",
+                  audio: {
+                    input: { format: { type: "audio/pcmu" } },
+                    output: { format: { type: "audio/pcmu" }, voice: "marin" }
+                  },
                   instructions: instructionBase.replace("__DATOS_FIJOS__", factsInstructions(facts))
                 }
               }));
@@ -653,8 +711,9 @@ ${menuText || "Menú no disponible."}
         ) {
           console.error(
             "OpenAI error:",
-            event.error
+            JSON.stringify(event.error)
           );
+          if (!greetingSent) sendGreeting();
         }
       } catch (error) {
         console.error(
@@ -680,6 +739,16 @@ ${menuText || "Menú no disponible."}
 
     getTranscript() {
       return transcript;
+    },
+
+    appendCallerAudio(payload) {
+      if (!payload) return;
+      if (!sessionReady || openaiSocket.readyState !== WebSocket.OPEN) {
+        inboundQueue.push(payload);
+        if (inboundQueue.length > 250) inboundQueue.shift();
+        return;
+      }
+      sendInbound(payload);
     },
 
     getDurationSeconds() {

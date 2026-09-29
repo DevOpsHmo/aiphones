@@ -414,21 +414,9 @@ wss.on(
             message.event ===
             "media"
           ) {
-            if (
-              realtime?.socket
-                ?.readyState ===
-              WebSocket.OPEN
-            ) {
-              realtime.socket.send(
-                JSON.stringify({
-                  type:
-                    "input_audio_buffer.append",
-                  audio:
-                    message.media
-                      .payload
-                })
-              );
-            }
+            realtime?.appendCallerAudio?.(
+              message.media?.payload
+            );
 
             return;
           }

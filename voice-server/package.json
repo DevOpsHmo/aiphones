@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "test": "node --test src/audit.test.js"
+    "test": "node --test src/audit.test.js src/phone-audio.test.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.0",
