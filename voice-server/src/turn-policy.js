@@ -7,7 +7,10 @@ export function foldTurn(value) {
 
 const CANCEL = /\b(cancela|cancelar|cancelalo|espera|esperate|parate|alto|callate|cuelga|ya no quiero)\b/;
 
-export function interruptionDecision({ event, transcript }) {
+export function interruptionDecision({ event, transcript, assistantSpeaking = false }) {
+  if (event === "speech_started" && assistantSpeaking) {
+    return { clearPlayback: true, cancelResponse: true, reason: "barge" };
+  }
   if (event !== "transcript") {
     return { clearPlayback: false, cancelResponse: false, reason: "vad" };
   }
@@ -80,7 +83,14 @@ export function reduceAudio(state, event) {
     }
     return next;
   }
-  if (event.type === "speech_started" || event.type === "noise" || event.type === "speech_stopped") {
+  if (event.type === "speech_started" && next.phase === "speaking") {
+    next.phase = "idle";
+    next.playback = "cleared";
+    next.clears += 1;
+    next.cancels += 1;
+    return next;
+  }
+  if (event.type === "noise" || event.type === "speech_stopped" || event.type === "speech_started") {
     return next;
   }
   if (event.type === "transcript") {

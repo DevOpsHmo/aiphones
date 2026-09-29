@@ -167,7 +167,7 @@ for (let index = 0; index < 100; index += 1) {
 for (let index = 0; index < 50; index += 1) {
   test(`ambiguedad ${index}`, () => {
     const reply = nextReply({ name: "Ivan", product: "Peperoni", size: "", extra: "", fulfillment: "" }, "quiero una pizza de peperoni");
-    assert.match(reply.say, /Mediana 200/);
+    assert.match(reply.say, /mediana, grande o familiar/);
     assert.equal(reply.state.size, "");
   });
 }
@@ -229,11 +229,16 @@ for (let index = 0; index < 100; index += 1) {
 }
 
 test("ruido no corta", () => {
-  for (const event of ["speech_started", "noise", "barge_in"]) {
+  for (const event of ["noise", "barge_in"]) {
     const decision = interruptionDecision({ event, transcript: "" });
     assert.equal(decision.clearPlayback, false);
     assert.equal(decision.cancelResponse, false);
   }
+  const quiet = interruptionDecision({ event: "speech_started", assistantSpeaking: false });
+  assert.equal(quiet.clearPlayback, false);
+  const barge = interruptionDecision({ event: "speech_started", assistantSpeaking: true });
+  assert.equal(barge.clearPlayback, true);
+  assert.equal(barge.cancelResponse, true);
   const cough = interruptionDecision({ event: "transcript", transcript: "eh" });
   assert.equal(cough.cancelResponse, false);
 });

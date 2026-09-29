@@ -14,8 +14,6 @@ import {
 import {
   createCall,
   finishCall,
-  findKnownCaller,
-  findUnfinishedCall,
   getBusinessByTwilioPhone,
   getMonthUsageSeconds,
   normalizePhone,
@@ -384,9 +382,6 @@ wss.on(
               callSid
             );
 
-            let previousTranscript = "";
-            let knownName = "";
-            let knownAddress = "";
             let menuText = "";
 
             try {
@@ -395,35 +390,6 @@ wss.on(
             } catch (error) {
               console.error(
                 "No se pudo cargar el menú:",
-                error.message
-              );
-            }
-
-            try {
-              const known = await findKnownCaller({
-                businessId,
-                callerPhone
-              });
-              knownName = known?.name || "";
-              knownAddress = known?.address || "";
-            } catch (error) {
-              console.error(
-                "No se pudo buscar al cliente conocido:",
-                error.message
-              );
-            }
-
-            try {
-              const draft = await findUnfinishedCall({
-                businessId,
-                callerPhone,
-                excludeCallId: callId
-              });
-
-              previousTranscript = draft?.transcript || "";
-            } catch (error) {
-              console.error(
-                "No se pudo buscar el pedido pendiente:",
                 error.message
               );
             }
@@ -437,9 +403,6 @@ wss.on(
                 callSid,
                 callerPhone,
                 businessId,
-                previousTranscript,
-                knownName,
-                knownAddress,
                 menuText,
                 resumeTransfer: params.resume === "transfer"
               });

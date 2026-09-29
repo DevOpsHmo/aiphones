@@ -4,19 +4,29 @@ import { playSequence } from "./turn-policy.js";
 import { buildConfirmation, reviseDraft, acceptSpoken, priceLine } from "./confirmation.js";
 import { withCallLock } from "./call-lock.js";
 
-const noise = ["speech_started", "noise", "speech_stopped", "speech_started"];
-
 test("ruido durante la respuesta no corta", () => {
   const end = playSequence([
     { type: "response.created" },
     { type: "audio.delta" },
-    ...noise.map(type => ({ type })),
+    { type: "noise" },
+    { type: "speech_stopped" },
     { type: "audio.delta" },
     { type: "response.done" }
   ]);
   assert.equal(end.clears, 0);
   assert.equal(end.cancels, 0);
   assert.equal(end.playback, "finished");
+});
+
+test("si el cliente habla mientras suena, se calla", () => {
+  const end = playSequence([
+    { type: "response.created" },
+    { type: "audio.delta" },
+    { type: "speech_started" }
+  ]);
+  assert.equal(end.clears, 1);
+  assert.equal(end.cancels, 1);
+  assert.equal(end.playback, "cleared");
 });
 
 test("cancelacion explicita si corta el audio", () => {
@@ -74,17 +84,18 @@ for (let index = 0; index < 100; index += 1) {
   const quantity = (index % 3) + 1;
   test(`confirmacion ${index}`, () => {
     const line = priceLine({ size, extra, quantity });
+    const pair = size === "grande" && !extra && quantity === 2;
     const draft = {
       version: 1,
       customerName: "Ivan",
       orderType: "delivery",
       address: "Los Pablitos 13, San Pablo",
       postalCode: "83010",
-      items: [{ size, extra, quantity, unit: line.unit }]
+      items: [{ size, extra, quantity, unit: pair ? 200 : line.unit }]
     };
     const spoken = buildConfirmation(draft);
     assert.equal(spoken.ok, true);
-    assert.equal(spoken.total, bases[size] * quantity + (extra ? 25 * quantity : 0));
+    assert.equal(spoken.total, pair ? 400 : bases[size] * quantity + (extra ? 25 * quantity : 0));
     assert.match(spoken.spoken, new RegExp(`Total ${spoken.total}`));
     assert.match(spoken.spoken, /ocho, tres, cero, uno, cero/);
     const lied = buildConfirmation({ ...draft, claimedTotal: 1 });

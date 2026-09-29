@@ -53,9 +53,6 @@ export function createRealtimeSession({
   menuText = "",
   resumeTransfer = false
 }) {
-  const draft = previousTranscript.trim();
-  const savedName = knownName.trim();
-  const savedAddress = knownAddress.trim();
   const openaiSocket =
     new WebSocket(
       OPENAI_URL,
@@ -74,6 +71,17 @@ export function createRealtimeSession({
   let askedIfThere = false;
   const customerName = savedName;
   const callState = { orderPlaced: false, hangupScheduled: false, cancelled: false };
+  let assistantSpeaking = false;
+
+  function stopTalking() {
+    assistantSpeaking = false;
+    if (openaiSocket.readyState === WebSocket.OPEN) {
+      openaiSocket.send(JSON.stringify({ type: "response.cancel" }));
+    }
+    if (twilioSocket.readyState === WebSocket.OPEN) {
+      twilioSocket.send(JSON.stringify({ event: "clear", streamSid }));
+    }
+  }
 
   function speakExact(phrase) {
     if (openaiSocket.readyState !== WebSocket.OPEN) {
@@ -96,7 +104,7 @@ export function createRealtimeSession({
       }
       if (!askedIfThere) {
         askedIfThere = true;
-        speakExact(customerName ? `Hola ${customerName}, ¿sigues ahí?` : "Hola, ¿sigues ahí?");
+        speakExact("Hola, ¿sigues ahí?");
         armSilence();
         return;
       }
@@ -152,7 +160,7 @@ export function createRealtimeSession({
               threshold: 0.7,
               prefix_padding_ms: 300,
               silence_duration_ms: 700,
-              interrupt_response: false
+              interrupt_response: true
             }
           },
 
@@ -178,7 +186,7 @@ ${
     : ""
 }
 
-Habla de usted, muy breve. En cada turno di UNA sola pregunta y espera la respuesta. Nunca juntes dos preguntas. Cada pregunta trae las opciones de respuesta. No preguntes "qué tamaño" ni "qué presentación" a secas. Si no entendiste, di exactamente: "Disculpa, no entendí. ¿Puedes repetir?" No inventes el pedido. El nombre de esta llamada es solo el que el cliente diga ahora. Repítelo tal cual: Luis Alfonso se queda Luis Alfonso. No lo cambies por Jimena, Ximena ni por el cliente conocido. Si dice que es otra persona, olvida el nombre y la dirección anteriores para siempre. No repitas el pedido completo más de una vez antes de cerrar. Prohibido decir "déjame", "voy a revisar", "antes de seguir", "lo registro", "perfecto, voy a" o "está en el menú". Pasa directo a la siguiente pregunta. Nunca digas Lucco. "Bordes" es boneless. A domicilio el pago es siempre en efectivo: no preguntes tarjeta ni transferencia. Solo pregunta el pago si el pedido es para recoger y la línea Pagos ofrece tarjeta o transferencia.
+Habla de usted, muy breve. En cada turno di UNA sola pregunta y espera la respuesta. Nunca juntes dos preguntas. Cada pregunta trae las opciones de respuesta. No preguntes "qué tamaño" ni "qué presentación" a secas. Si no entendiste, di exactamente: "Disculpa, no entendí. ¿Puedes repetir?" No inventes el pedido. El nombre de esta llamada es solo el que el cliente diga ahora. Repítelo tal cual: Luis Alfonso se queda Luis Alfonso. No lo cambies por Jimena, Ximena ni por el cliente conocido. Si dice que es otra persona, olvida el nombre y la dirección anteriores para siempre. No repitas el pedido completo más de una vez antes de cerrar. Prohibido decir "déjame", "voy a revisar", "antes de seguir", "lo registro", "perfecto, voy a" o "está en el menú". Pasa directo a la siguiente pregunta. Si el cliente habla mientras tú hablas, cállate de inmediato y contesta solo lo que acaba de decir. No retomes la frase que ibas a terminar. Nunca digas Lucco. "Bordes" es boneless. A domicilio el pago es siempre en efectivo: no preguntes tarjeta ni transferencia. Solo pregunta el pago si el pedido es para recoger y la línea Pagos ofrece tarjeta o transferencia.
 
 Tamaño de pizza, di exactamente el estilo: "Pizza mexicana, ¿mediana, grande o familiar?"
 Refrescos: solo Coca regular, Coca Light y refresco de fresa. 600 son 30. 2 litros son 50. Si dice Coca o soda, pregunta: "Coca-Cola, ¿regular o Light?" Cuando conteste, pregunta: "Coca-Cola regular, ¿600 mililitros o 2 litros?" o "Coca-Cola Light, ¿600 mililitros o 2 litros?" Si dice fresa, no preguntes regular o Light. Pregunta: "Refresco de fresa, ¿600 mililitros o 2 litros?"
@@ -195,9 +203,8 @@ Si el estado es preparing y preguntan cuánto tiempo, di "Aproximadamente 15 min
 Si el estado es delivering y preguntan cuánto tiempo, di "En menos de 10 minutos."
 Si después dicen que no, o que no tienen dudas, di exactamente "Muy bien, muchas gracias por marcar a Pizzería Hermosillo. Que tengas buen día." y llama end_call.
 2. Si quiere cancelar, di exactamente: "De acuerdo, su pedido quedó cancelado. Que tenga un buen día y gracias por llamar a Pizzería Hermosillo." y llama end_call.
-3. Si hay pedido pendiente de menos de 10 minutos: "¿Sigue con su pedido anterior?"
-4. Si hay cliente conocido, pregunta si es esa persona. Si dice que es otra, pide su nombre y no vuelvas a usar el nombre ni la dirección anteriores.
-5. Si falta el tamaño, di el nombre de la pizza y las tres opciones: "Pizza mexicana, ¿mediana, grande o familiar?"
+3. Cada llamada empieza de cero. No recuerdes el nombre ni la dirección de este teléfono. No digas que se cortó la llamada ni preguntes si retoman un pedido anterior. Pide el nombre y la dirección en esta llamada.
+4. Si falta el tamaño, di el nombre de la pizza y las tres opciones: "Pizza mexicana, ¿mediana, grande o familiar?"
 6. Pide primero la calle y el número. Después, en otro turno, la colonia. Después, si hace falta, el código postal. Guarda solo calle, número, colonia y código. Nunca guardes "mi nombre es" ni "mi dirección es". "Ochenta y tres mil doscientos ochenta y ocho" es 83288. "Ochenta y tres mil ciento cincuenta y siete" es 83157. No lo cambies por 83010.
 7. Pregunta "¿Desea agregar algo más?" una sola vez en toda la llamada. Si dice que sí, toma eso y no lo preguntes otra vez.
 8. "No", "gracias", "muchas gracias" o "es todo", cuando ya hay pizza, tamaño, nombre y dirección, cierran el pedido. Llama create_order una sola vez, con el nombre que dijo en esta llamada y paymentMethod efectivo si es domicilio. Di exactamente el campo spoken, completo, y solo después llama end_call. Esa frase ya confirma el pedido, el total, el domicilio y que llega en unos 30 minutos. No cuelgues antes de decir spoken. No llames end_call cuando solo dijeron su nombre. Si dicen que ya hicieron un pedido y quieren agregar algo, usa update_last_order. No crees otro pedido.
@@ -210,16 +217,7 @@ ${callerPhone || "desconocido"}
 El ID de llamada es:
 ${callId}
 
-${
-  draft
-    ? `PEDIDO PENDIENTE de hace menos de 10 minutos, sin confirmar. Pregunta si lo retoman:\n${draft}`
-    : "No hay pedido pendiente. Si pasó más de 10 minutos, es un pedido nuevo."
-}
-${
-  savedName
-    ? `CLIENTE CONOCIDO de este teléfono: ${savedName}.${savedAddress ? ` Dirección anterior: ${savedAddress}.` : ""} Si dice que es otra persona, este nombre y esta dirección quedan prohibidos el resto de la llamada.`
-    : "No hay cliente conocido en este teléfono."
-}
+No hay cliente conocido ni pedido pendiente. Esta llamada no usa el nombre ni la dirección de llamadas anteriores.
 
 MENÚ:
 ${menuText || "Menú no disponible."}
@@ -449,11 +447,9 @@ ${menuText || "Menú no disponible."}
           JSON.stringify({
             type: "response.create",
             response: {
-              instructions: draft
-                ? "Di exactamente esta frase completa y después guarda silencio hasta que el cliente hable: Bienvenido a Pizzería Hermosillo. Se cortó la llamada. ¿Seguimos con el pedido que ya había empezado?"
-                : savedName
-                  ? `Di exactamente esta frase completa y después guarda silencio hasta que el cliente hable. No preguntes qué desea ordenar. Frase: Hola, bienvenido a Pizzería Hermosillo. ¿Estoy hablando con ${savedName} o es otra persona?`
-                  : "Di exactamente esta frase completa y después guarda silencio hasta que el cliente hable: Bienvenido a Pizzería Hermosillo. ¿Qué desea ordenar?"
+              instructions: resumeTransfer
+                ? "Di exactamente esta frase completa y después guarda silencio hasta que el cliente hable: No pudieron tomar la llamada. Sigo con su pedido. ¿Qué desea ordenar?"
+                : "Di exactamente esta frase completa y después guarda silencio hasta que el cliente hable: Bienvenido a Pizzería Hermosillo. ¿Qué desea ordenar?"
             }
           })
         );
@@ -470,12 +466,34 @@ ${menuText || "Menú no disponible."}
             raw.toString()
           );
 
+        if (event.type === "response.created") {
+          assistantSpeaking = true;
+        }
+
+        if (
+          event.type === "response.done" ||
+          event.type === "response.cancelled"
+        ) {
+          assistantSpeaking = false;
+        }
+
+        if (event.type === "input_audio_buffer.speech_started") {
+          const decision = interruptionDecision({
+            event: "speech_started",
+            assistantSpeaking
+          });
+          if (decision.cancelResponse) {
+            stopTalking();
+          }
+        }
+
         if (
           event.type ===
           "response.output_audio.delta" ||
           event.type ===
           "response.audio.delta"
         ) {
+          assistantSpeaking = true;
           if (
             twilioSocket.readyState ===
             WebSocket.OPEN &&
