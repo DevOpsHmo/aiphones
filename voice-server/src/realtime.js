@@ -158,7 +158,7 @@ export function createRealtimeSession({
             },
             turn_detection: {
               type: "server_vad",
-              threshold: 0.7,
+              threshold: 0.9,
               prefix_padding_ms: 300,
               silence_duration_ms: 700,
               interrupt_response: true
@@ -505,17 +505,6 @@ ${menuText || "Menú no disponible."}
           assistantSpeaking = false;
         }
 
-        if (event.type === "input_audio_buffer.speech_started") {
-          const decision = interruptionDecision({
-            event: "speech_started",
-            assistantSpeaking
-          });
-          const callJustStarted = Date.now() - startedAt < 800;
-          if (decision.cancelResponse && !callJustStarted) {
-            stopTalking();
-          }
-        }
-
         if (
           event.type ===
           "response.output_audio.delta" ||
@@ -582,7 +571,9 @@ ${menuText || "Menú no disponible."}
               const turn = orderedTurn(callState.flow || {}, event.transcript);
               callState.flow = turn.state;
               if (turn.say) {
-                stopTalking();
+                if (assistantSpeaking) {
+                  stopTalking();
+                }
                 speakExact(turn.say);
               }
             }
