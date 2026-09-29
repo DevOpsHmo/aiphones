@@ -429,15 +429,87 @@ const HOUSE_NUMBERS = {
 };
 
 export function cleanSpokenAddress(value) {
-  return String(value || "")
+  let text = String(value || "")
+    .replace(/\bpara empezar\b[,:]?\s*/gi, " ")
     .replace(/\bmi nombre es\s+(?:(?!mi direcci[oó]n es)[^\s,]+\s*){1,4}/gi, " ")
     .replace(/\bmi direcci[oó]n es\b/gi, " ")
     .replace(/\bes la colonia\b/gi, " ")
-    .replace(/\bel c[oó]digo postal es\b/gi, "C.P.")
-    .replace(/\s+/g, " ")
-    .replace(/\s+,/g, ",")
-    .replace(/^[\s,]+/, "")
-    .trim();
+    .replace(/\bel c[oó]digo postal es\s+(\d{5})/gi, "C.P. $1")
+    .replace(/\bmil\s+ciento\s+(\d{1,3})\b/gi, (_, digits) => String(1100 + Number(digits)));
+
+  const codes = [...text.matchAll(/\b(\d{5})\b/g)].map(match => match[1]);
+  if (codes.length > 1) {
+    const keep = codes[0];
+    let seen = 0;
+    text = text.replace(/\bC\.?\s*P\.?\s*\d{5}\b|\b\d{5}\b/gi, (match) => {
+      if (!/\d{5}/.test(match)) {
+        return match;
+      }
+      seen += 1;
+      return seen === 1 ? `C.P. ${keep}` : "";
+    });
+  }
+
+  text = text.replace(/\s+(C\.P\.)/gi, ", $1");
+  const parts = text
+    .split(",")
+    .map(part => part.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  const unique = [];
+  for (const part of parts) {
+    const key = foldText(part);
+    const already = unique.some(item => {
+      const other = foldText(item);
+      return other === key || other.includes(key) || key.includes(other);
+    });
+    if (!already) {
+      unique.push(part);
+    }
+  }
+  for (let index = unique.length - 1; index > 0; index -= 1) {
+    if (/^\d{1,5}$/.test(unique[index]) && !/\d/.test(unique[index - 1])) {
+      unique[index - 1] = `${unique[index - 1]} ${unique[index]}`;
+      unique.splice(index, 1);
+    }
+  }
+
+  return unique.join(", ").replace(/^[\s,]+/, "").trim();
+}
+
+const ADDRESS_SPEECH = /\b(para empezar|es la colonia|mi nombre es|mi direcci[oó]n es)\b/i;
+
+export function deliveryAddress({ street = "", number = "", colony = "", postalCode = "", address = "" }) {
+  if (ADDRESS_SPEECH.test(`${street} ${number} ${colony} ${address}`)) {
+    throw new Error("La dirección trae una frase del cliente, no una calle. Pregunta otra vez: ¿Cuál es la calle y el número?");
+  }
+  const blob = cleanSpokenAddress(address);
+  let streetName = cleanSpokenAddress(street);
+  let house = String(number || "").replace(/\D/g, "");
+  let colonyName = cleanSpokenAddress(colony);
+  let postal = String(postalCode || "").replace(/\D/g, "");
+  if (!/^\d{5}$/.test(postal)) {
+    postal = blob.match(/\b(\d{5})\b/)?.[1] || "";
+  }
+  const blobParts = blob.split(",").map(part => part.trim()).filter(part => !/hermosillo|sonora|c\.?\s*p/i.test(part));
+  if (!house) {
+    const fromStreet = streetName.match(/\b(\d{1,5})\b/);
+    house = fromStreet?.[1] || blob.match(/\b(\d{1,5})\b(?!\d)/)?.[1] || "";
+    if (house === postal) {
+      house = "";
+    }
+    streetName = streetName.replace(new RegExp(`\\b${house}\\b`), "").trim();
+  }
+  if (!streetName && blobParts[0]) {
+    streetName = blobParts[0].replace(/\b\d{1,5}\b/, "").trim();
+  }
+  if (!colonyName) {
+    colonyName = blobParts.find(part => part !== blobParts[0] && !/^\d+$/.test(part)) || "";
+  }
+  streetName = streetName.replace(/[,\s]+$/, "");
+  if (!streetName || !house || !colonyName || !/^\d{5}$/.test(postal)) {
+    throw new Error("Faltan calle, número, colonia o código postal. Pregunta solo el dato que falta, uno por uno.");
+  }
+  return `${streetName} ${house}, ${colonyName}, C.P. ${postal}, Hermosillo, Sonora`;
 }
 
 export function formatHeardStreet(utterance) {
@@ -774,6 +846,10 @@ async function saveOrder({
   customerPhone,
   orderType,
   address,
+  street,
+  number,
+  colony,
+  postalCode,
   items,
   confirmed,
   paymentMethod
@@ -808,7 +884,11 @@ async function saveOrder({
 
   orderType = orderType || "delivery";
   paymentMethod = paymentForOrder(orderType, paymentMethod || "efectivo");
-  address = cleanSpokenAddress(address);
+  if (orderType === "delivery" || !orderType) {
+    address = deliveryAddress({ street, number, colony, postalCode, address });
+  } else {
+    address = cleanSpokenAddress(address);
+  }
   const payments = await loadPaymentFlags(businessId);
   if (paymentMethod === "tarjeta" && !payments.card) {
     throw new Error("La tarjeta está apagada. Di que por el momento no se puede pagar con tarjeta.");

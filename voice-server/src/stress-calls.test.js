@@ -5,7 +5,7 @@ import { factsInstructions, lockFacts, nextReply } from "./call-flow.js";
 import { billableExtras } from "./menu-ingredients.js";
 import { wantsHuman } from "./human-transfer.js";
 import { interruptionDecision, mushroomIntent, playSequence, serverPrice } from "./turn-policy.js";
-import { cleanSpokenAddress, parseSpokenPostalCode } from "./tools.js";
+import { cleanSpokenAddress, deliveryAddress, parseSpokenPostalCode } from "./tools.js";
 
 function questions(text) {
   return (String(text).match(/\?/g) || []).length;
@@ -100,6 +100,35 @@ test("11 la direccion no guarda mi nombre es", () => {
   assert.equal(
     cleanSpokenAddress("Mi nombre es Luis Alfonso mi dirección es Veracruz 56, 5 de Mayo, C.P. 83010, Hermosillo, Sonora"),
     "Veracruz 56, 5 de Mayo, C.P. 83010, Hermosillo, Sonora"
+  );
+  assert.equal(
+    cleanSpokenAddress("Para empezar, Lázaro Cárdenas 1, Hermosillo, Sonora"),
+    "Lázaro Cárdenas 1, Hermosillo, Sonora"
+  );
+  assert.equal(
+    cleanSpokenAddress("Es la colonia Montecarlo el código postal es 83288, Montecarlo, C.P. 83010, Hermosillo, Sonora"),
+    "Montecarlo, C.P. 83288, Hermosillo, Sonora"
+  );
+  assert.equal(
+    cleanSpokenAddress("Lázaro Cárdenas, mil ciento 57, ISSSTE Federal, C.P. 83157, Hermosillo, Sonora"),
+    "Lázaro Cárdenas 1157, ISSSTE Federal, C.P. 83157, Hermosillo, Sonora"
+  );
+  assert.equal(
+    deliveryAddress({
+      street: "Veracruz",
+      number: "56",
+      colony: "5 de Mayo",
+      postalCode: "83010"
+    }),
+    "Veracruz 56, 5 de Mayo, C.P. 83010, Hermosillo, Sonora"
+  );
+  assert.throws(
+    () => deliveryAddress({ address: "Para empezar, Lázaro Cárdenas 1, Hermosillo, Sonora" }),
+    /frase del cliente/
+  );
+  assert.throws(
+    () => deliveryAddress({ address: "Montecarlo, C.P. 83288, Hermosillo, Sonora" }),
+    /Faltan calle/
   );
 });
 
