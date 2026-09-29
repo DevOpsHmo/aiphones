@@ -510,7 +510,8 @@ ${menuText || "Menú no disponible."}
             event: "speech_started",
             assistantSpeaking
           });
-          if (decision.cancelResponse && Date.now() - speakingSince > 1200) {
+          const callJustStarted = Date.now() - startedAt < 800;
+          if (decision.cancelResponse && !callJustStarted) {
             stopTalking();
           }
         }
