@@ -69,9 +69,9 @@ export function createRealtimeSession({
   let timeWarned = false;
   let silenceTimer = null;
   let askedIfThere = false;
-  const customerName = savedName;
   const callState = { orderPlaced: false, hangupScheduled: false, cancelled: false };
   let assistantSpeaking = false;
+  let speakingSince = 0;
 
   function stopTalking() {
     assistantSpeaking = false;
@@ -449,7 +449,7 @@ ${menuText || "Menú no disponible."}
             response: {
               instructions: resumeTransfer
                 ? "Di exactamente esta frase completa y después guarda silencio hasta que el cliente hable: No pudieron tomar la llamada. Sigo con su pedido. ¿Qué desea ordenar?"
-                : "Di exactamente esta frase completa y después guarda silencio hasta que el cliente hable: Bienvenido a Pizzería Hermosillo. ¿Qué desea ordenar?"
+                : "Di exactamente esta frase completa y después guarda silencio hasta que el cliente hable: Hola, bienvenido a Pizzería Hermosillo. ¿Cuál es su nombre?"
             }
           })
         );
@@ -468,6 +468,7 @@ ${menuText || "Menú no disponible."}
 
         if (event.type === "response.created") {
           assistantSpeaking = true;
+          speakingSince = Date.now();
         }
 
         if (
@@ -482,7 +483,7 @@ ${menuText || "Menú no disponible."}
             event: "speech_started",
             assistantSpeaking
           });
-          if (decision.cancelResponse) {
+          if (decision.cancelResponse && Date.now() - speakingSince > 1200) {
             stopTalking();
           }
         }

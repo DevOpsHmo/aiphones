@@ -96,8 +96,9 @@ for (let index = 0; index < 100; index += 1) {
     const spoken = buildConfirmation(draft);
     assert.equal(spoken.ok, true);
     assert.equal(spoken.total, pair ? 400 : bases[size] * quantity + (extra ? 25 * quantity : 0));
-    assert.match(spoken.spoken, new RegExp(`Total ${spoken.total}`));
-    assert.match(spoken.spoken, /ocho, tres, cero, uno, cero/);
+    assert.match(spoken.spoken, new RegExp(`El precio es ${spoken.total}`));
+    assert.match(spoken.spoken, /El precio es/);
+    assert.match(spoken.spoken, /30 minutos/);
     const lied = buildConfirmation({ ...draft, claimedTotal: 1 });
     assert.equal(lied.ok, false);
     const wrongSize = buildConfirmation({

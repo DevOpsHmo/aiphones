@@ -108,11 +108,6 @@ export function buildConfirmation(draft) {
   if (draft.claimedTotal != null && Number(draft.claimedTotal) !== total) {
     return { ok: false, error: "El total dicho no es el del servidor" };
   }
-  const digits = ["cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve"];
-  const spokenCode = (draft.postalCode || "")
-    .split("")
-    .map(digit => digits[Number(digit)] || digit)
-    .join(", ");
   const street = (draft.address || "")
     .replace(/,?\s*Hermosillo,?\s*Sonora/gi, "")
     .replace(/,?\s*C\.P\.\s*\d{5}/gi, "")
@@ -125,16 +120,16 @@ export function buildConfirmation(draft) {
       ? "por transferencia"
       : "en efectivo";
   const place = draft.orderType === "delivery"
-    ? ` A ${street}. Código ${spokenCode}. El pago es ${pay}. Su pedido llegará a su domicilio en aproximadamente 30 minutos. Muchas gracias por llamar a Pizzería Hermosillo. Que tenga buen día. Hasta luego.`
-    : ` Para recoger. El pago es ${pay}. Estará listo en aproximadamente 30 minutos. Muchas gracias por llamar a Pizzería Hermosillo. Que tenga buen día. Hasta luego.`;
+    ? ` Su pedido estará en su domicilio en 30 minutos.`
+    : ` El pago es ${pay}. Estará listo para recoger en 30 minutos.`;
   return {
     ok: true,
     version: draft.version || 1,
     total,
     lines,
     postalCode: draft.postalCode || "",
-    address: draft.address || "",
-    spoken: `Muy bien, ${draft.customerName}, su pedido ha quedado confirmado: ${lines.join(", ")}. Total ${total}.${place}`
+    address: street,
+    spoken: `Perfecto, su pedido quedó listo: ${lines.join(", ")}. El precio es ${total}.${place}`
   };
 }
 

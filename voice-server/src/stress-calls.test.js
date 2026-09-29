@@ -29,7 +29,7 @@ test("1 pedido normal cobra 225 y confirma con 30 minutos", () => {
   state = nextReply(state, "quiero una peperoni mediana con champiñones").state;
   state = nextReply(state, "domicilio").state;
   const close = nextReply(state, "es todo, gracias");
-  assert.match(close.say, /confirmado/i);
+  assert.match(close.say, /quedó listo/i);
   assert.match(close.say, /225/);
   assert.match(close.say, /30 minutos/);
   assert.equal(close.hangup, false);
@@ -197,10 +197,9 @@ test("20 es todo dice confirmado, total y tiempo, y no cuelga antes", () => {
     fulfillment: "delivery"
   };
   const close = nextReply(state, "muy bien, sería todo");
-  assert.match(close.say, /ha quedado confirmado/);
+  assert.match(close.say, /quedó listo/);
   assert.match(close.say, /225/);
-  assert.match(close.say, /en efectivo/);
+  assert.match(close.say, /El precio es 225/);
   assert.match(close.say, /30 minutos/);
-  assert.match(close.say, /Muchas gracias/);
   assert.equal(close.hangup, false);
 });
