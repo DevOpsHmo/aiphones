@@ -506,7 +506,12 @@ export function deliveryAddress({ street = "", number = "", colony = "", postalC
     colonyName = blobParts.find(part => part !== blobParts[0] && !/^\d+$/.test(part)) || "";
   }
   streetName = streetName.replace(/[,\s]+$/, "");
-  if (!streetName || !house || !colonyName || !/^\d{5}$/.test(postal)) {
+  const streetWords = foldText(streetName).split(" ").filter(Boolean);
+  const numberOnly = streetWords.every(word => word in HOUSE_NUMBERS || word === "y" || word === "numero");
+  if (!streetName || numberOnly || streetWords.length === 0) {
+    throw new Error("Falta el nombre de la calle. Pregunta solo: ¿Cuál es la calle y el número?");
+  }
+  if (!house || !colonyName || !/^\d{5}$/.test(postal)) {
     throw new Error("Faltan calle, número, colonia o código postal. Pregunta solo el dato que falta, uno por uno.");
   }
   return `${streetName} ${house}, ${colonyName}, C.P. ${postal}, Hermosillo, Sonora`;
@@ -1201,7 +1206,7 @@ async function saveOrder({
     customer_name: customerName,
     spoken: confirmation.ok
       ? confirmation.spoken
-      : `Muy bien, ${customerName}. Tu pedido quedó listo. Total ${total}.`
+      : `¡Excelente! Su pedido quedó confirmado. El precio es ${total}. Llegará en aproximadamente 30 minutos a su domicilio. Que tenga buen día y gracias por llamar a Pizzería Hermosillo.`
   };
 }
 
@@ -1400,23 +1405,31 @@ export async function updateLastOrderTool({
   const subtotal = unitPrice * nextQuantity;
   const { error: itemError } = await supabase
     .from("order_items")
-    .update({
+    .insert({
+      order_id: last.order_id,
       product_id: product.id,
       name: product.name,
       quantity: nextQuantity,
       unit_price: unitPrice,
       subtotal,
       notes: itemNotes(isPizza(product) ? nextSize : null, nextSauce) || null
-    })
-    .eq("id", item.id);
+    });
 
   if (itemError) {
     throw itemError;
   }
 
+  const { data: lines, error: linesError } = await supabase
+    .from("order_items")
+    .select("subtotal")
+    .eq("order_id", last.order_id);
+  if (linesError) {
+    throw linesError;
+  }
+  const total = (lines || []).reduce((sum, line) => sum + Number(line.subtotal || 0), 0);
   const { error: orderError } = await supabase
     .from("orders")
-    .update({ total: subtotal })
+    .update({ total })
     .eq("id", last.order_id);
 
   if (orderError) {
@@ -1427,12 +1440,10 @@ export async function updateLastOrderTool({
     success: true,
     order_id: last.order_id,
     customer_name: savedName,
-    note: savedName === last.customer_name
-      ? "Pedido modificado."
-      : `El nombre quedó en ${savedName}. No reinicies el pedido. Úsalo en el cierre.`,
+    note: "Se agregó la pizza. Las pizzas anteriores siguen en el pedido. No las borres.",
     item: product.name,
     notes: itemNotes(isPizza(product) ? nextSize : null, nextSauce),
-    total: subtotal
+    total
   };
 }
 

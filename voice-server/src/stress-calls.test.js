@@ -29,7 +29,7 @@ test("1 pedido normal cobra 225 y confirma con 30 minutos", () => {
   state = nextReply(state, "quiero una peperoni mediana con champiñones").state;
   state = nextReply(state, "domicilio").state;
   const close = nextReply(state, "es todo, gracias");
-  assert.match(close.say, /quedó listo/i);
+  assert.match(close.say, /quedó confirmado/i);
   assert.match(close.say, /225/);
   assert.match(close.say, /30 minutos/);
   assert.equal(close.hangup, false);
@@ -128,7 +128,11 @@ test("11 la direccion no guarda mi nombre es", () => {
   );
   assert.throws(
     () => deliveryAddress({ address: "Montecarlo, C.P. 83288, Hermosillo, Sonora" }),
-    /Faltan calle/
+    /Falta el nombre de la calle|Faltan calle/
+  );
+  assert.throws(
+    () => deliveryAddress({ street: "ciento", number: "50", colony: "ISSSTE Federal", postalCode: "83157" }),
+    /nombre de la calle/
   );
 });
 
@@ -246,7 +250,7 @@ test("20 es todo dice confirmado, total y tiempo, y no cuelga antes", () => {
     fulfillment: "delivery"
   };
   const close = nextReply(state, "muy bien, sería todo");
-  assert.match(close.say, /quedó listo/);
+  assert.match(close.say, /quedó confirmado/);
   assert.match(close.say, /225/);
   assert.match(close.say, /El precio es 225/);
   assert.match(close.say, /30 minutos/);

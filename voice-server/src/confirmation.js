@@ -120,8 +120,8 @@ export function buildConfirmation(draft) {
       ? "por transferencia"
       : "en efectivo";
   const place = draft.orderType === "delivery"
-    ? ` Su pedido estará en su domicilio en 30 minutos.`
-    : ` El pago es ${pay}. Estará listo para recoger en 30 minutos.`;
+    ? "Llegará en aproximadamente 30 minutos a su domicilio."
+    : `El pago es ${pay}. Estará listo para recoger en 30 minutos.`;
   return {
     ok: true,
     version: draft.version || 1,
@@ -129,7 +129,7 @@ export function buildConfirmation(draft) {
     lines,
     postalCode: draft.postalCode || "",
     address: street,
-    spoken: `Perfecto, su pedido quedó listo: ${lines.join(", ")}. El precio es ${total}.${place}`
+    spoken: `¡Excelente! Su pedido quedó confirmado. Su orden es ${lines.join(", ")}. El precio es ${total}. ${place} Que tenga buen día y gracias por llamar a Pizzería Hermosillo.`
   };
 }
 
