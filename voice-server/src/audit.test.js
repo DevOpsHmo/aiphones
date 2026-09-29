@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { parseSpokenPostalCode, readPostalCode, lineQuote, streetNumber, formatHeardStreet, lockStreet } from "./tools.js";
+import { parseSpokenPostalCode, readPostalCode, lineQuote, streetNumber, formatHeardStreet, lockStreet, cleanSpokenAddress } from "./tools.js";
 import { nextReply } from "./call-flow.js";
 import { interruptionDecision, mushroomIntent, serverPrice } from "./turn-policy.js";
 
@@ -23,6 +23,8 @@ for (const code of sample) {
 }
 
 const known = [
+  ["ochenta y tres mil doscientos ochenta y ocho", "83288"],
+  ["ochenta y tres mil ciento cincuenta y siete", "83157"],
   ["ochenta y tres cero diez", "83010"],
   ["ocho tres cero uno cero", "83010"],
   ["ochenta y tres mil diez", "83010"],
@@ -67,6 +69,19 @@ for (let index = 0; index < 100; index += 1) {
     assert.equal(streetNumber(`Veracruz ${said}`), expected);
   });
 }
+
+test("la direccion no guarda el nombre ni la frase mi direccion es", () => {
+  assert.equal(
+    cleanSpokenAddress("Mi nombre es Luis Alfonso mi dirección es Veracruz 56, 5 de Mayo, C.P. 83010, Hermosillo, Sonora"),
+    "Veracruz 56, 5 de Mayo, C.P. 83010, Hermosillo, Sonora"
+  );
+});
+
+test("dos pizzas con extra cobran el extra en cada una", () => {
+  assert.equal(lineQuote({ size: "mediana", extra: "champinones", quantity: 2 }).total, 450);
+  assert.equal(lineQuote({ size: "familiar", extra: "champinones", quantity: 1 }).total, 275);
+  assert.equal(lineQuote({ size: "familiar", quantity: 1 }).total, 250);
+});
 
 test("la calle oida reemplaza la que inventa el modelo", () => {
   assert.equal(formatHeardStreet("Lázaro Cárdenas número uno."), "Lázaro Cárdenas 1");

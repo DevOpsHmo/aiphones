@@ -28,7 +28,7 @@ export function mushroomIntent(utterance) {
   if (/\b(sin|quita|quitale|quiteme|no quiero|mejor sin)\b/.test(text)) {
     return "remove";
   }
-  if (/\bcambia\b/.test(text)) {
+  if (/\bcambia/.test(text)) {
     return "unclear";
   }
   return "add";

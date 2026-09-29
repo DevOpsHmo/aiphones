@@ -1,5 +1,5 @@
 import { mushroomIntent, mentionedQuantity } from "./turn-policy.js";
-import { priceLine } from "./confirmation.js";
+import { buildConfirmation, paymentForOrder, priceLine } from "./confirmation.js";
 import { matchIngredients } from "./menu-ingredients.js";
 
 export const MENU_PIZZAS = [
@@ -29,16 +29,47 @@ export function fold(value) {
     .toLowerCase();
 }
 
+function titleName(value) {
+  return value.split(" ").filter(Boolean).map(part => part[0].toUpperCase() + part.slice(1)).join(" ");
+}
+
 export function correctName(current, utterance) {
   const text = fold(utterance);
+  const full = text.match(/\bmi nombre es\s+([a-z]+(?:\s+[a-z]+){0,2})/);
+  if (full) {
+    return { name: titleName(full[1]), needsLastName: full[1].split(" ").length < 2 };
+  }
   const matches = [...text.matchAll(/\bsoy\s+([a-z]+)\b/g)];
   const renamed = matches.at(-1);
   const denied = /\bno soy\b/.test(text) || /\botra persona\b/.test(text);
+  if (denied && !renamed && !full) {
+    return { name: "", needsLastName: true };
+  }
   if (renamed && (denied || renamed[1] !== fold(current).split(" ")[0])) {
     const first = renamed[1][0].toUpperCase() + renamed[1].slice(1);
     return { name: first, needsLastName: true };
   }
   return { name: current, needsLastName: false };
+}
+
+export function drinkQuestion(utterance, drink = {}) {
+  const text = fold(utterance);
+  const chosen = /\blight\b/.test(text) ? "Light" : /\bregular\b/.test(text) ? "regular" : "";
+  const waiting = drink.kind === "coca" || drink.kind === "regular" || drink.kind === "Light";
+  const volume = /\b(600|dos litros|2 litros)\b/.test(text);
+  if (/\bfresa\b/.test(text) && !volume) {
+    return { say: "Refresco de fresa, ¿600 mililitros o 2 litros?", drink: { kind: "fresa" } };
+  }
+  if (/\b(coca|soda)\b/.test(text) || waiting) {
+    const kind = chosen || (drink.kind === "regular" || drink.kind === "Light" ? drink.kind : "");
+    if (!kind) {
+      return { say: "Coca-Cola, ¿regular o Light?", drink: { kind: "coca" } };
+    }
+    if (!volume) {
+      return { say: `Coca-Cola ${kind}, ¿600 mililitros o 2 litros?`, drink: { kind } };
+    }
+  }
+  return null;
 }
 
 export function mentionedSize(utterance) {
@@ -139,6 +170,28 @@ export function nextReply(state, utterance) {
     };
   }
 
+  if (/\b(es todo|seria todo|muchas gracias|eso es todo)\b/.test(text) && next.product && next.size) {
+    const orderType = next.fulfillment === "pickup" ? "pickup" : "delivery";
+    const confirmation = buildConfirmation({
+      customerName: next.name || "cliente",
+      orderType,
+      address: next.address || "Veracruz 56, 5 de Mayo",
+      postalCode: next.postalCode || "83010",
+      paymentMethod: paymentForOrder(orderType, next.payment),
+      items: [{
+        name: next.product,
+        size: next.size,
+        extras: next.extras || (next.extra ? [next.extra] : []),
+        quantity: next.quantity || 1
+      }]
+    });
+    return {
+      state: next,
+      hangup: false,
+      say: confirmation.ok ? confirmation.spoken : "Su pedido ha quedado confirmado."
+    };
+  }
+
   if (nameFix.needsLastName) {
     return {
       state: next,
@@ -155,11 +208,36 @@ export function nextReply(state, utterance) {
     };
   }
 
+  const drink = drinkQuestion(utterance, state.drink);
+  if (drink) {
+    next.drink = drink.drink;
+    return { state: next, hangup: false, say: drink.say };
+  }
+
+  if (/\b(como va|estatus|mi pedido)\b/.test(text) && !next.product) {
+    return {
+      state: next,
+      hangup: false,
+      say: "Reviso el pedido de este teléfono."
+    };
+  }
+
+  if (!next.product) {
+    const named = nameFix.name && nameFix.name !== state.name;
+    return {
+      state: next,
+      hangup: false,
+      say: named
+        ? "¿Pepperoni, hawaiana o mexicana?"
+        : "Disculpa, no entendí. ¿Puedes repetir?"
+    };
+  }
+
   if (next.product && !next.size) {
     return {
       state: next,
       hangup: false,
-      say: "¿Mediana 200, grande 220 o familiar 250?"
+      say: `${next.product}, ¿mediana, grande o familiar?`
     };
   }
 

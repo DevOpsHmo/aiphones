@@ -2,6 +2,16 @@ import { matchIngredient, EXTRA_PRICE } from "./menu-ingredients.js";
 
 const SIZE_PRICES = { mediana: 200, grande: 220, familiar: 250 };
 
+export function paymentForOrder(orderType, method) {
+  if (orderType !== "pickup") {
+    return "efectivo";
+  }
+  if (method === "tarjeta" || method === "transferencia" || method === "efectivo") {
+    return method;
+  }
+  return "efectivo";
+}
+
 export function priceLine({ size, extra, extras, quantity, catalog, prices, extraPrice, extraPrices }) {
   const qty = Number(quantity);
   if (!Number.isInteger(qty) || qty < 1 || qty > 50) {
@@ -50,7 +60,8 @@ export function buildConfirmation(draft) {
   let total = 0;
   const grandeLines = (draft.items || []).filter(item => item.size === "grande");
   const grandeCount = grandeLines.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
-  const pairPromo = grandeLines.length >= 2 && grandeCount === 2;
+  const extrasOnGrandes = grandeLines.some(item => (item.extras && item.extras.length) || item.extra);
+  const pairPromo = grandeCount === 2 && !extrasOnGrandes;
   const sizePrices = draft.prices || SIZE_PRICES;
   const extraPrice = draft.extraPrice ?? EXTRA_PRICE;
   const promoPair = Number(draft.promoPair ?? 400);

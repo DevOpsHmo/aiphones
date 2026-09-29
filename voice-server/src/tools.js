@@ -5,7 +5,7 @@ import twilio from "twilio";
 import { config } from "./config.js";
 import { normalizePhone, supabase } from "./supabase.js";
 import { withCallLock } from "./call-lock.js";
-import { buildConfirmation, priceLine } from "./confirmation.js";
+import { buildConfirmation, paymentForOrder, priceLine } from "./confirmation.js";
 import { bakeNote, billableExtras, descriptionHasIngredient, foldIngredient, ingredientDescription, ingredientsFromText, menuIngredients } from "./menu-ingredients.js";
 import {
   requestTransfer,
@@ -117,7 +117,7 @@ function pizzaPrice(size) {
 
 function itemNotes(size, sauce, extra, note) {
   const topping = extra === "champinones" ? "champiñones" : extra;
-  const baked = bakeNote(note);
+  const baked = foldText(note) === "bien doradita" ? "" : bakeNote(note);
   return [size, sauce, topping, baked].filter(Boolean).join(", ");
 }
 
@@ -382,7 +382,15 @@ const SPANISH_NUMBERS = {
   ochenta: 80,
   noventa: 90,
   cien: 100,
-  ciento: 100
+  ciento: 100,
+  doscientos: 200,
+  trescientos: 300,
+  cuatrocientos: 400,
+  quinientos: 500,
+  seiscientos: 600,
+  setecientos: 700,
+  ochocientos: 800,
+  novecientos: 900
 };
 
 function postalChunks(atoms) {
@@ -419,6 +427,18 @@ const HOUSE_NUMBERS = {
   cien: 100,
   ciento: 100
 };
+
+export function cleanSpokenAddress(value) {
+  return String(value || "")
+    .replace(/\bmi nombre es\s+(?:(?!mi direcci[oó]n es)[^\s,]+\s*){1,4}/gi, " ")
+    .replace(/\bmi direcci[oó]n es\b/gi, " ")
+    .replace(/\bes la colonia\b/gi, " ")
+    .replace(/\bel c[oó]digo postal es\b/gi, "C.P.")
+    .replace(/\s+/g, " ")
+    .replace(/\s+,/g, ",")
+    .replace(/^[\s,]+/, "")
+    .trim();
+}
 
 export function formatHeardStreet(utterance) {
   const number = streetNumber(utterance);
@@ -521,14 +541,7 @@ function insertions(cp) {
 }
 
 export function readPostalCode(value) {
-  const folded = foldText(value)
-    .replace(/\btrescientos\b/g, "tres ciento")
-    .replace(/\bcuatrocientos\b/g, "cuatro ciento")
-    .replace(/\bquinientos\b/g, "cinco ciento")
-    .replace(/\bseiscientos\b/g, "seis ciento")
-    .replace(/\bsetecientos\b/g, "siete ciento")
-    .replace(/\bochocientos\b/g, "ocho ciento")
-    .replace(/\bnovecientos\b/g, "nueve ciento");
+  const folded = foldText(value);
   const digits = String(value || "").replace(/\D/g, "");
   const direct = fiveDigit(digits);
 
@@ -795,7 +808,9 @@ async function saveOrder({
     }
   }
 
-  paymentMethod = paymentMethod || "efectivo";
+  orderType = orderType || "delivery";
+  paymentMethod = paymentForOrder(orderType, paymentMethod || "efectivo");
+  address = cleanSpokenAddress(address);
   const payments = await loadPaymentFlags(businessId);
   if (paymentMethod === "tarjeta" && !payments.card) {
     throw new Error("La tarjeta está apagada. Di que por el momento no se puede pagar con tarjeta.");
@@ -803,7 +818,6 @@ async function saveOrder({
   if (paymentMethod === "transferencia" && !payments.transfer) {
     throw new Error("La transferencia está apagada. Di que por el momento no se puede pagar con transferencia.");
   }
-  orderType = orderType || "delivery";
 
   if (!customerName?.trim()) {
     throw new Error(
