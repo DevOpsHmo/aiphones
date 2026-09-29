@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildConfirmation, paymentForOrder, priceLine } from "./confirmation.js";
-import { nextReply } from "./call-flow.js";
+import { factsInstructions, lockFacts, nextReply } from "./call-flow.js";
 import { billableExtras } from "./menu-ingredients.js";
 import { wantsHuman } from "./human-transfer.js";
 import { interruptionDecision, mushroomIntent, playSequence, serverPrice } from "./turn-policy.js";
@@ -185,6 +185,26 @@ test("23 la coca se pregunta regular o light y luego el volumen", () => {
   assert.equal(size.say, "Coca-Cola regular, ¿600 mililitros o 2 litros?");
   assert.doesNotMatch(kind.say, /presentaci[oó]n/i);
   assert.doesNotMatch(kind.say, /voy a revisar/i);
+});
+
+test("25 tadeo a secas queda como nombre y no se inventa otro", () => {
+  const facts = lockFacts({}, "Tadeo");
+  assert.equal(facts.name, "Tadeo");
+  assert.match(factsInstructions(facts), /Tadeo/);
+  assert.doesNotMatch(factsInstructions(facts), /Luis Alfonso/);
+});
+
+test("24 un nombre y una calle oídos se quedan fijos", () => {
+  let facts = lockFacts({}, "me llamo Tadeo");
+  facts = lockFacts(facts, "Lázaro Cárdenas 1, Issste Federal");
+  facts = lockFacts(facts, "familiar");
+  const block = factsInstructions(facts);
+  assert.match(block, /Tadeo/);
+  assert.match(block, /Lázaro Cárdenas 1/);
+  assert.match(block, /Issste Federal/);
+  assert.match(block, /familiar/);
+  assert.match(block, /No lo vuelvas a preguntar/);
+  assert.doesNotMatch(block, /Luis Alfonso|Zaragoza|Cuauhtémoc/);
 });
 
 test("20 es todo dice confirmado, total y tiempo, y no cuelga antes", () => {

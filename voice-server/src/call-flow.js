@@ -82,6 +82,65 @@ export function matchPizza(utterance) {
   return MENU_PIZZAS.find(name => text.includes(fold(name))) || "";
 }
 
+export function emptyFacts() {
+  return { name: "", size: "", product: "", street: "", colony: "" };
+}
+
+export function lockFacts(facts, utterance) {
+  const next = { ...facts };
+  const text = fold(utterance);
+  const named = text.match(/\b(?:me llamo|mi nombre es|soy)\s+([a-z]+(?:\s+[a-z]+){0,3})/);
+  if (named) {
+    next.name = titleName(named[1]);
+  } else if (!next.name) {
+    const bare = text.trim().match(/^([a-z]{3,}(?:\s+[a-z]{3,}){0,2})$/);
+    const blocked = /\b(pizza|mediana|grande|familiar|domicilio|recoger|gracias|colonia|calle)\b/;
+    if (bare && !blocked.test(text) && !mentionedSize(utterance) && !matchPizza(utterance)) {
+      next.name = titleName(bare[1]);
+    }
+  }
+  const size = mentionedSize(utterance);
+  if (size) {
+    next.size = size;
+  }
+  const pizza = matchPizza(utterance);
+  if (pizza) {
+    next.product = pizza;
+  }
+  const street = String(utterance || "").match(/((?:l[aá]zaro c[aá]rdenas|zaragoza|veracruz|morelos)[^,.]*)/i);
+  if (street) {
+    next.street = street[1].trim();
+  }
+  const colony = String(utterance || "").match(/\b(issste federal|cuauht[eé]moc|modelo|5 de mayo)\b/i);
+  if (colony) {
+    next.colony = colony[1];
+  }
+  return next;
+}
+
+export function factsInstructions(facts) {
+  const lines = [];
+  if (facts.name) {
+    lines.push(`Nombre exacto: ${facts.name}. Repítelo igual. No propongas otro.`);
+  }
+  if (facts.product) {
+    lines.push(`Pizza ya dicha: ${facts.product}. No ofrezcas otra ni una que no esté en el menú.`);
+  }
+  if (facts.size) {
+    lines.push(`Tamaño ya dicho: ${facts.size}. No lo vuelvas a preguntar.`);
+  }
+  if (facts.street) {
+    lines.push(`Calle exacta: ${facts.street}. No la cambies por otra calle.`);
+  }
+  if (facts.colony) {
+    lines.push(`Colonia exacta: ${facts.colony}. No preguntes el código de otra colonia.`);
+  }
+  if (!lines.length) {
+    return "DATOS FIJOS: todavía ninguno. Si no oíste un dato, pregunta de nuevo sin inventar otro.";
+  }
+  return `DATOS FIJOS DE ESTA LLAMADA:\n${lines.join("\n")}`;
+}
+
 export function nextReply(state, utterance) {
   const text = fold(utterance);
   const next = { ...state };

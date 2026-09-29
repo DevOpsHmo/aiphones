@@ -748,9 +748,7 @@ export async function checkAddressTool({
       address: [dictatedStreet, colony.trim(), `C.P. ${cp}`, "Hermosillo, Sonora"]
         .filter(Boolean)
         .join(", "),
-      note: options.length
-        ? `Di el código dígito por dígito: ${spellPostalCode(cp)}. Ofrece solo estas colonias: ${options.join(", ")}.`
-        : `Di el código dígito por dígito: ${spellPostalCode(cp)}. Pregunta otra vez cuál es la colonia.`
+      note: `La colonia dicha por el cliente se queda: ${colony.trim()}. No la cambies por otra. No ofrezcas ${options.slice(0, 3).join(", ") || "otra colonia"}. Pregunta solo si ese código postal es de esa colonia.`
     };
   }
 
