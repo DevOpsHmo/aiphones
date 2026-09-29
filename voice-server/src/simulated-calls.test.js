@@ -1,0 +1,91 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { orderedTurn } from "./call-flow.js";
+import { deliveryAddress } from "./tools.js";
+import { interruptionDecision } from "./turn-policy.js";
+
+function play(lines, start = {}) {
+  let state = { ...start };
+  const said = [];
+  for (const line of lines) {
+    const turn = orderedTurn(state, line);
+    state = turn.state;
+    said.push(turn.say);
+    assert.equal(turn.hangup, false);
+    assert.doesNotMatch(turn.say, /opci[oó]n [abc1]/i);
+    assert.doesNotMatch(turn.say, /d[eé]jame/i);
+  }
+  return { state, said };
+}
+
+test("simulacion 1 el nombre no pide la calle", () => {
+  const call = play(["Ernesto"]);
+  assert.equal(call.state.name, "Ernesto");
+  assert.equal(call.said[0], "¿Qué desea ordenar?");
+  assert.doesNotMatch(call.said[0], /calle/i);
+});
+
+test("simulacion 2 el precio de cualquier pizza son los tres tamaños", () => {
+  const call = play(["Ernesto", "mexicana", "qué precio tiene"]);
+  assert.match(call.said.at(-1), /200/);
+  assert.match(call.said.at(-1), /220/);
+  assert.match(call.said.at(-1), /250/);
+});
+
+test("simulacion 3 domicilio pide el codigo antes que la calle", () => {
+  const call = play(["Octavio", "mexicana", "familiar", "no", "a domicilio"]);
+  assert.equal(call.said.at(-1), "¿Cuál es el código postal?");
+  assert.doesNotMatch(call.said.join(" "), /Privada|calle y número/i);
+});
+
+test("simulacion 4 montecarlo se queda como colonia", () => {
+  const call = play(["Octavio", "mexicana", "familiar", "no", "domicilio", "83157", "Montecarlo"]);
+  assert.equal(call.state.colony, "Montecarlo");
+  assert.doesNotMatch(call.said.join(" "), /vocabulario/i);
+});
+
+test("simulacion 5 ciento 50 no es una calle", () => {
+  assert.throws(
+    () => deliveryAddress({ street: "ciento", number: "50", colony: "ISSSTE Federal", postalCode: "83157" }),
+    /nombre de la calle/
+  );
+});
+
+test("simulacion 6 el cierre repite orden precio y 30 minutos", () => {
+  const call = play([
+    "Ernesto",
+    "peperoni",
+    "mediana",
+    "no",
+    "domicilio",
+    "83157",
+    "Issste Federal",
+    "Lázaro Cárdenas número 1"
+  ]);
+  assert.match(call.said.at(-1), /Excelente/);
+  assert.match(call.said.at(-1), /quedó confirmado/);
+  assert.match(call.said.at(-1), /30 minutos/);
+  assert.match(call.said.at(-1), /Pizzería Hermosillo/);
+});
+
+test("simulacion 7 recoger no pide direccion", () => {
+  const call = play(["Ana", "deluxe", "grande", "no", "recoger"]);
+  assert.match(call.said.at(-1), /recoger/);
+  assert.doesNotMatch(call.said.at(-1), /código postal/);
+});
+
+test("simulacion 8 si el cliente habla mientras ella habla se calla", () => {
+  const decision = interruptionDecision({ event: "speech_started", assistantSpeaking: true });
+  assert.equal(decision.cancelResponse, true);
+  assert.equal(decision.clearPlayback, true);
+});
+
+test("simulacion 9 agregar una pizza no borra la anterior", () => {
+  const call = play(["quisiera agregar otra pizza en el mismo pedido"], { name: "Ernesto", product: "mexicana" });
+  assert.match(call.said[0], /se quedan/);
+});
+
+test("simulacion 10 la hawaiana apagada no se vende", () => {
+  const call = play(["Luis", "una pizza hawaiana"], { unavailable: ["Hawaina"] });
+  assert.match(call.said.at(-1), /no está disponible/);
+});

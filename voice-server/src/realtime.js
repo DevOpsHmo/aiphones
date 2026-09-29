@@ -14,7 +14,7 @@ import {
 import { config } from "./config.js";
 import { interruptionDecision } from "./turn-policy.js";
 import { wantsHuman } from "./human-transfer.js";
-import { emptyFacts, factsInstructions, lockFacts } from "./call-flow.js";
+import { emptyFacts, factsInstructions, lockFacts, orderedTurn } from "./call-flow.js";
 
 function isPromptEcho(text) {
   const normalized = text.trim().toLowerCase();
@@ -578,12 +578,12 @@ ${menuText || "Menú no disponible."}
               endCallTool(callSid).catch(error => {
                 console.error("No se pudo colgar al cancelar:", error.message);
               });
-            } else if (decision.cancelResponse) {
-              if (openaiSocket.readyState === WebSocket.OPEN) {
-                openaiSocket.send(JSON.stringify({ type: "response.cancel" }));
-              }
-              if (twilioSocket.readyState === WebSocket.OPEN) {
-                twilioSocket.send(JSON.stringify({ event: "clear", streamSid }));
+            } else {
+              const turn = orderedTurn(callState.flow || {}, event.transcript);
+              callState.flow = turn.state;
+              if (turn.say) {
+                stopTalking();
+                speakExact(turn.say);
               }
             }
           }

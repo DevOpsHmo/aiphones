@@ -323,3 +323,104 @@ export function nextReply(state, utterance) {
     say: `Sigo con ${next.name}: ${next.product || "pedido"} ${next.size || ""}.`.trim()
   };
 }
+
+export function orderedTurn(state, utterance) {
+  const next = {
+    name: "",
+    product: "",
+    size: "",
+    fulfillment: "",
+    postalCode: "",
+    colony: "",
+    street: "",
+    offeredMore: false,
+    unavailable: [],
+    ...state
+  };
+  const text = fold(utterance);
+  if (/\b(agregar|otra pizza|pedido anterior)\b/.test(text)) {
+    return { state: next, hangup: false, say: "¿Qué pizza desea agregar? Las que ya tenía se quedan." };
+  }
+  if (/\bprecio\b/.test(text)) {
+    return { state: next, hangup: false, say: "Mediana 200, grande 220 y familiar 250." };
+  }
+  if (!next.name) {
+    const bare = text.trim().match(/^(?:me llamo |soy )?([a-z]{3,}(?:\s+[a-z]{3,}){0,2})$/);
+    if (bare && !matchPizza(utterance) && !mentionedSize(utterance)) {
+      next.name = titleName(bare[1]);
+      return { state: next, hangup: false, say: "¿Qué desea ordenar?" };
+    }
+    return { state: next, hangup: false, say: "¿Cuál es su nombre?" };
+  }
+  const pizza = /hawaiana/.test(text) ? "Hawaina" : matchPizza(utterance);
+  if (pizza) {
+    if ((next.unavailable || []).some(item => fold(item) === fold(pizza))) {
+      return { state: next, hangup: false, say: `La pizza ${pizza} no está disponible. ¿Qué otra desea?` };
+    }
+    next.product = pizza;
+  }
+  const size = mentionedSize(utterance);
+  if (size) {
+    next.size = size;
+  }
+  if (/\bdomicilio\b/.test(text)) {
+    next.fulfillment = "delivery";
+  }
+  if (/\brecoger\b/.test(text)) {
+    next.fulfillment = "pickup";
+  }
+  if (!next.product) {
+    return { state: next, hangup: false, say: "¿Qué desea ordenar?" };
+  }
+  if (!next.size) {
+    return { state: next, hangup: false, say: `${next.product}, ¿mediana, grande o familiar?` };
+  }
+  if (!next.offeredMore && !/\bno\b/.test(text)) {
+    next.offeredMore = true;
+    return { state: next, hangup: false, say: "¿Desea agregar algo más? ¿Alguna bebida?" };
+  }
+  next.offeredMore = true;
+  if (!next.fulfillment) {
+    return { state: next, hangup: false, say: "¿A domicilio o para recoger?" };
+  }
+  if (next.fulfillment === "pickup") {
+    const confirmation = buildConfirmation({
+      customerName: next.name,
+      orderType: "pickup",
+      paymentMethod: "efectivo",
+      items: [{ name: next.product, size: next.size, quantity: 1 }]
+    });
+    return { state: next, hangup: false, say: confirmation.spoken };
+  }
+  const postal = text.match(/\b(\d{5})\b/);
+  if (!next.postalCode) {
+    if (postal) {
+      next.postalCode = postal[1];
+    } else {
+      return { state: next, hangup: false, say: "¿Cuál es el código postal?" };
+    }
+  }
+  if (!next.colony) {
+    if (/\b(montecarlo|issste|modelo|centro)\b/.test(text)) {
+      next.colony = utterance.trim();
+    } else {
+      return { state: next, hangup: false, say: `Muy bien ${next.name}, ¿y la colonia cuál es?` };
+    }
+  }
+  if (!next.street) {
+    if (/\b(calle|privada|numero|n[uú]mero)\b/.test(text) || /\d/.test(text)) {
+      next.street = utterance.trim();
+    } else {
+      return { state: next, hangup: false, say: "¿Cuál es la calle y el número?" };
+    }
+  }
+  const confirmation = buildConfirmation({
+    customerName: next.name,
+    orderType: "delivery",
+    address: `${next.street}, ${next.colony}`,
+    postalCode: next.postalCode,
+    paymentMethod: "efectivo",
+    items: [{ name: next.product, size: next.size, quantity: 1 }]
+  });
+  return { state: next, hangup: false, say: confirmation.spoken };
+}
