@@ -113,7 +113,12 @@ export function sauceWord(sauce) {
 }
 
 function asksIngredients(text) {
-  return /\b(ingredientes?|que trae|que lleva|que contiene|de que esta)\b/.test(text);
+  const clean = text.replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  if (/\b(ingredientes?|que trae|que lleva|que tiene|que contiene|de que esta|que incluye|con que viene|que le ponen|que le echan)\b/.test(clean)) {
+    return true;
+  }
+  const words = clean.split(" ").filter(Boolean);
+  return words.length > 0 && words.length <= 4 && /\btrae\b/.test(clean);
 }
 
 function asksPrice(text) {
@@ -170,16 +175,20 @@ export function matchPizza(utterance) {
   if (/hawai|saway|awaina|awaiana/.test(text)) {
     return "Hawaina";
   }
-  if (/peperoni|pepperoni/.test(text)) {
-    return "Peperoni";
-  }
   if (soundsLikeBoneless(text)) {
     return "Lucco Boneless";
   }
   if (/\bdeluxe\b|\bde luz\b|\bluz\b/.test(text)) {
     return "Deluxe";
   }
-  return MENU_PIZZAS.find(name => text.includes(fold(name))) || "";
+  const named = MENU_PIZZAS.find(name => fold(name) !== "peperoni" && text.includes(fold(name)));
+  if (named) {
+    return named;
+  }
+  if (/peperoni|pepperoni/.test(text) && !/\b(extra|con|agrega|agregale|ponle)\b/.test(text)) {
+    return "Peperoni";
+  }
+  return "";
 }
 
 function heardSize(utterance) {
@@ -255,20 +264,23 @@ export function heardFulfillment(utterance) {
 }
 
 function sameQuestion(next, say) {
-  if (next.lastSay === say) {
+  if (next.lastAsk === say) {
     next.sameCount = (next.sameCount || 0) + 1;
-  } else {
-    next.sameCount = 0;
-    next.lastSay = say;
+    if (next.sameCount >= 2) {
+      return {
+        state: next,
+        hangup: false,
+        transfer: true,
+        say: "Disculpe, lo transferiré con un humano."
+      };
+    }
+    const again = `Disculpe, no le oí bien. ${say}`;
+    next.lastSay = again;
+    return { state: next, hangup: false, say: again };
   }
-  if (next.sameCount >= 2) {
-    return {
-      state: next,
-      hangup: false,
-      transfer: true,
-      say: "Disculpe, lo transferiré con un humano."
-    };
-  }
+  next.lastAsk = say;
+  next.sameCount = 0;
+  next.lastSay = say;
   return { state: next, hangup: false, say };
 }
 
@@ -575,15 +587,27 @@ export function orderedTurn(state, utterance) {
   const pizza = matchPizza(text);
   const size = heardSize(text);
   if (pizza && next.product && pizza !== next.product && next.size) {
-    next.items = [...(next.items || []), { product: next.product, size: next.size, sauce: next.sauce || "" }];
+    next.items = [...(next.items || []), {
+      product: next.product,
+      size: next.size,
+      sauce: next.sauce || "",
+      extras: next.extras || []
+    }];
     next.size = "";
     next.sauce = "";
+    next.extras = [];
   }
   if (pizza) {
     if ((next.unavailable || []).some(item => fold(item) === fold(pizza))) {
       return { state: next, hangup: false, say: `La pizza ${pizza} no está disponible. ¿Qué otra desea?` };
     }
     next.product = pizza;
+  }
+  const foundExtras = matchIngredients(String(utterance || "").replace(/peperoni/gi, "pepperoni"));
+  if (foundExtras.length) {
+    const folded = foundExtras.map(name => fold(name).replace(/pepperoni/g, "peperoni"));
+    const unique = foundExtras.filter((name, index) => folded.indexOf(folded[index]) === index);
+    next.extras = [...new Set([...(next.extras || []), ...unique])];
   }
   if (size) {
     next.size = size;
@@ -617,8 +641,9 @@ export function orderedTurn(state, utterance) {
     }
     return sameQuestion(next, "¿Qué desea ordenar?");
   }
+  const extraLabel = (next.extras || []).length ? ` con extra de ${(next.extras || []).join(" y ")}` : "";
   if (!next.size) {
-    return sameQuestion(next, `${next.product}, ¿mediana, grande o familiar?`);
+    return sameQuestion(next, `${next.product}${extraLabel}, ¿mediana, grande o familiar?`);
   }
   if (fold(next.product).includes("boneless") && !next.sauce) {
     return sameQuestion(next, "Lucco Boneless, ¿salsa barbiquiú o búfalo?");
@@ -701,9 +726,12 @@ export function orderedTurn(state, utterance) {
   const orderLine = () => {
     const lines = [...(next.items || [])];
     if (next.product && next.size) {
-      lines.push({ product: next.product, size: next.size, sauce: next.sauce || "" });
+      lines.push({ product: next.product, size: next.size, sauce: next.sauce || "", extras: next.extras || [] });
     }
-    const pizzas = lines.map(item => `una pizza ${item.size} de ${item.product}${item.sauce ? ` con ${sauceWord(item.sauce)}` : ""}`).join(" y ");
+    const pizzas = lines.map(item => {
+      const topping = (item.extras || []).length ? ` con extra de ${item.extras.join(" y ")}` : "";
+      return `una pizza ${item.size} de ${item.product}${item.sauce ? ` con ${sauceWord(item.sauce)}` : ""}${topping}`;
+    }).join(" y ");
     const drink = next.drink || {};
     if (!drink.volume) {
       return pizzas || "su pedido";

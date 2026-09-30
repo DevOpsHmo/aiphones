@@ -264,6 +264,32 @@ test("simulacion 17 sin codigo postal la colonia modelo completa el codigo", () 
   assert.equal(several.state.postalCode, "");
 });
 
+test("simulacion 18 que trae lee la pizza y el extra no la cambia", () => {
+  const info = orderedTurn({
+    name: "Ana",
+    product: "Mexicana",
+    descriptions: { Mexicana: "Jalapeños, chorizo, tocino, cebolla y frijoles." }
+  }, "¿Qué trae?");
+  assert.match(info.say, /chorizo/i);
+  assert.notEqual(info.transfer, true);
+  const order = orderedTurn({ name: "Ana" }, "una pizza mexicana con extra de pepperoni");
+  assert.equal(order.state.product, "Mexicana");
+  assert.ok((order.state.extras || []).some(name => /pepperoni|peperoni/i.test(name)));
+  assert.match(order.say, /Mexicana con extra de pepperoni/i);
+  assert.match(order.say, /mediana, grande o familiar/);
+  const drink = orderedTurn({
+    name: "Ana",
+    product: "Mexicana",
+    size: "grande",
+    offeredMore: true,
+    drink: { kind: "coca" }
+  }, "regular");
+  assert.match(drink.say, /600 mililitros/);
+  assert.notEqual(drink.transfer, true);
+  const repeated = orderedTurn(drink.state, "regular");
+  assert.notEqual(repeated.say, drink.say);
+});
+
 test("simulacion 10 la hawaiana apagada no se vende", () => {
   const call = play(["Luis", "una pizza hawaiana"], { unavailable: ["Hawaina"] });
   assert.match(call.said.at(-1), /no está disponible/);

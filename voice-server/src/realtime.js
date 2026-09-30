@@ -140,27 +140,34 @@ export function createRealtimeSession({
     }));
   }
 
+  let lastSpoken = "";
+
   function sendGreeting() {
     if (greetingSent || openaiSocket.readyState !== WebSocket.OPEN) return;
     greetingSent = true;
+    lastSpoken = "Hola, bienvenido a Pizzería Hermosillo. ¿Cuál es su nombre?";
     openaiSocket.send(JSON.stringify({
       type: "response.create",
       response: {
         output_modalities: ["audio"],
-        instructions: "Di exactamente esta frase completa y después guarda silencio hasta que el cliente hable: Hola, bienvenido a Pizzería Hermosillo. ¿Cuál es su nombre?"
+        tool_choice: "none",
+        instructions: "Di una sola vez, sin repetirla, exactamente esta frase y después guarda silencio: Hola, bienvenido a Pizzería Hermosillo. ¿Cuál es su nombre?"
       }
     }));
   }
 
   function speakExact(phrase) {
-    if (openaiSocket.readyState !== WebSocket.OPEN) {
+    const clean = String(phrase || "").trim();
+    if (!clean || clean === lastSpoken || openaiSocket.readyState !== WebSocket.OPEN) {
       return;
     }
+    lastSpoken = clean;
     openaiSocket.send(JSON.stringify({
       type: "response.create",
       response: {
         output_modalities: ["audio"],
-        instructions: `Di exactamente esta frase y nada más: ${phrase}`
+        tool_choice: "none",
+        instructions: `Di este texto una sola vez y después guarda silencio. No lo repitas. No saludes. No llames herramientas. Texto: ${clean}`
       }
     }));
   }
@@ -263,7 +270,7 @@ R8. Si no entendiste, di exactamente: "Disculpa, no entendí. ¿Puedes repetir?"
 R9. Si pregunta clima, política u otro tema, di "Solo puedo ayudarle con su pedido. ¿Continuamos?"
 R10. Si dice que no entiendes o pide un humano, di "Te comunico con un compañero, un momento." y llama transfer_to_human.
 R11. "No" y "gracias" durante la toma no cuelgan. Solo end_call después del spoken de create_order, o si cancelaron.
-R12. El saludo se dice una sola vez en toda la llamada. Nunca lo repitas. Orden de la llamada: nombre, qué desea ordenar, tamaño, una vez "¿Desea agregar algo más? ¿Alguna bebida?", después "¿A domicilio o para recoger?". Solo si es domicilio pide la ubicación en este orden, una pregunta por turno y sin opciones: código postal, colonia, calle y número. Si no entendiste la colonia, pide otra vez la colonia, no el código.
+R12. No saludes: el servidor ya dijo la bienvenida una sola vez. Nunca repitas una frase. Orden de la llamada: nombre, qué desea ordenar, tamaño, una vez "¿Desea agregar algo más? ¿Alguna bebida?", después "¿A domicilio o para recoger?". Solo si es domicilio pide la ubicación en este orden, una pregunta por turno y sin opciones: código postal, colonia, calle y número. Si no entendiste la colonia, pide otra vez la colonia, no el código.
 
 A domicilio el pago es siempre en efectivo. Solo pregunta el pago si es para recoger. Si el cliente habla mientras tú hablas, cállate y contesta solo lo que acaba de decir. Nunca digas Lucco. "Bordes" es la orilla, no una pizza.
 
@@ -276,7 +283,7 @@ Si pregunta qué trae, qué lleva o qué ingredientes tiene una pizza, lee solo 
 Si piden un ingrediente que no viene en la descripción de esa pizza, es extra. Di el precio propio de ese ingrediente si está en el menú; si no tiene, di el extra general. No inventes el número. "Los champiñones no vienen en la pizza de pepperoni. Son un extra de 25" solo si el extra general es 25 y champiñones no tiene precio propio. "La piña no viene en la mexicana. Es un extra." Pasa ese ingrediente en extras. Si el ingrediente ya viene en la descripción, no lo cobres ni lo menciones como extra. Esto vale para cualquier ingrediente del menú. Orilla rellena de queso y queso extra usan su precio propio o, si no tienen, el extra general, aunque la pizza ya lleve queso. No escribas notas que el cliente no dijo. No pongas "Bien doradita" si no pidió la pizza más dorada. Si pide dos pizzas con el mismo extra, el extra se cobra en cada una: dos medianas con champiñones son 450, no 425. No calcules tú el total: usa el precio del menú, tamaño más extra, por cada pizza.
 Una calle, una colonia, Issste, un código postal o un "no" no son ingredientes. No agregues pollo ni ningún extra si no dijo "con" o "agrégale" ese ingrediente. Si dice que no pidió el extra, quítalo y repite el precio sin él.
 
-1. Si pide un humano en cualquier momento, di "Claro, lo comunico con alguien de la pizzería." y llama transfer_to_human. No preguntes la dirección. No uses end_call.
+1. No llames transfer_to_human por tu cuenta. El servidor transfiere solo si la persona lo pide o está frustrada.
 Si preguntan cómo va su pedido, llama order_status y di exactamente spoken. No armes un pedido nuevo.
 Si el estado es preparing y preguntan cuánto tiempo, di "Aproximadamente 15 minutos."
 Si el estado es delivering y preguntan cuánto tiempo, di "En menos de 10 minutos."
@@ -641,7 +648,7 @@ ${menuText || "Menú no disponible."}
                 const flow = turn.state;
                 const wanted = [...(flow.items || [])];
                 if (flow.product && flow.size) {
-                  wanted.push({ product: flow.product, size: flow.size, sauce: flow.sauce || "" });
+                  wanted.push({ product: flow.product, size: flow.size, sauce: flow.sauce || "", extras: flow.extras || [] });
                 }
                 getMenuTool(businessId).then(async menu => {
                   const foldName = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/pepperoni/g, "peperoni").replace(/hawaiana/g, "hawaina");
@@ -680,7 +687,7 @@ ${menuText || "Menú no disponible."}
                 getMenuTool(businessId).then(menu => {
                   const wanted = [...(flow.items || [])];
                   if (flow.product && flow.size) {
-                    wanted.push({ product: flow.product, size: flow.size, sauce: flow.sauce || "" });
+                    wanted.push({ product: flow.product, size: flow.size, sauce: flow.sauce || "", extras: flow.extras || [] });
                   }
                   const foldName = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/pepperoni/g, "peperoni").replace(/hawaiana/g, "hawaina");
                   const items = wanted.map(line => {
@@ -689,7 +696,7 @@ ${menuText || "Menú no disponible."}
                       const have = foldName(item.name);
                       return have.includes(name) || name.includes(have);
                     });
-                    return product ? { product_id: product.id, quantity: 1, size: line.size, sauce: line.sauce || "" } : null;
+                    return product ? { product_id: product.id, quantity: 1, size: line.size, sauce: line.sauce || "", extras: line.extras || [] } : null;
                   });
                   if (flow.drink?.volume) {
                     const volumeKey = flow.drink.volume === "600" ? "600" : "2";
@@ -972,9 +979,13 @@ async function handleToolCall(
     }
 
     else if (event.name === "transfer_to_human") {
-      result = await transferToHumanTool(callSid);
-      if (result?.success && !result.duplicate && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: "response.cancel" }));
+      if (!callState.transferAsked) {
+        result = { success: false, error: "No transfieras. Sigue con el pedido." };
+      } else {
+        result = await transferToHumanTool(callSid);
+        if (result?.success && !result.duplicate && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "response.cancel" }));
+        }
       }
     }
 
@@ -1050,7 +1061,8 @@ async function handleToolCall(
       JSON.stringify({
         type: "response.create",
         response: {
-          instructions: `Di exactamente este texto y nada más: ${result.spoken}`
+          tool_choice: "none",
+          instructions: `Di este texto una sola vez y nada más: ${result.spoken}`
         }
       })
     );
@@ -1062,7 +1074,8 @@ async function handleToolCall(
       JSON.stringify({
         type: "response.create",
         response: {
-          instructions: `Di exactamente este texto, sin preguntas y sin cambiar el nombre, y al terminar llama end_call: ${result.spoken}`
+          tool_choice: "none",
+          instructions: `Di este texto una sola vez, sin preguntas y sin cambiar el nombre: ${result.spoken}`
         }
       })
     );
@@ -1073,10 +1086,4 @@ async function handleToolCall(
     return;
   }
 
-  socket.send(
-    JSON.stringify({
-      type:
-        "response.create"
-    })
-  );
 }
