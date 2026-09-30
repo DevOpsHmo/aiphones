@@ -318,20 +318,29 @@ function MenuSelect({
   name,
   value,
   options,
-  onChange
+  onChange,
+  dropUp = false,
+  placeholder = "Elegir"
 }: {
   name: string;
   value: string;
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
+  dropUp?: boolean;
+  placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLUListElement>(null);
   const current = options.find(option => option.value === value);
 
   useEffect(() => {
     if (!open) {
       return;
+    }
+    const active = menuRef.current?.querySelector(".is-active");
+    if (active instanceof HTMLElement && menuRef.current) {
+      menuRef.current.scrollTop = Math.max(0, active.offsetTop - 72);
     }
     function close(event: PointerEvent) {
       if (!rootRef.current?.contains(event.target as Node)) {
@@ -352,7 +361,7 @@ function MenuSelect({
   }, [open]);
 
   return (
-    <div className={`menu-select${open ? " is-open" : ""}`} ref={rootRef}>
+    <div className={`menu-select${open ? " is-open" : ""}${dropUp ? " is-up" : ""}`} ref={rootRef}>
       <input type="hidden" name={name} value={value} />
       <button
         type="button"
@@ -361,12 +370,12 @@ function MenuSelect({
         aria-haspopup="listbox"
         onClick={() => setOpen(currentOpen => !currentOpen)}
       >
-        {current?.label || "Elegir"}
+        {current?.label || placeholder}
       </button>
       {open && (
-        <ul className="menu-select-menu" role="listbox">
+        <ul className="menu-select-menu" role="listbox" ref={menuRef}>
           {options.map(option => (
-            <li key={option.value}>
+            <li key={option.value || "none"}>
               <button
                 type="button"
                 role="option"
@@ -385,6 +394,33 @@ function MenuSelect({
       )}
     </div>
   );
+}
+
+function clockLabel(value: string) {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value);
+  if (!match) {
+    return value;
+  }
+  const hour = Number(match[1]);
+  const minute = match[2];
+  const hour12 = hour % 12 || 12;
+  return `${hour12}:${minute} ${hour < 12 ? "a. m." : "p. m."}`;
+}
+
+const HOUR_OPTIONS = [
+  { value: "", label: "Sin horario" },
+  ...Array.from({ length: 48 }, (_, index) => {
+    const hour = Math.floor(index / 2);
+    const value = `${String(hour).padStart(2, "0")}:${index % 2 === 0 ? "00" : "30"}`;
+    return { value, label: clockLabel(value) };
+  })
+];
+
+function hourOptions(current: string) {
+  if (!current || HOUR_OPTIONS.some(option => option.value === current)) {
+    return HOUR_OPTIONS;
+  }
+  return [...HOUR_OPTIONS, { value: current, label: clockLabel(current) }];
 }
 
 function Switch({
@@ -1184,24 +1220,28 @@ export default function MenuBoard({
       <section className="menu-panel menu-hours-panel">
         <h2>Horario de atención</h2>
         <form className="menu-form menu-hours" onSubmit={saveHours}>
-          <label className="price-field">
+          <div className="price-field">
             <span>Apertura</span>
-            <input
-              type="time"
+            <MenuSelect
               name="open-time"
               value={hours.open}
-              onChange={event => setHours(current => ({ ...current, open: event.target.value }))}
+              options={hourOptions(hours.open)}
+              dropUp
+              placeholder="Elige la hora"
+              onChange={open => setHours(current => ({ ...current, open }))}
             />
-          </label>
-          <label className="price-field">
+          </div>
+          <div className="price-field">
             <span>Cierre</span>
-            <input
-              type="time"
+            <MenuSelect
               name="close-time"
               value={hours.close}
-              onChange={event => setHours(current => ({ ...current, close: event.target.value }))}
+              options={hourOptions(hours.close)}
+              dropUp
+              placeholder="Elige la hora"
+              onChange={close => setHours(current => ({ ...current, close }))}
             />
-          </label>
+          </div>
           <button type="submit" className={`menu-save${savingHours ? " is-busy" : ""}`} disabled={savingHours}>
             <span className="menu-save-label">Guardar horario</span>
             {savingHours && <span className="menu-save-spin" aria-hidden="true" />}
