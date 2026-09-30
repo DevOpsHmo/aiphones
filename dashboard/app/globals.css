@@ -629,12 +629,21 @@ body.login-lock {
   min-width: 0;
 }
 
-.menu-prices {
+.menu-prices,
+.menu-hours {
   max-width: none;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 12px 18px;
+}
+
+.menu-hours input[type="time"] {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 8px 10px;
+  font: inherit;
+  background: #fff;
 }
 
 .price-step {

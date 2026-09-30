@@ -436,6 +436,8 @@ export default function MenuBoard({
   const [savingEdit, setSavingEdit] = useState(false);
   const [toast, setToast] = useState("");
   const [savingPrices, setSavingPrices] = useState(false);
+  const [savingHours, setSavingHours] = useState(false);
+  const [hours, setHours] = useState({ open: "", close: "" });
   const [pendingDelete, setPendingDelete] = useState<
     { kind: "product"; item: ProductRow } | { kind: "ingredient"; item: IngredientRow } | null
   >(null);
@@ -519,8 +521,25 @@ export default function MenuBoard({
         promo_pair: String(settings.promo_pair)
       });
     }
+    let hoursQuery = supabase
+      .from("menu_settings")
+      .select("open_time,close_time");
+    if (business?.id) {
+      hoursQuery = hoursQuery.eq("business_id", business.id);
+    }
+    const { data: hoursRow, error: hoursError } = await hoursQuery.maybeSingle();
+    if (!hoursError && hoursRow) {
+      setHours({
+        open: hoursRow.open_time || "",
+        close: hoursRow.close_time || ""
+      });
+    }
 
-    setError("");
+    setError(
+      hoursError && /open_time|close_time|PGRST204/i.test(hoursError.message)
+        ? "Falta el horario de atención. Pega supabase/migration_kitchen_hours.sql en Supabase."
+        : ""
+    );
     const rows = ((productRows || []) as ProductRow[]).map(product => {
       const pizza = product.category === "Pizzas" || /^pizza\b/i.test(product.name);
       if (!pizza) {
@@ -889,6 +908,38 @@ export default function MenuBoard({
     }
   }
 
+  async function saveHours(event: React.FormEvent) {
+    event.preventDefault();
+    if (!businessId || savingHours) {
+      return;
+    }
+    if ((hours.open && !hours.close) || (!hours.open && hours.close)) {
+      setError("Pon la hora de apertura y la de cierre.");
+      return;
+    }
+    setSavingHours(true);
+    window.dispatchEvent(new Event("kitchen-spin"));
+    const supabase = createClient();
+    const { error: saveError } = await supabase
+      .from("menu_settings")
+      .upsert({
+        business_id: businessId,
+        open_time: hours.open || null,
+        close_time: hours.close || null
+      }, { onConflict: "business_id" });
+    setError(
+      saveError
+        ? /open_time|close_time|PGRST204|schema cache/i.test(saveError.message)
+          ? "Falta el horario de atención. Pega supabase/migration_kitchen_hours.sql en Supabase."
+          : saveError.message
+        : ""
+    );
+    setSavingHours(false);
+    if (!saveError) {
+      flashSaved();
+    }
+  }
+
   const listed = menuProducts();
 
   return (
@@ -1130,6 +1181,33 @@ export default function MenuBoard({
         </ul>
       </section>
       )}
+      <section className="menu-panel menu-hours-panel">
+        <h2>Horario de atención</h2>
+        <form className="menu-form menu-hours" onSubmit={saveHours}>
+          <label className="price-field">
+            <span>Apertura</span>
+            <input
+              type="time"
+              name="open-time"
+              value={hours.open}
+              onChange={event => setHours(current => ({ ...current, open: event.target.value }))}
+            />
+          </label>
+          <label className="price-field">
+            <span>Cierre</span>
+            <input
+              type="time"
+              name="close-time"
+              value={hours.close}
+              onChange={event => setHours(current => ({ ...current, close: event.target.value }))}
+            />
+          </label>
+          <button type="submit" className={`menu-save${savingHours ? " is-busy" : ""}`} disabled={savingHours}>
+            <span className="menu-save-label">Guardar horario</span>
+            {savingHours && <span className="menu-save-spin" aria-hidden="true" />}
+          </button>
+        </form>
+      </section>
       {toast &&
         toastSlot &&
         createPortal(

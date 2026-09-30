@@ -203,21 +203,88 @@ export async function loadPaymentFlags(businessId) {
 }
 
 export async function loadMenuPrices(businessId) {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("menu_settings")
-    .select("mediana,grande,familiar,extra,promo_pair")
+    .select("mediana,grande,familiar,extra,promo_pair,open_time,close_time")
     .eq("business_id", businessId)
     .maybeSingle();
+  if (error && /open_time|close_time|PGRST204/i.test(error.message)) {
+    const retry = await supabase
+      .from("menu_settings")
+      .select("mediana,grande,familiar,extra,promo_pair")
+      .eq("business_id", businessId)
+      .maybeSingle();
+    data = retry.data;
+    error = retry.error;
+  }
   if (error || !data) {
-    return { ...DEFAULT_MENU_PRICES };
+    return { ...DEFAULT_MENU_PRICES, openTime: "", closeTime: "" };
   }
   return {
     mediana: Number(data.mediana) || DEFAULT_MENU_PRICES.mediana,
     grande: Number(data.grande) || DEFAULT_MENU_PRICES.grande,
     familiar: Number(data.familiar) || DEFAULT_MENU_PRICES.familiar,
     extra: Number(data.extra) || DEFAULT_MENU_PRICES.extra,
-    promoPair: Number(data.promo_pair) || DEFAULT_MENU_PRICES.promoPair
+    promoPair: Number(data.promo_pair) || DEFAULT_MENU_PRICES.promoPair,
+    openTime: data.open_time || "",
+    closeTime: data.close_time || ""
   };
+}
+
+function clockMinutes(value) {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})/);
+  if (!match) {
+    return null;
+  }
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour > 23 || minute > 59) {
+    return null;
+  }
+  return hour * 60 + minute;
+}
+
+function hermosilloMinutes(now) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Hermosillo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(now);
+  const hour = Number(parts.find(part => part.type === "hour")?.value || 0) % 24;
+  const minute = Number(parts.find(part => part.type === "minute")?.value || 0);
+  return hour * 60 + minute;
+}
+
+export function speakClock(value) {
+  const minutes = clockMinutes(value);
+  if (minutes == null) {
+    return String(value || "");
+  }
+  const hour = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+  const names = ["doce", "una", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez", "once"];
+  const hour12 = hour % 12;
+  const hourWord = hour12 === 1 ? "la una" : `las ${names[hour12]}`;
+  const period = hour < 12 ? "de la mañana" : hour < 19 ? "de la tarde" : "de la noche";
+  const minuteWord = minute === 0 ? "" : minute === 15 ? " y cuarto" : minute === 30 ? " y media" : ` y ${minute}`;
+  return `${hourWord}${minuteWord} ${period}`;
+}
+
+export function kitchenClosedMessage({ openTime = "", closeTime = "", now = new Date() } = {}) {
+  const open = clockMinutes(openTime);
+  const close = clockMinutes(closeTime);
+  if (open == null || close == null || open === close) {
+    return "";
+  }
+  const current = hermosilloMinutes(now);
+  const openNow = open < close
+    ? current >= open && current < close
+    : current >= open || current < close;
+  if (openNow) {
+    return "";
+  }
+  return `Hola, bienvenido a Pizzería Hermosillo. Por el momento estamos cerrados. Te recordamos que nuestro horario de atención es de ${speakClock(openTime)} a ${speakClock(closeTime)}. Que tengas buen día.`;
 }
 
 function promoDayKeys(description) {
@@ -284,6 +351,8 @@ export async function getMenuTool(businessId) {
     extra_price: menuPrices.extra,
     extra_prices: extraPrices,
     promo_pair: menuPrices.promoPair,
+    open_time: menuPrices.openTime || "",
+    close_time: menuPrices.closeTime || "",
     payments,
     unavailableIngredients: [...unavailable],
     products: products.map(product => ({

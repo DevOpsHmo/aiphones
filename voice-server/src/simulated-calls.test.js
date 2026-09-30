@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { correctHeard, heardFulfillment, matchPizza, orderedTurn, speakPostal } from "./call-flow.js";
-import { deliveryAddress, postalFromColony } from "./tools.js";
+import { deliveryAddress, kitchenClosedMessage, postalFromColony } from "./tools.js";
 import { interruptionDecision } from "./turn-policy.js";
 
 function play(lines, start = {}) {
@@ -288,6 +288,18 @@ test("simulacion 18 que trae lee la pizza y el extra no la cambia", () => {
   assert.notEqual(drink.transfer, true);
   const repeated = orderedTurn(drink.state, "regular");
   assert.notEqual(repeated.say, drink.say);
+});
+
+test("simulacion 19 fuera de horario avisa que estan cerrados", () => {
+  const noon = new Date("2026-09-30T19:00:00Z");
+  const night = new Date("2026-10-01T06:00:00Z");
+  assert.equal(kitchenClosedMessage({ openTime: "11:00", closeTime: "22:00", now: noon }), "");
+  const closed = kitchenClosedMessage({ openTime: "11:00", closeTime: "22:00", now: night });
+  assert.match(closed, /estamos cerrados/);
+  assert.match(closed, /las once de la mañana/);
+  assert.match(closed, /las diez de la noche/);
+  assert.match(closed, /Que tengas buen día/);
+  assert.equal(kitchenClosedMessage({ openTime: "", closeTime: "", now: night }), "");
 });
 
 test("simulacion 10 la hawaiana apagada no se vende", () => {

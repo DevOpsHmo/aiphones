@@ -58,6 +58,7 @@ export function createRealtimeSession({
   menuText = "",
   menuPrices = null,
   menuDescriptions = {},
+  closedGreeting = "",
   resumeTransfer = false
 }) {
   const openaiSocket =
@@ -80,6 +81,8 @@ export function createRealtimeSession({
     orderPlaced: false,
     hangupScheduled: false,
     cancelled: false,
+    closed: Boolean(closedGreeting),
+    closeWhenSpoken: Boolean(closedGreeting),
     flow: {
       prices: menuPrices || undefined,
       descriptions: menuDescriptions || {}
@@ -145,13 +148,14 @@ export function createRealtimeSession({
   function sendGreeting() {
     if (greetingSent || openaiSocket.readyState !== WebSocket.OPEN) return;
     greetingSent = true;
-    lastSpoken = "Hola, bienvenido a Pizzería Hermosillo. ¿Cuál es su nombre?";
+    const phrase = closedGreeting || "Hola, bienvenido a Pizzería Hermosillo. ¿Cuál es su nombre?";
+    lastSpoken = phrase;
     openaiSocket.send(JSON.stringify({
       type: "response.create",
       response: {
         output_modalities: ["audio"],
         tool_choice: "none",
-        instructions: "Di una sola vez, sin repetirla, exactamente esta frase y después guarda silencio: Hola, bienvenido a Pizzería Hermosillo. ¿Cuál es su nombre?"
+        instructions: `Di una sola vez, sin repetirla, exactamente esta frase y después guarda silencio: ${phrase}`
       }
     }));
   }
@@ -630,6 +634,9 @@ ${menuText || "Menú no disponible."}
               callState.heardStreet = heardStreet;
             }
             armSilence();
+            if (callState.closed) {
+              return;
+            }
             if (wantsHuman(event.transcript)) {
               callState.transferAsked = true;
               redirectToHuman();

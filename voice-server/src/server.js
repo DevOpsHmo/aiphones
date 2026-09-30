@@ -21,6 +21,7 @@ import {
 } from "./supabase.js";
 import {
   formatMenuForPrompt,
+  kitchenClosedMessage,
   getMenuTool,
   refreshHermosilloCatalog,
   abandonHumanTransfer,
@@ -411,6 +412,10 @@ wss.on(
                     .filter(product => product.description)
                     .map(product => [product.name, product.description])
                 ),
+                closedGreeting: kitchenClosedMessage({
+                  openTime: menu?.open_time,
+                  closeTime: menu?.close_time
+                }),
                 resumeTransfer: params.resume === "transfer"
               });
 
