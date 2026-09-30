@@ -629,6 +629,43 @@ ${menuText || "Menú no disponible."}
                 callState.transferAsked = true;
                 speakExact(turn.say);
                 redirectToHuman();
+              } else if (turn.save && !callState.orderPlaced && turn.state.adding) {
+                const flow = turn.state;
+                const wanted = [...(flow.items || [])];
+                if (flow.product && flow.size) {
+                  wanted.push({ product: flow.product, size: flow.size });
+                }
+                getMenuTool(businessId).then(async menu => {
+                  const foldName = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/pepperoni/g, "peperoni").replace(/hawaiana/g, "hawaina");
+                  for (const line of wanted) {
+                    const name = foldName(line.product);
+                    const product = (menu.products || []).find(item => {
+                      const have = foldName(item.name);
+                      return have.includes(name) || name.includes(have);
+                    });
+                    if (!product) {
+                      throw new Error("No encontré esa pizza en el menú.");
+                    }
+                    await updateLastOrderTool({
+                      businessId,
+                      callerPhone,
+                      customerName: flow.name,
+                      productId: product.id,
+                      size: line.size,
+                      quantity: 1
+                    });
+                  }
+                  return { success: true };
+                }).then(result => {
+                  if (result?.success) {
+                    callState.orderPlaced = true;
+                    callState.closeWhenSpoken = true;
+                    speakExact(turn.say);
+                  }
+                }).catch(error => {
+                  console.error("No se pudo agregar al pedido:", error.message);
+                  speakExact(error.message || "No pude agregar eso al pedido.");
+                });
               } else if (turn.save && !callState.orderPlaced) {
                 const flow = turn.state;
                 getMenuTool(businessId).then(menu => {

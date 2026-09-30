@@ -418,6 +418,7 @@ export function orderedTurn(state, utterance) {
     };
   }
   if (/\b(agregar|otra pizza|pedido anterior)\b/.test(text)) {
+    next.adding = true;
     return { state: next, hangup: false, say: "¿Qué pizza desea agregar? Las que ya tenía se quedan." };
   }
   if (/\bprecio\b/.test(text)) {
