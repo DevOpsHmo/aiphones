@@ -492,8 +492,8 @@ export function deliveryAddress({ street = "", number = "", colony = "", postalC
   }
   const blobParts = blob.split(",").map(part => part.trim()).filter(part => !/hermosillo|sonora|c\.?\s*p/i.test(part));
   if (!house) {
-    const fromStreet = streetName.match(/\b(\d{1,5})\b/);
-    house = fromStreet?.[1] || blob.match(/\b(\d{1,5})\b(?!\d)/)?.[1] || "";
+    const fromStreet = streetNumber(street || streetName || blob);
+    house = fromStreet || streetName.match(/\b(\d{1,5})\b/)?.[1] || blob.match(/\b(\d{1,5})\b/)?.[1] || "";
     if (house === postal) {
       house = "";
     }

@@ -1,7 +1,7 @@
 import { mushroomIntent, mentionedQuantity } from "./turn-policy.js";
 import { buildConfirmation, paymentForOrder, priceLine } from "./confirmation.js";
 import { matchIngredients } from "./menu-ingredients.js";
-import { parseSpokenPostalCode } from "./tools.js";
+import { parseSpokenPostalCode, streetNumber } from "./tools.js";
 
 export const MENU_PIZZAS = [
   "BBQ Chicken",
@@ -80,7 +80,42 @@ export function mentionedSize(utterance) {
 
 export function matchPizza(utterance) {
   const text = fold(utterance);
+  if (/hawai|saway|awaina|awaiana/.test(text)) {
+    return "Hawaina";
+  }
+  if (/boneless|bonles|bodwe|baule|bound/.test(text)) {
+    return "Lucco Boneless";
+  }
+  if (/\bdeluxe\b|\bde luz\b|\bluz\b/.test(text)) {
+    return "Deluxe";
+  }
   return MENU_PIZZAS.find(name => text.includes(fold(name))) || "";
+}
+
+function heardSize(utterance) {
+  const text = fold(utterance);
+  if (/famil/.test(text)) {
+    return "familiar";
+  }
+  return mentionedSize(utterance);
+}
+
+function sameQuestion(next, say) {
+  if (next.lastSay === say) {
+    next.sameCount = (next.sameCount || 0) + 1;
+  } else {
+    next.sameCount = 0;
+    next.lastSay = say;
+  }
+  if (next.sameCount >= 2) {
+    return {
+      state: next,
+      hangup: false,
+      transfer: true,
+      say: "Disculpe, lo transferiré con un humano."
+    };
+  }
+  return { state: next, hangup: false, say };
 }
 
 export function emptyFacts() {
@@ -339,7 +374,7 @@ export function orderedTurn(state, utterance) {
     ...state
   };
   const text = fold(utterance).replace(/[.,!?¿¡]/g, " ").replace(/\s+/g, " ").trim();
-  if (/\b(ya te lo dije|no entiendes|no me escuch|estoy harto|confund|tres veces|cuatro veces)\b/.test(text)) {
+  if (/\b(ya te lo dije|no entiendes|no me escuch|estoy harto|confund|tres veces|cuatro veces|pendeja|pendejo|cabron|mierda|estupida|idiota|por que no puedes)\b/.test(text)) {
     return {
       state: next,
       hangup: false,
@@ -361,14 +396,14 @@ export function orderedTurn(state, utterance) {
     }
     return { state: next, hangup: false, say: "¿Cuál es su nombre?" };
   }
-  const pizza = /hawaiana/.test(text) ? "Hawaina" : matchPizza(utterance);
+  const pizza = matchPizza(text);
   if (pizza) {
     if ((next.unavailable || []).some(item => fold(item) === fold(pizza))) {
       return { state: next, hangup: false, say: `La pizza ${pizza} no está disponible. ¿Qué otra desea?` };
     }
     next.product = pizza;
   }
-  const size = mentionedSize(utterance);
+  const size = heardSize(text);
   if (size) {
     next.size = size;
   }
@@ -380,12 +415,12 @@ export function orderedTurn(state, utterance) {
   }
   if (!next.product) {
     if (/\bpizza\b/.test(text)) {
-      return { state: next, hangup: false, say: "No manejamos esa. Tenemos mexicana, peperoni y deluxe. ¿Cuál desea?" };
+      return sameQuestion(next, "No manejamos esa. Tenemos mexicana, peperoni y deluxe. ¿Cuál desea?");
     }
-    return { state: next, hangup: false, say: "¿Qué desea ordenar?" };
+    return sameQuestion(next, "¿Qué desea ordenar?");
   }
   if (!next.size) {
-    return { state: next, hangup: false, say: `${next.product}, ¿mediana, grande o familiar?` };
+    return sameQuestion(next, `${next.product}, ¿mediana, grande o familiar?`);
   }
   if (!next.offeredMore && !/\bno\b/.test(text)) {
     next.offeredMore = true;
@@ -409,25 +444,27 @@ export function orderedTurn(state, utterance) {
     if (/^\d{5}$/.test(postal)) {
       next.postalCode = postal;
     } else {
-      return { state: next, hangup: false, say: "¿Cuál es el código postal?" };
+      return sameQuestion(next, "¿Cuál es el código postal?");
     }
   }
+  const postalSpeech = /\b(ochenta|cero|diez|ciento|veinte|treinta)\b/.test(text) || Boolean(parseSpokenPostalCode(utterance));
   if (!next.colony) {
-    if (text.length > 2 && !/^\d+$/.test(text) && !parseSpokenPostalCode(utterance)) {
+    if (text.length > 2 && !/^\d+$/.test(text) && !postalSpeech) {
       next.colony = utterance.trim();
     } else {
-      return { state: next, hangup: false, say: `Muy bien ${next.name}, ¿y la colonia cuál es?` };
+      return sameQuestion(next, `Muy bien ${next.name}, ¿y la colonia cuál es?`);
     }
   }
   if (!next.street) {
-    if (/\b(calle|privada|numero|n[uú]mero)\b/.test(text) || /\d/.test(text)) {
+    if (streetNumber(utterance) || /\b(calle|privada|avenida|numero|n[uú]mero)\b/.test(text)) {
       next.street = utterance.trim();
+      next.house = streetNumber(utterance);
     } else {
-      return { state: next, hangup: false, say: "¿Cuál es la calle y el número?" };
+      return sameQuestion(next, "¿Cuál es la calle y el número?");
     }
   }
   if (!next.agreed) {
-    if (/\b(si|correcto|de acuerdo|esta bien)\b/.test(text) && next.askedAgree) {
+    if (/\b(si|confirmo|confirmado|correcto|de acuerdo|esta bien|estaria bien)\b/.test(text) && next.askedAgree) {
       next.agreed = true;
     } else if (!next.askedAgree) {
       next.askedAgree = true;

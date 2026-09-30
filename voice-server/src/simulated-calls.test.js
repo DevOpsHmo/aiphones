@@ -71,6 +71,36 @@ test("simulacion 6 el cierre pide un si antes de confirmar", () => {
   assert.match(yes.said.at(-1), /30 minutos/);
 });
 
+test("simulacion 12 familias es familiar y veracruz cincuenta y seis es calle", () => {
+  const sized = play(["familias"], { name: "Oscar", product: "Mexicana" });
+  assert.equal(sized.state.size, "familiar");
+  assert.match(sized.said.at(-1), /agregar algo más/i);
+  const street = play(["Veracruz cincuenta y seis"], {
+    name: "Oscar",
+    product: "Mexicana",
+    size: "familiar",
+    offeredMore: true,
+    fulfillment: "delivery",
+    postalCode: "83010",
+    colony: "Cinco de Mayo"
+  });
+  assert.match(street.state.street, /Veracruz/i);
+  assert.equal(street.state.house, "56");
+});
+
+test("simulacion 13 sawayana es hawaiana y no repite para siempre", () => {
+  const heard = play(["Ola Pista Sawayana"], { name: "Oscar" });
+  assert.equal(heard.state.product, "Hawaina");
+  let state = { name: "Oscar", product: "Mexicana" };
+  let last = "";
+  for (let i = 0; i < 3; i += 1) {
+    const turn = orderedTurn(state, "que");
+    state = turn.state;
+    last = turn.say;
+  }
+  assert.equal(last, "Disculpe, lo transferiré con un humano.");
+});
+
 test("simulacion 11 si se enoja transfiere a un humano", () => {
   const call = play(["ya te lo dije tres veces"], { name: "Ricardo", postalCode: "" });
   assert.equal(call.said[0], "Disculpe, lo transferiré con un humano.");
