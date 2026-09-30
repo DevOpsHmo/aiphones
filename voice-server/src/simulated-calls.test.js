@@ -60,15 +60,41 @@ test("simulacion 6 el cierre pide un si antes de confirmar", () => {
     "domicilio",
     "ochenta y tres ciento cincuenta y siete",
     "Issste Federal",
-    "Lázaro Cárdenas número 1"
+    "Lázaro Cárdenas número 1",
+    "no"
   ]);
   assert.equal(call.state.name, "Ricardo");
   assert.equal(call.state.postalCode, "83157");
   assert.match(call.said.at(-1), /Está de acuerdo/);
+  assert.match(call.said.at(-2), /bebida o soda/);
   const yes = play(["sí"], call.state);
   assert.equal(yes.state.agreed, true);
   assert.match(yes.said.at(-1), /confirmado con éxito/);
   assert.match(yes.said.at(-1), /30 minutos/);
+  assert.match(yes.said.at(-1), /Hasta pronto/);
+});
+
+test("simulacion 15 dos pizzas se confirman juntas y la calle queda sin puntos", () => {
+  const call = play([
+    "Ivan Valencia",
+    "una pizza hawaiana",
+    "familiar",
+    "y una pizza de pepperoni mediana",
+    "no",
+    "a domicilio",
+    "83280",
+    "Colonia San Pablo.",
+    "Pablitos . 13",
+    "no"
+  ]);
+  assert.equal(call.state.items[0].product, "Hawaina");
+  assert.equal(call.state.items[0].size, "familiar");
+  assert.equal(call.state.product, "Peperoni");
+  assert.equal(call.state.size, "mediana");
+  assert.match(call.said.at(-1), /familiar de Hawaina/);
+  assert.match(call.said.at(-1), /mediana de Peperoni/);
+  assert.doesNotMatch(call.state.street, /\./);
+  assert.doesNotMatch(call.state.colony, /colonia/i);
 });
 
 test("simulacion 12 familias es familiar y veracruz cincuenta y seis es calle", () => {

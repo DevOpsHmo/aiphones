@@ -632,13 +632,30 @@ ${menuText || "Menú no disponible."}
               } else if (turn.save && !callState.orderPlaced) {
                 const flow = turn.state;
                 getMenuTool(businessId).then(menu => {
-                  const product = (menu.products || []).find(item =>
-                    String(item.name || "").toLowerCase().includes(String(flow.product || "").toLowerCase())
-                  );
-                  if (!product) {
+                  const wanted = [...(flow.items || [])];
+                  if (flow.product && flow.size) {
+                    wanted.push({ product: flow.product, size: flow.size });
+                  }
+                  const foldName = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/pepperoni/g, "peperoni").replace(/hawaiana/g, "hawaina");
+                  const items = wanted.map(line => {
+                    const name = foldName(line.product);
+                    const product = (menu.products || []).find(item => {
+                      const have = foldName(item.name);
+                      return have.includes(name) || name.includes(have);
+                    });
+                    return product ? { product_id: product.id, quantity: 1, size: line.size } : null;
+                  });
+                  if (items.some(item => !item)) {
+                    callState.flow = { ...flow, agreed: false, askedAgree: false };
                     speakExact("No encontré esa pizza en el menú. ¿Cuál desea?");
                     return null;
                   }
+                  const place = `${flow.street}, ${flow.colony}, C.P. ${flow.postalCode}, Hermosillo, Sonora`
+                    .replace(/\./g, " ")
+                    .replace(/\bcolonia\b/gi, "")
+                    .replace(/\s+/g, " ")
+                    .replace(/\s+,/g, ",")
+                    .trim();
                   return createOrderTool({
                     businessId,
                     callId,
@@ -646,10 +663,11 @@ ${menuText || "Menú no disponible."}
                     customerPhone: callerPhone,
                     orderType: "delivery",
                     street: flow.street,
+                    number: flow.house,
                     colony: flow.colony,
                     postalCode: flow.postalCode,
-                    address: `${flow.street}, ${flow.colony}, C.P. ${flow.postalCode}, Hermosillo, Sonora`,
-                    items: [{ product_id: product.id, quantity: 1, size: flow.size }],
+                    address: place,
+                    items,
                     confirmed: true,
                     paymentMethod: "efectivo"
                   });
@@ -707,7 +725,7 @@ ${menuText || "Menú no disponible."}
             }
             if (
               callState.orderPlaced &&
-              /hasta luego/i.test(event.transcript) &&
+              /hasta luego|hasta pronto/i.test(event.transcript) &&
               !callState.hangupScheduled &&
               !humanTransferStarted(callSid) &&
               !wantsHuman(event.transcript)

@@ -83,6 +83,9 @@ export function matchPizza(utterance) {
   if (/hawai|saway|awaina|awaiana/.test(text)) {
     return "Hawaina";
   }
+  if (/peperoni|pepperoni/.test(text)) {
+    return "Peperoni";
+  }
   if (/boneless|bonles|bodwe|baule|bound/.test(text)) {
     return "Lucco Boneless";
   }
@@ -405,7 +408,7 @@ export function orderedTurn(state, utterance) {
     unavailable: [],
     ...state
   };
-  const text = fold(utterance).replace(/[.,!?¿¡]/g, " ").replace(/\s+/g, " ").trim();
+  const text = fold(utterance).replace(/[.,!?¿¡]/g, " ").replace(/\bno la pizza\b/g, "una pizza").replace(/\s+/g, " ").trim();
   if (/\b(ya te lo dije|no entiendes|no me escuch|estoy harto|confund|tres veces|cuatro veces|pendeja|pendejo|cabron|mierda|estupida|idiota|por que no puedes)\b/.test(text)) {
     return {
       state: next,
@@ -429,13 +432,17 @@ export function orderedTurn(state, utterance) {
     return { state: next, hangup: false, say: "¿Cuál es su nombre?" };
   }
   const pizza = matchPizza(text);
+  const size = heardSize(text);
+  if (pizza && next.product && pizza !== next.product && next.size) {
+    next.items = [...(next.items || []), { product: next.product, size: next.size }];
+    next.size = "";
+  }
   if (pizza) {
     if ((next.unavailable || []).some(item => fold(item) === fold(pizza))) {
       return { state: next, hangup: false, say: `La pizza ${pizza} no está disponible. ¿Qué otra desea?` };
     }
     next.product = pizza;
   }
-  const size = heardSize(text);
   if (size) {
     next.size = size;
   }
@@ -500,6 +507,33 @@ export function orderedTurn(state, utterance) {
       return sameQuestion(next, "¿Cuál es la calle y el número?");
     }
   }
+  const orderLine = () => {
+    const lines = [...(next.items || [])];
+    if (next.product && next.size) {
+      lines.push({ product: next.product, size: next.size });
+    }
+    return lines.map(item => `una pizza ${item.size} de ${item.product}`).join(" y ") || "su pedido";
+  };
+  const tidyPlace = value => String(value || "")
+    .replace(/\./g, " ")
+    .replace(/\bcolonia\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  next.street = tidyPlace(next.street);
+  next.colony = tidyPlace(next.colony);
+  if (!next.drinkOffered && !next.drink?.kind) {
+    const drink = drinkQuestion(utterance, next.drink);
+    if (drink) {
+      next.drink = drink.drink;
+      next.drinkOffered = true;
+      return { state: next, hangup: false, say: drink.say };
+    }
+    if (!/\bno\b/.test(text)) {
+      next.drinkOffered = true;
+      return { state: next, hangup: false, say: "Disculpe, ¿desea agregar alguna bebida o soda?" };
+    }
+    next.drinkOffered = true;
+  }
   if (!next.agreed) {
     if (/\b(si|confirmo|confirmado|correcto|de acuerdo|esta bien|estaria bien)\b/.test(text) && next.askedAgree) {
       next.agreed = true;
@@ -508,7 +542,7 @@ export function orderedTurn(state, utterance) {
       return {
         state: next,
         hangup: false,
-        say: `Su pedido es una pizza ${next.size} de ${next.product}, a domicilio, en ${next.street}, colonia ${next.colony}, código ${next.postalCode}. ¿Está de acuerdo?`
+        say: `Su pedido es ${orderLine()}, a domicilio, en ${next.street}, colonia ${next.colony}, código ${next.postalCode}. ¿Está de acuerdo?`
       };
     } else {
       return { state: next, hangup: false, say: "¿Está de acuerdo con su pedido?" };
@@ -518,6 +552,6 @@ export function orderedTurn(state, utterance) {
     state: next,
     hangup: false,
     save: true,
-    say: "Su pedido quedó confirmado con éxito. Llegará a su domicilio en aproximadamente 30 minutos. Que tenga buen día y gracias por llamar a Pizzería Hermosillo."
+    say: `Su pedido quedó confirmado con éxito. Su orden es ${orderLine()}. Llegará a su domicilio en aproximadamente 30 minutos. Que tenga buen día y gracias por llamar a Pizzería Hermosillo. Hasta pronto.`
   };
 }
