@@ -383,9 +383,10 @@ wss.on(
             );
 
             let menuText = "";
+            let menu = null;
 
             try {
-              const menu = await getMenuTool(businessId);
+              menu = await getMenuTool(businessId);
               menuText = formatMenuForPrompt(menu);
             } catch (error) {
               console.error(
@@ -404,6 +405,12 @@ wss.on(
                 callerPhone,
                 businessId,
                 menuText,
+                menuPrices: menu?.pizza_sizes || null,
+                menuDescriptions: Object.fromEntries(
+                  (menu?.products || [])
+                    .filter(product => product.description)
+                    .map(product => [product.name, product.description])
+                ),
                 resumeTransfer: params.resume === "transfer"
               });
 

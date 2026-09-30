@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { correctHeard, heardFulfillment, matchPizza, orderedTurn, speakPostal } from "./call-flow.js";
-import { deliveryAddress } from "./tools.js";
+import { deliveryAddress, postalFromColony } from "./tools.js";
 import { interruptionDecision } from "./turn-policy.js";
 
 function play(lines, start = {}) {
@@ -207,6 +207,61 @@ test("simulacion 15 boneless mal oido, soda que no se repite y cancelar solo la 
   const whole = orderedTurn(stuck.state, "cancela todo el pedido");
   assert.equal(whole.cancel, true);
   assert.match(whole.say, /Hasta pronto/);
+});
+
+test("simulacion 16 bufalo se entiende, los ingredientes se leen y el precio sale del menu", () => {
+  const first = orderedTurn({ name: "Oscar" }, "Una pizza de boneless búfalo tamaño familiar.");
+  assert.equal(first.state.product, "Lucco Boneless");
+  assert.equal(first.state.size, "familiar");
+  assert.equal(first.state.sauce, "buffalo");
+  assert.match(first.say, /agregar algo más/i);
+  assert.doesNotMatch(first.say, /bbq|buffalo/i);
+  const plain = orderedTurn({ name: "Oscar", product: "Lucco Boneless", size: "familiar" }, "Búfalo.");
+  assert.equal(plain.state.sauce, "buffalo");
+  assert.notEqual(plain.transfer, true);
+  const info = orderedTurn({
+    name: "Esteban",
+    descriptions: { Sinaloense: "Chilorio, champiñones, cebolla y pimiento verde." }
+  }, "¿Me puedes decir qué trae la pizza sinaloense?");
+  assert.match(info.say, /Chilorio/);
+  assert.doesNotMatch(info.say, /mediana/);
+  const again = orderedTurn(info.state, "Sí, pero quiero saber los ingredientes de esa pizza.");
+  assert.match(again.say, /Chilorio/);
+  assert.notEqual(again.transfer, true);
+  const price = orderedTurn({
+    name: "Esteban",
+    product: "Sinaloense",
+    prices: { mediana: 180, grande: 210, familiar: 240 }
+  }, "¿Cuánto cuestan?");
+  assert.match(price.say, /180/);
+  assert.match(price.say, /210/);
+  assert.match(price.say, /240/);
+  assert.doesNotMatch(price.say, /\b200\b/);
+});
+
+test("simulacion 17 sin codigo postal la colonia modelo completa el codigo", () => {
+  const ready = {
+    name: "Ana",
+    product: "Mexicana",
+    size: "grande",
+    offeredMore: true,
+    fulfillment: "delivery"
+  };
+  const unknown = orderedTurn(ready, "no me se el codigo postal");
+  assert.equal(unknown.say, "No te preocupes, dime qué colonia es");
+  assert.equal(unknown.state.postalCode, "");
+  const short = orderedTurn(ready, "no me lo se");
+  assert.equal(short.say, "No te preocupes, dime qué colonia es");
+  const colony = orderedTurn(unknown.state, "colonia modelo");
+  assert.equal(colony.state.colony, "Modelo");
+  assert.equal(colony.state.postalCode, "83190");
+  assert.match(colony.say, /ochenta y tres ciento noventa/);
+  assert.match(colony.say, /calle y el número/);
+  assert.equal(postalFromColony("cinco de mayo").postalCode, "83010");
+  assert.equal(postalFromColony("issste").postalCode, "83157");
+  const several = orderedTurn(unknown.state, "Montecarlo");
+  assert.match(several.say, /Hay más de una/);
+  assert.equal(several.state.postalCode, "");
 });
 
 test("simulacion 10 la hawaiana apagada no se vende", () => {

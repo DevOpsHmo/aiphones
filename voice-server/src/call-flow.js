@@ -1,7 +1,7 @@
 import { mushroomIntent, mentionedQuantity } from "./turn-policy.js";
 import { buildConfirmation, paymentForOrder, priceLine } from "./confirmation.js";
 import { matchIngredients } from "./menu-ingredients.js";
-import { formatHeardStreet, parseSpokenPostalCode, streetNumber } from "./tools.js";
+import { formatHeardStreet, parseSpokenPostalCode, postalFromColony, streetNumber } from "./tools.js";
 
 export const MENU_PIZZAS = [
   "BBQ Chicken",
@@ -89,6 +89,50 @@ export function drinkQuestion(utterance, drink = {}) {
     return { drink: { kind, volume } };
   }
   return null;
+}
+
+export function heardSauce(utterance) {
+  const text = fold(utterance);
+  if (/buffalo|bufalo|bufal/.test(text)) {
+    return "buffalo";
+  }
+  if (/\bbbq\b|barbecue|barbacoa|barbiqu|barbicu|barbi/.test(text)) {
+    return "bbq";
+  }
+  return "";
+}
+
+export function sauceWord(sauce) {
+  if (sauce === "bbq") {
+    return "barbiquiú";
+  }
+  if (sauce === "buffalo") {
+    return "búfalo";
+  }
+  return sauce || "";
+}
+
+function asksIngredients(text) {
+  return /\b(ingredientes?|que trae|que lleva|que contiene|de que esta)\b/.test(text);
+}
+
+function asksPrice(text) {
+  return /\b(precio|precios|cuesta|cuestan|cuanto)\b/.test(text);
+}
+
+function priceSay(next) {
+  const prices = next.prices || { mediana: 200, grande: 220, familiar: 250 };
+  const money = value => String(Math.round(Number(value) || 0));
+  return `Mediana ${money(prices.mediana)}, grande ${money(prices.grande)} y familiar ${money(prices.familiar)}.`;
+}
+
+function describePizza(descriptions, name) {
+  const wanted = fold(name);
+  const found = Object.entries(descriptions || {}).find(([key]) => {
+    const have = fold(key);
+    return have === wanted || have.includes(wanted) || wanted.includes(have);
+  });
+  return found ? String(found[1] || "").replace(/\s+/g, " ").trim() : "";
 }
 
 export function mentionedSize(utterance) {
@@ -520,9 +564,6 @@ export function orderedTurn(state, utterance) {
     next.adding = true;
     return { state: next, hangup: false, say: "¿Qué pizza desea agregar? Las que ya tenía se quedan." };
   }
-  if (/\bprecio\b/.test(text)) {
-    return { state: next, hangup: false, say: "Mediana 200, grande 220 y familiar 250." };
-  }
   if (!next.name) {
     const bare = text.trim().match(/^(?:me llamo |soy )?([a-z]{3,}(?:\s+[a-z]{3,}){0,2})$/);
     if (bare && !matchPizza(utterance) && !mentionedSize(utterance)) {
@@ -547,6 +588,25 @@ export function orderedTurn(state, utterance) {
   if (size) {
     next.size = size;
   }
+  if (heardSauce(text) && fold(next.product).includes("boneless")) {
+    next.sauce = heardSauce(text);
+  }
+  if (asksIngredients(text)) {
+    if (!next.product) {
+      return { state: next, hangup: false, say: "¿De cuál pizza quiere saber los ingredientes?" };
+    }
+    const description = describePizza(next.descriptions, next.product);
+    return {
+      state: next,
+      hangup: false,
+      say: description
+        ? `La pizza ${next.product} trae ${description}.`
+        : `No tengo anotados los ingredientes de la pizza ${next.product}.`
+    };
+  }
+  if (asksPrice(text)) {
+    return { state: next, hangup: false, say: priceSay(next) };
+  }
   const fulfillment = heardFulfillment(text);
   if (fulfillment) {
     next.fulfillment = fulfillment;
@@ -560,15 +620,8 @@ export function orderedTurn(state, utterance) {
   if (!next.size) {
     return sameQuestion(next, `${next.product}, ¿mediana, grande o familiar?`);
   }
-  if (fold(next.product).includes("boneless")) {
-    if (/\bbuffalo\b/.test(text)) {
-      next.sauce = "buffalo";
-    } else if (/\bbbq\b/.test(text)) {
-      next.sauce = "bbq";
-    }
-    if (!next.sauce) {
-      return sameQuestion(next, "Lucco Boneless, ¿salsa bbq o buffalo?");
-    }
+  if (fold(next.product).includes("boneless") && !next.sauce) {
+    return sameQuestion(next, "Lucco Boneless, ¿salsa barbiquiú o búfalo?");
   }
   if (!next.offeredMore && !/\bno\b/.test(text) && !/\b(coca|soda|fresa)\b/.test(text)) {
     next.offeredMore = true;
@@ -598,11 +651,33 @@ export function orderedTurn(state, utterance) {
     return { state: next, hangup: false, say: confirmation.spoken };
   }
   const postal = text.match(/\b(\d{5})\b/)?.[1] || parseSpokenPostalCode(utterance);
+  const doesNotKnowPostal = /\bno (me lo |me |lo )?(se|acuerdo|recuerdo)\b/.test(text)
+    || /\bno (tengo|manejo)\b/.test(text)
+    || /^no$/.test(text);
+  let learnedPostal = false;
   if (!next.postalCode) {
     if (/^\d{5}$/.test(postal)) {
       next.postalCode = postal;
     } else {
-      return sameQuestion(next, "¿Cuál es el código postal?");
+      const found = postalFromColony(utterance);
+      if (found.postalCode) {
+        next.postalCode = found.postalCode;
+        next.colony = found.colony;
+        learnedPostal = true;
+      } else if (found.options.length) {
+        next.postalFromColony = true;
+        const choices = found.options.slice(0, 3)
+          .map(item => `${item.colony}, código ${speakPostal(item.postalCode)}`)
+          .join(", o ");
+        return { state: next, hangup: false, say: `Hay más de una. ¿Es ${choices}?` };
+      } else if (doesNotKnowPostal && !next.postalFromColony) {
+        next.postalFromColony = true;
+        return { state: next, hangup: false, say: "No te preocupes, dime qué colonia es" };
+      } else if (next.postalFromColony) {
+        return sameQuestion(next, "No encontré esa colonia en Hermosillo. ¿Me dice otra vez la colonia?");
+      } else {
+        return sameQuestion(next, "¿Cuál es el código postal?");
+      }
     }
   }
   const postalSpeech = /\b(ochenta|cero|diez|ciento|veinte|treinta)\b/.test(text) || Boolean(parseSpokenPostalCode(utterance));
@@ -619,7 +694,8 @@ export function orderedTurn(state, utterance) {
       next.house = streetNumber(utterance);
       next.street = heard.replace(/\s+\d+$/, "").trim();
     } else {
-      return sameQuestion(next, "¿Cuál es la calle y el número?");
+      const known = learnedPostal ? `Colonia ${next.colony}, código ${speakPostal(next.postalCode)}. ` : "";
+      return sameQuestion(next, `${known}¿Cuál es la calle y el número?`);
     }
   }
   const orderLine = () => {
@@ -627,7 +703,7 @@ export function orderedTurn(state, utterance) {
     if (next.product && next.size) {
       lines.push({ product: next.product, size: next.size, sauce: next.sauce || "" });
     }
-    const pizzas = lines.map(item => `una pizza ${item.size} de ${item.product}${item.sauce ? ` con ${item.sauce}` : ""}`).join(" y ");
+    const pizzas = lines.map(item => `una pizza ${item.size} de ${item.product}${item.sauce ? ` con ${sauceWord(item.sauce)}` : ""}`).join(" y ");
     const drink = next.drink || {};
     if (!drink.volume) {
       return pizzas || "su pedido";

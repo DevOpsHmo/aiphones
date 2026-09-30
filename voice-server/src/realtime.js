@@ -56,6 +56,8 @@ export function createRealtimeSession({
   knownName = "",
   knownAddress = "",
   menuText = "",
+  menuPrices = null,
+  menuDescriptions = {},
   resumeTransfer = false
 }) {
   const openaiSocket =
@@ -74,7 +76,15 @@ export function createRealtimeSession({
   let timeWarned = false;
   let silenceTimer = null;
   let askedIfThere = false;
-  const callState = { orderPlaced: false, hangupScheduled: false, cancelled: false };
+  const callState = {
+    orderPlaced: false,
+    hangupScheduled: false,
+    cancelled: false,
+    flow: {
+      prices: menuPrices || undefined,
+      descriptions: menuDescriptions || {}
+    }
+  };
   let facts = emptyFacts();
   const playedResponses = new Set();
   const pendingAssistant = new Map();
@@ -243,7 +253,7 @@ ${
 Habla de usted, cálida, breve y solo en español. Una pregunta por turno. Prohibido "opción 1", "opción 2", "opción A", "déjame", "déjeme", "voy a revisar", "déjame pensar" y palabras de otro idioma. Prohibido pedir calle, número o colonia antes de saber si el pedido es a domicilio o para recoger.
 
 R1. No cambies un nombre, calle, número, colonia ni código. Si no lo oíste, di "¿Me lo repite?" sin proponer otro.
-R2. Solo menciona productos escritos en MENÚ. Si piden pizza boneless y no está en MENÚ, di "No manejamos pizza boneless." Toda pizza del menú cuesta lo mismo: mediana 200, grande 220, familiar 250, más el extra si lo piden. Si preguntan un precio, di ese número. Nunca digas que no tienes el precio.
+R2. Solo menciona productos escritos en MENÚ. Si piden pizza boneless y no está en MENÚ, di "No manejamos pizza boneless." Los precios son los del MENÚ, no 200, 220 ni 250 si ahí hay otros. Si preguntan un precio, di ese número. Nunca digas que no tienes el precio. La salsa se dice barbiquiú, nunca bbq.
 R3. No preguntes un dato que ya está en DATOS FIJOS. Si ya dijo su nombre, no preguntes el nombre otra vez.
 R4. Una sola pregunta. Prohibido decir "opción A", "opción B" u "opción C" en cualquier pregunta: pizza, colonia, código, domicilio o extras.
 R5. No inventes precios ni tiempos. El domicilio llega en 30 minutos.

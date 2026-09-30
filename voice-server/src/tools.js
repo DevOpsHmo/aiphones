@@ -21,9 +21,11 @@ const catalogPath = path.join(
 );
 
 let hermosilloCatalog = {};
+let colonyIndex = null;
 
 function loadHermosilloCatalog() {
   hermosilloCatalog = JSON.parse(readFileSync(catalogPath, "utf8"));
+  colonyIndex = null;
   return hermosilloCatalog;
 }
 
@@ -762,6 +764,64 @@ function colonyScore(said, official) {
   const distance = editDistance(said, official);
   const limit = Math.max(said.length, official.length);
   return Math.max(0, Math.round(100 - (distance / limit) * 100));
+}
+
+function coloniesByName() {
+  if (colonyIndex) {
+    return colonyIndex;
+  }
+  const map = new Map();
+  for (const [postalCode, names] of Object.entries(hermosilloCatalog)) {
+    for (const name of names) {
+      const key = foldColony(name);
+      if (!map.has(key)) {
+        map.set(key, []);
+      }
+      map.get(key).push({ colony: name, postalCode });
+    }
+  }
+  colonyIndex = map;
+  return map;
+}
+
+export function postalFromColony(utterance) {
+  const said = foldColony(String(utterance || "")
+    .replace(/\bno (me lo |me |lo )?(se|acuerdo|recuerdo)\b/gi, " ")
+    .replace(/\b(el c[oó]digo postal|c[oó]digo postal|c[oó]digo)\b/gi, " ")
+    .replace(/\b(colonia|fraccionamiento|fracc|barrio)\b/gi, " ")
+    .replace(/[^a-z0-9áéíóúñ\s]/gi, " "));
+  if (!said || said.length < 3 || /^(no|si|gracias)$/.test(said)) {
+    return { colony: "", postalCode: "", options: [] };
+  }
+  const exact = coloniesByName().get(said) || [];
+  if (exact.length === 1) {
+    return { colony: exact[0].colony, postalCode: exact[0].postalCode, options: [] };
+  }
+  if (exact.length > 1) {
+    return { colony: "", postalCode: "", options: exact };
+  }
+  const ranked = [];
+  for (const [key, rows] of coloniesByName()) {
+    const score = colonyScore(said, key);
+    if (score >= 88) {
+      ranked.push({ score, rows });
+    }
+  }
+  ranked.sort((left, right) => right.score - left.score);
+  if (!ranked.length) {
+    return { colony: "", postalCode: "", options: [] };
+  }
+  if (ranked.length === 1 || ranked[0].score - ranked[1].score >= 12) {
+    if (ranked[0].rows.length === 1) {
+      return { colony: ranked[0].rows[0].colony, postalCode: ranked[0].rows[0].postalCode, options: [] };
+    }
+    return { colony: "", postalCode: "", options: ranked[0].rows };
+  }
+  return {
+    colony: "",
+    postalCode: "",
+    options: ranked.slice(0, 3).flatMap(item => item.rows).slice(0, 4)
+  };
 }
 
 function matchColonies(colony, colonias) {
