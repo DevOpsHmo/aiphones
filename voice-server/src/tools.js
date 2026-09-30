@@ -1233,7 +1233,7 @@ export async function getLastOrderTool({
 
   const { data: orders, error } = await supabase
     .from("orders")
-    .select("id,customer_id,address,total,created_at,status")
+    .select("id,customer_id,address,total,created_at,status,notes,order_number")
     .eq("business_id", businessId)
     .gte("created_at", since)
     .neq("status", "cancelled")
@@ -1270,6 +1270,9 @@ export async function getLastOrderTool({
       customer_id: order.customer_id,
       customer_name: customer?.name || "",
       address: order.address,
+      status: order.status || "new",
+      notes: order.notes || "",
+      order_number: order.order_number || "",
       items: items || []
     };
   }
@@ -1341,6 +1344,12 @@ export async function updateLastOrderTool({
   if (!last.found) {
     throw new Error(
       "No hay un pedido reciente de este teléfono."
+    );
+  }
+
+  if (last.status === "delivering") {
+    throw new Error(
+      "Ese pedido ya va en camino. No se puede agregar nada."
     );
   }
 
@@ -1427,9 +1436,14 @@ export async function updateLastOrderTool({
     throw linesError;
   }
   const total = (lines || []).reduce((sum, line) => sum + Number(line.subtotal || 0), 0);
+  const added = `Se agregó ${product.name}${nextSize ? ` ${nextSize}` : ""}.`;
+  const previousNotes = String(last.notes || "").replace(/\[\[agregado]][\s\S]*?(?=\n|$)/g, "").trim();
   const { error: orderError } = await supabase
     .from("orders")
-    .update({ total })
+    .update({
+      total,
+      notes: `[[agregado]]${added}${previousNotes ? `\n${previousNotes}` : ""}`
+    })
     .eq("id", last.order_id);
 
   if (orderError) {

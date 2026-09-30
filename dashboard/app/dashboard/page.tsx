@@ -1160,6 +1160,18 @@ export default function DashboardPage() {
     }
   }
 
+  async function dismissAddon(order: Order) {
+    const notes = (order.notes || "").replace(/\[\[agregado]][^\n]*\n?/g, "").trim() || null;
+    setOrders(current =>
+      current.map(item => item.id === order.id ? { ...item, notes } : item)
+    );
+    if (isDemoOrder(order.id)) {
+      return;
+    }
+    const supabase = createClient();
+    await supabase.from("orders").update({ notes }).eq("id", order.id);
+  }
+
   async function flushStatusQueue() {
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
       return;
@@ -1522,8 +1534,17 @@ export default function DashboardPage() {
             (payload.new as { id: string }).id
           );
           if (full) {
-            setOrders(current =>
-              current.map(order =>
+            setOrders(current => {
+              const previous = current.find(order => order.id === full.id);
+              const becameAddon = full.notes?.includes("[[agregado]]")
+                && !previous?.notes?.includes("[[agregado]]");
+              if (becameAddon) {
+                setToast({
+                  type: "success",
+                  message: `Pedido #${full.order_number}: se agregó un producto. Revísalo antes de enviarlo.`
+                });
+              }
+              return current.map(order =>
                 order.id === full.id
                   ? {
                       ...full,
@@ -1532,8 +1553,8 @@ export default function DashboardPage() {
                         : null
                     }
                   : order
-              )
-            );
+              );
+            });
           }
         }
       )
@@ -2188,6 +2209,17 @@ export default function DashboardPage() {
           >
             <div className="orders-card-body">
               <div className="orders-card-info">
+                {order.notes?.includes("[[agregado]]") && (
+                  <p className="order-addon-banner">
+                    {order.notes.replace(/\[\[agregado]]/g, "").split("\n")[0]}
+                    <button
+                      type="button"
+                      onClick={() => dismissAddon(order)}
+                    >
+                      Ya lo agregué
+                    </button>
+                  </p>
+                )}
                 <div className="orders-card-heading">
                   <h2>{order.customers?.name || "Sin nombre"}</h2>
                   <button
@@ -2232,9 +2264,9 @@ export default function DashboardPage() {
                         ) : null}
                       </li>
                     ))}
-                    {order.notes ? (
+                    {order.notes?.replace(/\[\[agregado]][^\n]*\n?/g, "").trim() ? (
                       <li className="order-item-note">
-                        {order.notes}
+                        {order.notes.replace(/\[\[agregado]][^\n]*\n?/g, "").trim()}
                       </li>
                     ) : null}
                   </ul>
