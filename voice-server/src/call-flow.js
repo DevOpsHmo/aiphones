@@ -100,6 +100,38 @@ function heardSize(utterance) {
   return mentionedSize(utterance);
 }
 
+function editDistance(left, right) {
+  const row = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= left.length; i += 1) {
+    let previous = i;
+    for (let j = 1; j <= right.length; j += 1) {
+      const next = left[i - 1] === right[j - 1]
+        ? row[j - 1]
+        : Math.min(row[j - 1], row[j], previous) + 1;
+      row[j - 1] = previous;
+      previous = next;
+    }
+    row[right.length] = previous;
+  }
+  return row[right.length];
+}
+
+export function heardFulfillment(utterance) {
+  const text = fold(utterance);
+  if (/\brecoger\b/.test(text)) {
+    return "pickup";
+  }
+  if (/domicil|adomi/.test(text)) {
+    return "delivery";
+  }
+  const compact = text.replace(/\s+/g, "");
+  if (!compact || compact.length < 6) {
+    return "";
+  }
+  const nearDelivery = ["domicilio", "adomicilio"].some(target => editDistance(compact, target) <= 5);
+  return nearDelivery ? "delivery" : "";
+}
+
 function sameQuestion(next, say) {
   if (next.lastSay === say) {
     next.sameCount = (next.sameCount || 0) + 1;
@@ -407,11 +439,9 @@ export function orderedTurn(state, utterance) {
   if (size) {
     next.size = size;
   }
-  if (/\bdomicilio\b/.test(text)) {
-    next.fulfillment = "delivery";
-  }
-  if (/\brecoger\b/.test(text)) {
-    next.fulfillment = "pickup";
+  const fulfillment = heardFulfillment(text);
+  if (fulfillment) {
+    next.fulfillment = fulfillment;
   }
   if (!next.product) {
     if (/\bpizza\b/.test(text)) {
@@ -422,13 +452,20 @@ export function orderedTurn(state, utterance) {
   if (!next.size) {
     return sameQuestion(next, `${next.product}, ¿mediana, grande o familiar?`);
   }
-  if (!next.offeredMore && !/\bno\b/.test(text)) {
+  if (!next.offeredMore && !/\bno\b/.test(text) && !/\b(coca|soda|fresa)\b/.test(text)) {
     next.offeredMore = true;
     return { state: next, hangup: false, say: "¿Desea agregar algo más? ¿Alguna bebida?" };
   }
   next.offeredMore = true;
+  if (!fulfillment) {
+    const drink = drinkQuestion(utterance, next.drink);
+    if (drink) {
+      next.drink = drink.drink;
+      return { state: next, hangup: false, say: drink.say };
+    }
+  }
   if (!next.fulfillment) {
-    return { state: next, hangup: false, say: "¿A domicilio o para recoger?" };
+    return sameQuestion(next, "¿A domicilio o para recoger?");
   }
   if (next.fulfillment === "pickup") {
     const confirmation = buildConfirmation({

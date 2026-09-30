@@ -137,9 +137,7 @@ export function createRealtimeSession({
       type: "response.create",
       response: {
         output_modalities: ["audio"],
-        instructions: resumeTransfer
-          ? "Di exactamente esta frase completa y después guarda silencio hasta que el cliente hable: No pudieron tomar la llamada. Sigo con su pedido. ¿Qué desea ordenar?"
-          : "Di exactamente esta frase completa y después guarda silencio hasta que el cliente hable: Hola, bienvenido a Pizzería Hermosillo. ¿Cuál es su nombre?"
+        instructions: "Di exactamente esta frase completa y después guarda silencio hasta que el cliente hable: Hola, bienvenido a Pizzería Hermosillo. ¿Cuál es su nombre?"
       }
     }));
   }
@@ -609,21 +607,7 @@ ${menuText || "Menú no disponible."}
             });
             askedIfThere = false;
             const heardStreet = formatHeardStreet(event.transcript);
-            const previousFacts = factsInstructions(facts);
             facts = lockFacts(facts, event.transcript);
-            if (instructionBase && factsInstructions(facts) !== previousFacts && openaiSocket.readyState === WebSocket.OPEN) {
-              openaiSocket.send(JSON.stringify({
-                type: "session.update",
-                session: {
-                  type: "realtime",
-                  audio: {
-                    input: { format: { type: "audio/pcmu" } },
-                    output: { format: { type: "audio/pcmu" }, voice: "marin" }
-                  },
-                  instructions: instructionBase.replace("__DATOS_FIJOS__", factsInstructions(facts))
-                }
-              }));
-            }
             if (heardStreet) {
               callState.heardStreet = heardStreet;
             }

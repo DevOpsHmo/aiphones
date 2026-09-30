@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { orderedTurn } from "./call-flow.js";
+import { heardFulfillment, orderedTurn } from "./call-flow.js";
 import { deliveryAddress } from "./tools.js";
 import { interruptionDecision } from "./turn-policy.js";
 
@@ -99,6 +99,24 @@ test("simulacion 13 sawayana es hawaiana y no repite para siempre", () => {
     last = turn.say;
   }
   assert.equal(last, "Disculpe, lo transferiré con un humano.");
+});
+
+test("simulacion 14 la coca se pregunta y domicilio mal oido cuenta", () => {
+  const drink = play(["Sí, una Coca-Cola"], {
+    name: "Iván Valencia",
+    product: "Mexicana",
+    size: "familiar",
+    offeredMore: true
+  });
+  assert.equal(drink.said.at(-1), "Coca-Cola, ¿regular o Light?");
+  const volume = play(["regular"], drink.state);
+  assert.match(volume.said.at(-1), /600 mililitros/);
+  const finished = play(["2 litros"], volume.state);
+  assert.equal(heardFulfillment("Adomitridio"), "delivery");
+  assert.equal(heardFulfillment("Aromofilia"), "delivery");
+  const place = play(["Adomitridio"], finished.state);
+  assert.equal(place.state.fulfillment, "delivery");
+  assert.equal(place.said.at(-1), "¿Cuál es el código postal?");
 });
 
 test("simulacion 11 si se enoja transfiere a un humano", () => {
