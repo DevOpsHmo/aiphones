@@ -478,6 +478,20 @@ export function cleanSpokenAddress(value) {
 
 const ADDRESS_SPEECH = /\b(para empezar|es la colonia|mi nombre es|mi direcci[oó]n es)\b/i;
 
+function stripTrailingHouseWords(value, house) {
+  const numberWord = /^(cero|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|y|numero|número|num)$/i;
+  const words = String(value || "").replace(/[.]/g, " ").split(/\s+/).filter(Boolean);
+  while (words.length) {
+    const last = words[words.length - 1];
+    if (numberWord.test(last) || (house && last === String(house))) {
+      words.pop();
+      continue;
+    }
+    break;
+  }
+  return words.join(" ").trim();
+}
+
 export function deliveryAddress({ street = "", number = "", colony = "", postalCode = "", address = "" }) {
   if (ADDRESS_SPEECH.test(`${street} ${number} ${colony} ${address}`)) {
     throw new Error("La dirección trae una frase del cliente, no una calle. Pregunta otra vez: ¿Cuál es la calle y el número?");
@@ -505,7 +519,7 @@ export function deliveryAddress({ street = "", number = "", colony = "", postalC
   if (!colonyName) {
     colonyName = blobParts.find(part => part !== blobParts[0] && !/^\d+$/.test(part)) || "";
   }
-  streetName = streetName.replace(/[,\s]+$/, "");
+  streetName = stripTrailingHouseWords(streetName, house).replace(/[,\s]+$/, "");
   const streetWords = foldText(streetName).split(" ").filter(Boolean);
   const numberOnly = streetWords.every(word => word in HOUSE_NUMBERS || word === "y" || word === "numero");
   if (!streetName || numberOnly || streetWords.length === 0) {

@@ -1,7 +1,7 @@
 import { mushroomIntent, mentionedQuantity } from "./turn-policy.js";
 import { buildConfirmation, paymentForOrder, priceLine } from "./confirmation.js";
 import { matchIngredients } from "./menu-ingredients.js";
-import { parseSpokenPostalCode, streetNumber } from "./tools.js";
+import { formatHeardStreet, parseSpokenPostalCode, streetNumber } from "./tools.js";
 
 export const MENU_PIZZAS = [
   "BBQ Chicken",
@@ -53,13 +53,30 @@ export function correctName(current, utterance) {
   return { name: current, needsLastName: false };
 }
 
+function drinkVolume(utterance) {
+  const text = fold(utterance);
+  if (/\b(600|seiscientos)\b/.test(text)) {
+    return "600";
+  }
+  if (/\b(dos litros|2 litros)\b/.test(text)) {
+    return "2 litros";
+  }
+  return "";
+}
+
 export function drinkQuestion(utterance, drink = {}) {
+  if (drink.volume) {
+    return null;
+  }
   const text = fold(utterance);
   const chosen = /\blight\b/.test(text) ? "Light" : /\bregular\b/.test(text) ? "regular" : "";
-  const waiting = drink.kind === "coca" || drink.kind === "regular" || drink.kind === "Light";
-  const volume = /\b(600|dos litros|2 litros)\b/.test(text);
-  if (/\bfresa\b/.test(text) && !volume) {
+  const waiting = drink.kind === "coca" || drink.kind === "regular" || drink.kind === "Light" || drink.kind === "fresa";
+  const volume = drinkVolume(utterance);
+  if ((/\bfresa\b/.test(text) || drink.kind === "fresa") && !volume) {
     return { say: "Refresco de fresa, ¿600 mililitros o 2 litros?", drink: { kind: "fresa" } };
+  }
+  if (drink.kind === "fresa" && volume) {
+    return { drink: { kind: "fresa", volume } };
   }
   if (/\b(coca|soda)\b/.test(text) || waiting) {
     const kind = chosen || (drink.kind === "regular" || drink.kind === "Light" ? drink.kind : "");
@@ -69,6 +86,7 @@ export function drinkQuestion(utterance, drink = {}) {
     if (!volume) {
       return { say: `Coca-Cola ${kind}, ¿600 mililitros o 2 litros?`, drink: { kind } };
     }
+    return { drink: { kind, volume } };
   }
   return null;
 }
@@ -76,6 +94,31 @@ export function drinkQuestion(utterance, drink = {}) {
 export function mentionedSize(utterance) {
   const text = fold(utterance);
   return SIZES.find(size => text.includes(size)) || "";
+}
+
+function soundsLikeBoneless(text) {
+  if (/boneless|bonles|boneles|bodwe|baule|baul|bound/.test(text)) {
+    return true;
+  }
+  if (/\b(pizza|pieza)\s+de\s+(doble|bajo|borde|baul\w*)\b/.test(text)) {
+    return true;
+  }
+  return /^(bajo|baul|baules|borde|doble)$/.test(text.trim());
+}
+
+export function correctHeard(utterance) {
+  const text = fold(utterance);
+  if (!soundsLikeBoneless(text) || /boneless/.test(text)) {
+    return utterance;
+  }
+  const replaced = String(utterance).replace(/\b((?:pizza|pieza)\s+de\s+)\S+/i, "$1boneless");
+  if (replaced !== utterance) {
+    return replaced;
+  }
+  if (text.split(" ").filter(Boolean).length <= 2) {
+    return "boneless";
+  }
+  return utterance;
 }
 
 export function matchPizza(utterance) {
@@ -86,7 +129,7 @@ export function matchPizza(utterance) {
   if (/peperoni|pepperoni/.test(text)) {
     return "Peperoni";
   }
-  if (/boneless|bonles|bodwe|baule|bound/.test(text)) {
+  if (soundsLikeBoneless(text)) {
     return "Lucco Boneless";
   }
   if (/\bdeluxe\b|\bde luz\b|\bluz\b/.test(text)) {
@@ -117,6 +160,38 @@ function editDistance(left, right) {
     row[right.length] = previous;
   }
   return row[right.length];
+}
+
+export function speakPostal(code) {
+  const digits = String(code || "").replace(/\D/g, "");
+  if (!/^\d{5}$/.test(digits)) {
+    return String(code || "");
+  }
+  const ones = ["cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez", "once", "doce", "trece", "catorce", "quince", "dieciséis", "diecisiete", "dieciocho", "diecinueve"];
+  const tens = ["", "", "veinte", "treinta", "cuarenta", "cincuenta", "sesenta", "setenta", "ochenta", "noventa"];
+  const under100 = value => {
+    if (value < 20) {
+      return ones[value];
+    }
+    const ten = Math.floor(value / 10);
+    const one = value % 10;
+    if (!one) {
+      return tens[ten];
+    }
+    if (ten === 2) {
+      return ["", "veintiuno", "veintidós", "veintitrés", "veinticuatro", "veinticinco", "veintiséis", "veintisiete", "veintiocho", "veintinueve"][one];
+    }
+    return `${tens[ten]} y ${ones[one]}`;
+  };
+  const head = under100(Number(digits.slice(0, 2)));
+  const mid = Number(digits[2]);
+  const tail = Number(digits.slice(3));
+  if (mid === 0) {
+    return `${head} cero ${tail === 0 ? "cero" : under100(tail)}`;
+  }
+  const hundreds = ["", "ciento", "doscientos", "trescientos", "cuatrocientos", "quinientos", "seiscientos", "setecientos", "ochocientos", "novecientos"];
+  const rest = tail === 0 ? hundreds[mid] : `${hundreds[mid]} ${under100(tail)}`;
+  return `${head} ${rest}`.replace(/\s+/g, " ").trim();
 }
 
 export function heardFulfillment(utterance) {
@@ -417,6 +492,30 @@ export function orderedTurn(state, utterance) {
       say: "Disculpe, lo transferiré con un humano."
     };
   }
+  if (/\bcancel/.test(text) || next.cancelAsked) {
+    const onlyDrink = /\b(bebida|soda|coca|refresco)\b/.test(text) || (next.cancelAsked && /\b(solo|nomas|nada mas)\b/.test(text));
+    const whole = /\b(todo|pedido|orden)\b/.test(text);
+    if (whole && !onlyDrink) {
+      return {
+        state: next,
+        hangup: false,
+        cancel: true,
+        say: "De acuerdo, su pedido quedó cancelado. Que tenga un buen día y gracias por llamar a Pizzería Hermosillo. Hasta pronto."
+      };
+    }
+    if (onlyDrink || (next.cancelAsked && /\b(solo|nomas|nada mas|eso)\b/.test(text))) {
+      next.drink = {};
+      next.drinkOffered = true;
+      next.cancelAsked = false;
+      next.askedAgree = true;
+      return { state: next, hangup: false, say: "Listo, quité la bebida. Seguimos con las pizzas. ¿Está de acuerdo con su pedido?" };
+    }
+    if (/\bcancel/.test(text)) {
+      next.cancelAsked = true;
+      return { state: next, hangup: false, say: "¿Desea cancelar todo el pedido o solo la bebida?" };
+    }
+    next.cancelAsked = false;
+  }
   if (/\b(agregar|otra pizza|pedido anterior)\b/.test(text)) {
     next.adding = true;
     return { state: next, hangup: false, say: "¿Qué pizza desea agregar? Las que ya tenía se quedan." };
@@ -435,8 +534,9 @@ export function orderedTurn(state, utterance) {
   const pizza = matchPizza(text);
   const size = heardSize(text);
   if (pizza && next.product && pizza !== next.product && next.size) {
-    next.items = [...(next.items || []), { product: next.product, size: next.size }];
+    next.items = [...(next.items || []), { product: next.product, size: next.size, sauce: next.sauce || "" }];
     next.size = "";
+    next.sauce = "";
   }
   if (pizza) {
     if ((next.unavailable || []).some(item => fold(item) === fold(pizza))) {
@@ -460,16 +560,29 @@ export function orderedTurn(state, utterance) {
   if (!next.size) {
     return sameQuestion(next, `${next.product}, ¿mediana, grande o familiar?`);
   }
+  if (fold(next.product).includes("boneless")) {
+    if (/\bbuffalo\b/.test(text)) {
+      next.sauce = "buffalo";
+    } else if (/\bbbq\b/.test(text)) {
+      next.sauce = "bbq";
+    }
+    if (!next.sauce) {
+      return sameQuestion(next, "Lucco Boneless, ¿salsa bbq o buffalo?");
+    }
+  }
   if (!next.offeredMore && !/\bno\b/.test(text) && !/\b(coca|soda|fresa)\b/.test(text)) {
     next.offeredMore = true;
     return { state: next, hangup: false, say: "¿Desea agregar algo más? ¿Alguna bebida?" };
   }
   next.offeredMore = true;
   if (!fulfillment) {
-    const drink = drinkQuestion(utterance, next.drink);
-    if (drink) {
+    const drink = drinkQuestion(utterance, next.drink || {});
+    if (drink?.say) {
       next.drink = drink.drink;
-      return { state: next, hangup: false, say: drink.say };
+      return sameQuestion(next, drink.say);
+    }
+    if (drink?.drink) {
+      next.drink = drink.drink;
     }
   }
   if (!next.fulfillment) {
@@ -501,9 +614,10 @@ export function orderedTurn(state, utterance) {
     }
   }
   if (!next.street) {
-    if (streetNumber(utterance) || /\b(calle|privada|avenida|numero|n[uú]mero)\b/.test(text)) {
-      next.street = utterance.trim();
+    const heard = formatHeardStreet(utterance);
+    if (heard) {
       next.house = streetNumber(utterance);
+      next.street = heard.replace(/\s+\d+$/, "").trim();
     } else {
       return sameQuestion(next, "¿Cuál es la calle y el número?");
     }
@@ -511,9 +625,18 @@ export function orderedTurn(state, utterance) {
   const orderLine = () => {
     const lines = [...(next.items || [])];
     if (next.product && next.size) {
-      lines.push({ product: next.product, size: next.size });
+      lines.push({ product: next.product, size: next.size, sauce: next.sauce || "" });
     }
-    return lines.map(item => `una pizza ${item.size} de ${item.product}`).join(" y ") || "su pedido";
+    const pizzas = lines.map(item => `una pizza ${item.size} de ${item.product}${item.sauce ? ` con ${item.sauce}` : ""}`).join(" y ");
+    const drink = next.drink || {};
+    if (!drink.volume) {
+      return pizzas || "su pedido";
+    }
+    const volume = drink.volume === "600" ? "600 mililitros" : "2 litros";
+    const soda = drink.kind === "fresa"
+      ? `un refresco de fresa de ${volume}`
+      : `una Coca-Cola ${drink.kind} de ${volume}`;
+    return `${pizzas} y ${soda}`;
   };
   const tidyPlace = value => String(value || "")
     .replace(/\./g, " ")
@@ -522,18 +645,22 @@ export function orderedTurn(state, utterance) {
     .trim();
   next.street = tidyPlace(next.street);
   next.colony = tidyPlace(next.colony);
-  if (!next.drinkOffered && !next.drink?.kind) {
-    const drink = drinkQuestion(utterance, next.drink);
-    if (drink) {
+  if (!next.drinkOffered && !next.drink?.volume) {
+    const drink = drinkQuestion(utterance, next.drink || {});
+    if (drink?.say) {
       next.drink = drink.drink;
       next.drinkOffered = true;
       return { state: next, hangup: false, say: drink.say };
     }
-    if (!/\bno\b/.test(text)) {
+    if (drink?.drink) {
+      next.drink = drink.drink;
+      next.drinkOffered = true;
+    } else if (!/\bno\b/.test(text)) {
       next.drinkOffered = true;
       return { state: next, hangup: false, say: "Disculpe, ¿desea agregar alguna bebida o soda?" };
+    } else {
+      next.drinkOffered = true;
     }
-    next.drinkOffered = true;
   }
   if (!next.agreed) {
     if (/\b(si|confirmo|confirmado|correcto|de acuerdo|esta bien|estaria bien)\b/.test(text) && next.askedAgree) {
@@ -543,7 +670,7 @@ export function orderedTurn(state, utterance) {
       return {
         state: next,
         hangup: false,
-        say: `Su pedido es ${orderLine()}, a domicilio, en ${next.street}, colonia ${next.colony}, código ${next.postalCode}. ¿Está de acuerdo?`
+        say: `Su pedido es ${orderLine()}, a domicilio, en ${next.street} ${next.house}, colonia ${next.colony}, código ${speakPostal(next.postalCode)}. ¿Está de acuerdo?`
       };
     } else {
       return { state: next, hangup: false, say: "¿Está de acuerdo con su pedido?" };

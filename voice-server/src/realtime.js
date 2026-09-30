@@ -15,7 +15,7 @@ import {
 import { config } from "./config.js";
 import { interruptionDecision } from "./turn-policy.js";
 import { wantsHuman } from "./human-transfer.js";
-import { emptyFacts, factsInstructions, lockFacts, orderedTurn } from "./call-flow.js";
+import { correctHeard, emptyFacts, factsInstructions, lockFacts, orderedTurn } from "./call-flow.js";
 import { emptyPcmState, isPcmFormat, pcmToPcmuBase64 } from "./phone-audio.js";
 
 function isPromptEcho(text) {
@@ -599,15 +599,16 @@ ${menuText || "Menú no disponible."}
           "conversation.item.input_audio_transcription.completed"
         ) {
           if (event.transcript && !isPromptEcho(event.transcript)) {
+            const heard = correctHeard(event.transcript);
             transcript +=
-              `Cliente: ${event.transcript}\n`;
+              `Cliente: ${heard}\n`;
             const decision = interruptionDecision({
               event: "transcript",
               transcript: event.transcript
             });
             askedIfThere = false;
-            const heardStreet = formatHeardStreet(event.transcript);
-            facts = lockFacts(facts, event.transcript);
+            const heardStreet = formatHeardStreet(heard);
+            facts = lockFacts(facts, heard);
             if (heardStreet) {
               callState.heardStreet = heardStreet;
             }
@@ -615,25 +616,22 @@ ${menuText || "Menú no disponible."}
             if (wantsHuman(event.transcript)) {
               callState.transferAsked = true;
               redirectToHuman();
-            } else if (wantsCancel(event.transcript)) {
-              callState.cancelled = true;
-              speakExact("De acuerdo, su pedido quedó cancelado. Que tenga un buen día y gracias por llamar a Pizzería Hermosillo.");
-              callState.hangupScheduled = true;
-              endCallTool(callSid).catch(error => {
-                console.error("No se pudo colgar al cancelar:", error.message);
-              });
             } else {
-              const turn = orderedTurn(callState.flow || {}, event.transcript);
+              const turn = orderedTurn(callState.flow || {}, heard);
               callState.flow = turn.state;
               if (turn.transfer) {
                 callState.transferAsked = true;
                 speakExact(turn.say);
                 redirectToHuman();
+              } else if (turn.cancel) {
+                callState.cancelled = true;
+                callState.closeWhenSpoken = true;
+                speakExact(turn.say);
               } else if (turn.save && !callState.orderPlaced && turn.state.adding) {
                 const flow = turn.state;
                 const wanted = [...(flow.items || [])];
                 if (flow.product && flow.size) {
-                  wanted.push({ product: flow.product, size: flow.size });
+                  wanted.push({ product: flow.product, size: flow.size, sauce: flow.sauce || "" });
                 }
                 getMenuTool(businessId).then(async menu => {
                   const foldName = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/pepperoni/g, "peperoni").replace(/hawaiana/g, "hawaina");
@@ -652,6 +650,7 @@ ${menuText || "Menú no disponible."}
                       customerName: flow.name,
                       productId: product.id,
                       size: line.size,
+                      sauce: line.sauce || "",
                       quantity: 1
                     });
                   }
@@ -671,7 +670,7 @@ ${menuText || "Menú no disponible."}
                 getMenuTool(businessId).then(menu => {
                   const wanted = [...(flow.items || [])];
                   if (flow.product && flow.size) {
-                    wanted.push({ product: flow.product, size: flow.size });
+                    wanted.push({ product: flow.product, size: flow.size, sauce: flow.sauce || "" });
                   }
                   const foldName = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/pepperoni/g, "peperoni").replace(/hawaiana/g, "hawaina");
                   const items = wanted.map(line => {
@@ -680,14 +679,25 @@ ${menuText || "Menú no disponible."}
                       const have = foldName(item.name);
                       return have.includes(name) || name.includes(have);
                     });
-                    return product ? { product_id: product.id, quantity: 1, size: line.size } : null;
+                    return product ? { product_id: product.id, quantity: 1, size: line.size, sauce: line.sauce || "" } : null;
                   });
+                  if (flow.drink?.volume) {
+                    const volumeKey = flow.drink.volume === "600" ? "600" : "2";
+                    const drinkName = flow.drink.kind === "fresa" ? "fresa" : "coca";
+                    const drinkProduct = (menu.products || []).find(item => {
+                      const have = foldName(item.name);
+                      return have.includes(drinkName) && (have.includes(volumeKey) || have.includes("litro"));
+                    });
+                    if (drinkProduct) {
+                      items.push({ product_id: drinkProduct.id, quantity: 1 });
+                    }
+                  }
                   if (items.some(item => !item)) {
                     callState.flow = { ...flow, agreed: false, askedAgree: false };
                     speakExact("No encontré esa pizza en el menú. ¿Cuál desea?");
                     return null;
                   }
-                  const place = `${flow.street}, ${flow.colony}, C.P. ${flow.postalCode}, Hermosillo, Sonora`
+                  const place = `${flow.street} ${flow.house}, ${flow.colony}, C.P. ${flow.postalCode}, Hermosillo, Sonora`
                     .replace(/\./g, " ")
                     .replace(/\bcolonia\b/gi, "")
                     .replace(/\s+/g, " ")
@@ -761,7 +771,7 @@ ${menuText || "Menú no disponible."}
               redirectToHuman();
             }
             if (
-              callState.orderPlaced &&
+              (callState.orderPlaced || callState.cancelled) &&
               /hasta luego|hasta pronto/i.test(event.transcript) &&
               !callState.hangupScheduled &&
               !humanTransferStarted(callSid) &&

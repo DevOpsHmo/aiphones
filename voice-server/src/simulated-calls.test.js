@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { heardFulfillment, orderedTurn } from "./call-flow.js";
+import { correctHeard, heardFulfillment, matchPizza, orderedTurn, speakPostal } from "./call-flow.js";
 import { deliveryAddress } from "./tools.js";
 import { interruptionDecision } from "./turn-policy.js";
 
@@ -111,7 +111,12 @@ test("simulacion 12 familias es familiar y veracruz cincuenta y seis es calle", 
     colony: "Cinco de Mayo"
   });
   assert.match(street.state.street, /Veracruz/i);
+  assert.doesNotMatch(street.state.street, /cincuenta/i);
   assert.equal(street.state.house, "56");
+  assert.equal(
+    deliveryAddress({ street: "Veracruz cincuenta y seis", number: "56", colony: "Cinco de mayo", postalCode: "83010" }),
+    "Veracruz 56, Cinco de mayo, C.P. 83010, Hermosillo, Sonora"
+  );
 });
 
 test("simulacion 13 sawayana es hawaiana y no repite para siempre", () => {
@@ -165,6 +170,43 @@ test("simulacion 8 si el cliente habla mientras ella habla se calla", () => {
 test("simulacion 9 agregar una pizza no borra la anterior", () => {
   const call = play(["quisiera agregar otra pizza en el mismo pedido"], { name: "Ernesto", product: "mexicana" });
   assert.match(call.said[0], /se quedan/);
+});
+
+test("simulacion 15 boneless mal oido, soda que no se repite y cancelar solo la bebida", () => {
+  for (const said of ["una pizza de baules", "una pizza de doble", "Bajo", "una pizza de borde", "una pieza de baúl"]) {
+    assert.equal(matchPizza(said), "Lucco Boneless");
+  }
+  assert.equal(correctHeard("Sí, una pizza de baules."), "Sí, una pizza de boneless");
+  assert.equal(speakPostal("83010"), "ochenta y tres cero diez");
+  const ready = {
+    name: "Diego Alejandro",
+    product: "Hawaina",
+    size: "familiar",
+    items: [{ product: "Lucco Boneless", size: "familiar", sauce: "bbq" }],
+    offeredMore: true,
+    fulfillment: "delivery",
+    postalCode: "83010",
+    colony: "Cinco de mayo",
+    street: "Veracruz",
+    house: "56",
+    drinkOffered: true,
+    drink: { kind: "regular" }
+  };
+  const sized = orderedTurn(ready, "Dos litros");
+  assert.equal(sized.state.drink.volume, "2 litros");
+  assert.match(sized.say, /ochenta y tres cero diez/);
+  assert.match(sized.say, /Veracruz 56/);
+  assert.match(sized.say, /Coca-Cola regular de 2 litros/);
+  const again = orderedTurn(sized.state, "Sí");
+  assert.equal(again.save, true);
+  const stuck = orderedTurn(ready, "cancelala");
+  assert.match(stuck.say, /todo el pedido o solo la bebida/);
+  assert.equal(stuck.cancel, undefined);
+  const dropped = orderedTurn(stuck.state, "solo la bebida");
+  assert.match(dropped.say, /quité la bebida/);
+  const whole = orderedTurn(stuck.state, "cancela todo el pedido");
+  assert.equal(whole.cancel, true);
+  assert.match(whole.say, /Hasta pronto/);
 });
 
 test("simulacion 10 la hawaiana apagada no se vende", () => {
