@@ -144,6 +144,34 @@ export function createRealtimeSession({
   }
 
   let lastSpoken = "";
+  const scriptedIds = new Set();
+  let pendingScripts = 0;
+
+  function exactSpeech(phrase) {
+    pendingScripts += 1;
+    return {
+      output_modalities: ["audio"],
+      tool_choice: "none",
+      conversation: "none",
+      metadata: { source: "script" },
+      instructions: `Pronuncia únicamente el texto entre comillas triples, palabra por palabra, y después guarda silencio. No agregues, no quites y no cambies ninguna palabra. No traduzcas. Si dice Light, di Light, nunca ligera. Si dice barbiquiú, di barbiquiú, nunca bbq. No confirmes el pedido. No saludes si el texto no saluda.\n"""${phrase}"""`
+    };
+  }
+
+  function acceptScripted(response) {
+    const id = response?.id || "";
+    const source = response?.metadata?.source;
+    if (source === "script" || (!source && pendingScripts > 0)) {
+      if (pendingScripts > 0) pendingScripts -= 1;
+      if (id) scriptedIds.add(id);
+      activeResponseId = id;
+      return true;
+    }
+    if (id && openaiSocket.readyState === WebSocket.OPEN) {
+      openaiSocket.send(JSON.stringify({ type: "response.cancel", response_id: id }));
+    }
+    return false;
+  }
 
   function sendGreeting() {
     if (greetingSent || openaiSocket.readyState !== WebSocket.OPEN) return;
@@ -152,11 +180,7 @@ export function createRealtimeSession({
     lastSpoken = phrase;
     openaiSocket.send(JSON.stringify({
       type: "response.create",
-      response: {
-        output_modalities: ["audio"],
-        tool_choice: "none",
-        instructions: `Di una sola vez, sin repetirla, exactamente esta frase y después guarda silencio: ${phrase}`
-      }
+      response: exactSpeech(phrase)
     }));
   }
 
@@ -168,11 +192,7 @@ export function createRealtimeSession({
     lastSpoken = clean;
     openaiSocket.send(JSON.stringify({
       type: "response.create",
-      response: {
-        output_modalities: ["audio"],
-        tool_choice: "none",
-        instructions: `Di este texto una sola vez y después guarda silencio. No lo repitas. No saludes. No llames herramientas. Texto: ${clean}`
-      }
+      response: exactSpeech(clean)
     }));
   }
 
@@ -198,9 +218,7 @@ export function createRealtimeSession({
       if (result && result.success === false && result.spoken && openaiSocket.readyState === WebSocket.OPEN) {
         openaiSocket.send(JSON.stringify({
           type: "response.create",
-          response: {
-            instructions: `Di exactamente esta frase y sigue con el pedido: ${result.spoken}`
-          }
+          response: exactSpeech(result.spoken)
         }));
       }
     }).catch(error => {
@@ -261,7 +279,9 @@ ${
     : ""
 }
 
-Habla de usted, cálida, breve y solo en español. Una pregunta por turno. Prohibido "opción 1", "opción 2", "opción A", "déjame", "déjeme", "voy a revisar", "déjame pensar" y palabras de otro idioma. Prohibido pedir calle, número o colonia antes de saber si el pedido es a domicilio o para recoger.
+No hables por tu cuenta. El servidor te manda cada frase y tú solo la pronuncias, palabra por palabra. No agregues despedidas, no confirmes el pedido y no pidas la dirección si esa frase no lo dice. La palabra Light se dice Light, nunca ligera. La salsa se dice barbiquiú, nunca bbq.
+
+Habla de usted, cálida, breve y solo en español. Una pregunta por turno. Prohibido "opción 1", "opción 2", "opción A", "déjame", "déjeme", "voy a revisar", "déjame pensar" y palabras de otro idioma, salvo la palabra Light. Prohibido pedir calle, número o colonia antes de saber si el pedido es a domicilio o para recoger.
 
 R1. No cambies un nombre, calle, número, colonia ni código. Si no lo oíste, di "¿Me lo repite?" sin proponer otro.
 R2. Solo menciona productos escritos en MENÚ. Si piden pizza boneless y no está en MENÚ, di "No manejamos pizza boneless." Los precios son los del MENÚ, no 200, 220 ni 250 si ahí hay otros. Si preguntan un precio, di ese número. Nunca digas que no tienes el precio. La salsa se dice barbiquiú, nunca bbq.
@@ -279,7 +299,7 @@ R12. No saludes: el servidor ya dijo la bienvenida una sola vez. Nunca repitas u
 A domicilio el pago es siempre en efectivo. Solo pregunta el pago si es para recoger. Si el cliente habla mientras tú hablas, cállate y contesta solo lo que acaba de decir. Nunca digas Lucco. "Bordes" es la orilla, no una pizza.
 
 Tamaño de pizza, di exactamente el estilo: "Pizza mexicana, ¿mediana, grande o familiar?"
-Refrescos: solo Coca regular, Coca Light y refresco de fresa. 600 son 30. 2 litros son 50. Si dice Coca o soda, pregunta: "Coca-Cola, ¿regular o Light?" Cuando conteste, pregunta: "Coca-Cola regular, ¿600 mililitros o 2 litros?" o "Coca-Cola Light, ¿600 mililitros o 2 litros?" Si dice fresa, no preguntes regular o Light. Pregunta: "Refresco de fresa, ¿600 mililitros o 2 litros?"
+Refrescos: solo Coca regular, Coca Light y refresco de fresa. 600 son 30. 2 litros son 50. Nunca digas ligera: di Light. Si dice Coca o soda, la frase es: "Coca-Cola, ¿regular o Light?" Cuando conteste, la frase es: "Coca-Cola regular, ¿600 mililitros o 2 litros?" o "Coca-Cola Light, ¿600 mililitros o 2 litros?" Si dice fresa, no preguntes regular o Light. La frase es: "Refresco de fresa, ¿600 mililitros o 2 litros?" No des por incluida la soda hasta saber si es de 600 mililitros o de 2 litros. No confirmes el pedido antes de la dirección.
 
 Si preguntan las promociones, di en la misma respuesta todas las de la línea "Promociones de hoy", con su precio. No te quedes con una sola. No inventes una promoción que no esté en esa lista. Si eligen una, cobra el precio de esa promoción. Dos pizzas grandes sueltas, si no hay otra promo igual, usan el precio de "2 grandes". Guarda cada pizza con su nombre.
 
@@ -527,7 +547,7 @@ ${menuText || "Menú no disponible."}
           }
         ],
 
-        tool_choice: "auto"
+        tool_choice: "none"
       }
     };
 
@@ -569,9 +589,11 @@ ${menuText || "Menú no disponible."}
 
         if (event.type === "response.created") {
           noteAudioFormat(event.response?.audio?.output?.format || event.response?.output_audio_format);
+          if (!acceptScripted(event.response)) {
+            return;
+          }
           assistantSpeaking = true;
           speakingSince = Date.now();
-          activeResponseId = event.response?.id || "";
         }
 
         if (
@@ -594,7 +616,7 @@ ${menuText || "Menú no disponible."}
           "response.audio.delta"
         ) {
           assistantSpeaking = true;
-          if (activeResponseId && event.response_id && event.response_id !== activeResponseId) {
+          if (!event.response_id || !scriptedIds.has(event.response_id)) {
             return;
           }
           const payload = payloadForTwilio(event.delta);
@@ -766,7 +788,7 @@ ${menuText || "Menú no disponible."}
           event.type === "response.output_audio.delta" ||
           event.type === "response.audio.delta"
         ) {
-          if (event.response_id) {
+          if (event.response_id && scriptedIds.has(event.response_id)) {
             playedResponses.add(event.response_id);
             const waiting = pendingAssistant.get(event.response_id);
             if (waiting) {
@@ -782,6 +804,7 @@ ${menuText || "Menú no disponible."}
           event.type ===
           "response.audio_transcript.done"
         ) {
+          if (!event.response_id || scriptedIds.has(event.response_id)) {
           if (event.transcript && event.response_id && !playedResponses.has(event.response_id)) {
             pendingAssistant.set(event.response_id, event.transcript);
           } else if (event.transcript && (!event.response_id || playedResponses.has(event.response_id))) {
@@ -796,7 +819,7 @@ ${menuText || "Menú no disponible."}
             }
             if (
               (callState.orderPlaced || callState.cancelled) &&
-              /hasta luego|hasta pronto/i.test(event.transcript) &&
+              /hasta luego|hasta pronto|tu pedido quedó confirmado/i.test(event.transcript) &&
               !callState.hangupScheduled &&
               !humanTransferStarted(callSid) &&
               !wantsHuman(event.transcript)
@@ -806,6 +829,7 @@ ${menuText || "Menú no disponible."}
                 console.error("No se pudo colgar:", error.message);
               });
             }
+          }
           }
         }
 
@@ -887,11 +911,7 @@ ${menuText || "Menú no disponible."}
       openaiSocket.send(JSON.stringify({ type: "response.cancel" }));
       openaiSocket.send(JSON.stringify({
         type: "response.create",
-        response: {
-          output_modalities: ["audio"],
-          instructions:
-            "Di exactamente esta frase y nada más: Disculpa, el tiempo de esta llamada se agotó, vuelve a marcar para retomar tu pedido."
-        }
+        response: exactSpeech("Disculpa, el tiempo de esta llamada se agotó, vuelve a marcar para retomar tu pedido.")
       }));
     }
   };
@@ -1068,8 +1088,11 @@ async function handleToolCall(
       JSON.stringify({
         type: "response.create",
         response: {
+          output_modalities: ["audio"],
           tool_choice: "none",
-          instructions: `Di este texto una sola vez y nada más: ${result.spoken}`
+          conversation: "none",
+          metadata: { source: "script" },
+          instructions: `Pronuncia únicamente el texto entre comillas triples, palabra por palabra, y después guarda silencio.\n"""${result.spoken}"""`
         }
       })
     );
@@ -1081,8 +1104,11 @@ async function handleToolCall(
       JSON.stringify({
         type: "response.create",
         response: {
+          output_modalities: ["audio"],
           tool_choice: "none",
-          instructions: `Di este texto una sola vez, sin preguntas y sin cambiar el nombre: ${result.spoken}`
+          conversation: "none",
+          metadata: { source: "script" },
+          instructions: `Pronuncia únicamente el texto entre comillas triples, palabra por palabra, y después guarda silencio.\n"""${result.spoken}"""`
         }
       })
     );

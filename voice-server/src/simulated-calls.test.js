@@ -65,13 +65,13 @@ test("simulacion 6 el cierre pide un si antes de confirmar", () => {
   ]);
   assert.equal(call.state.name, "Ricardo");
   assert.equal(call.state.postalCode, "83157");
-  assert.match(call.said.at(-1), /Está de acuerdo/);
+  assert.match(call.said.at(-1), /alguna duda/);
   assert.match(call.said.at(-2), /bebida o soda/);
-  const yes = play(["sí"], call.state);
+  const yes = play(["no"], call.state);
   assert.equal(yes.state.agreed, true);
-  assert.match(yes.said.at(-1), /confirmado con éxito/);
+  assert.match(yes.said.at(-1), /tu pedido quedó confirmado/);
   assert.match(yes.said.at(-1), /30 minutos/);
-  assert.match(yes.said.at(-1), /Hasta pronto/);
+  assert.match(yes.said.at(-1), /Muchas gracias por llamar a Pizzería Hermosillo/);
 });
 
 test("simulacion 15 dos pizzas se confirman juntas y la calle queda sin puntos", () => {
@@ -91,8 +91,7 @@ test("simulacion 15 dos pizzas se confirman juntas y la calle queda sin puntos",
   assert.equal(call.state.items[0].size, "familiar");
   assert.equal(call.state.product, "Peperoni");
   assert.equal(call.state.size, "mediana");
-  assert.match(call.said.at(-1), /familiar de Hawaina/);
-  assert.match(call.said.at(-1), /mediana de Peperoni/);
+  assert.match(call.said.at(-1), /alguna duda/);
   assert.doesNotMatch(call.state.street, /\./);
   assert.doesNotMatch(call.state.colony, /colonia/i);
 });
@@ -194,11 +193,13 @@ test("simulacion 15 boneless mal oido, soda que no se repite y cancelar solo la 
   };
   const sized = orderedTurn(ready, "Dos litros");
   assert.equal(sized.state.drink.volume, "2 litros");
-  assert.match(sized.say, /ochenta y tres cero diez/);
-  assert.match(sized.say, /Veracruz 56/);
-  assert.match(sized.say, /Coca-Cola regular de 2 litros/);
-  const again = orderedTurn(sized.state, "Sí");
+  assert.equal(sized.state.street, "Veracruz");
+  assert.equal(sized.state.postalCode, "83010");
+  assert.match(sized.say, /alguna duda/);
+  const again = orderedTurn(sized.state, "no");
   assert.equal(again.save, true);
+  assert.match(again.say, /tu pedido quedó confirmado/);
+  assert.match(again.say, /30 minutos/);
   const stuck = orderedTurn(ready, "cancelala");
   assert.match(stuck.say, /todo el pedido o solo la bebida/);
   assert.equal(stuck.cancel, undefined);
@@ -288,6 +289,69 @@ test("simulacion 18 que trae lee la pizza y el extra no la cambia", () => {
   assert.notEqual(drink.transfer, true);
   const repeated = orderedTurn(drink.state, "regular");
   assert.notEqual(repeated.say, drink.say);
+});
+
+test("simulacion 20 beneficio es el precio, light no es ligera y sin direccion no cierra", () => {
+  assert.equal(correctHeard("¿Qué beneficio tiene?"), "¿Qué precios tiene?");
+  const price = orderedTurn({
+    name: "Alfredo",
+    product: "Lucco Boneless",
+    prices: { mediana: 199, grande: 219, familiar: 249 }
+  }, "¿Qué beneficio tiene?");
+  assert.match(price.say, /199/);
+  assert.match(price.say, /219/);
+  assert.match(price.say, /249/);
+  assert.doesNotMatch(price.say, /mediana, grande o familiar/);
+  const light = orderedTurn({
+    name: "Alfredo",
+    product: "Lucco Boneless",
+    size: "familiar",
+    sauce: "buffalo",
+    offeredMore: true,
+    drink: { kind: "coca" }
+  }, "ligera");
+  assert.equal(light.say, "Coca-Cola Light, ¿600 mililitros o 2 litros?");
+  const skipped = orderedTurn({
+    name: "Alfredo",
+    product: "Lucco Boneless",
+    size: "familiar",
+    sauce: "buffalo",
+    offeredMore: true,
+    drink: { kind: "regular" }
+  }, "No sería todo");
+  assert.match(skipped.say, /600 mililitros/);
+  assert.notEqual(skipped.save, true);
+  const early = orderedTurn({
+    name: "Alfredo",
+    product: "Lucco Boneless",
+    size: "familiar",
+    sauce: "buffalo",
+    offeredMore: true,
+    drinkOffered: true,
+    drink: { kind: "regular", volume: "600" }
+  }, "no, sería todo");
+  assert.notEqual(early.save, true);
+  assert.match(early.say, /domicilio o para recoger/);
+  const placed = orderedTurn({
+    name: "Alfredo",
+    product: "Lucco Boneless",
+    size: "familiar",
+    sauce: "buffalo",
+    offeredMore: true,
+    drinkOffered: true,
+    drink: { kind: "regular", volume: "600" },
+    fulfillment: "delivery",
+    postalCode: "83010",
+    colony: "Modelo",
+    street: "Veracruz",
+    house: "56",
+    closingAsked: true
+  }, "no");
+  assert.equal(placed.save, true);
+  assert.equal(
+    placed.say,
+    "Muy bien, tu pedido quedó confirmado. Llegará a tu domicilio en aproximadamente 30 minutos. Muchas gracias por llamar a Pizzería Hermosillo. Que tenga buen día."
+  );
 });
 
 test("simulacion 19 fuera de horario avisa que estan cerrados", () => {

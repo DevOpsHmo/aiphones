@@ -69,7 +69,7 @@ export function drinkQuestion(utterance, drink = {}) {
     return null;
   }
   const text = fold(utterance);
-  const chosen = /\blight\b/.test(text) ? "Light" : /\bregular\b/.test(text) ? "regular" : "";
+  const chosen = /\b(light|ligera|lite)\b/.test(text) ? "Light" : /\bregular\b/.test(text) ? "regular" : "";
   const waiting = drink.kind === "coca" || drink.kind === "regular" || drink.kind === "Light" || drink.kind === "fresa";
   const volume = drinkVolume(utterance);
   if ((/\bfresa\b/.test(text) || drink.kind === "fresa") && !volume) {
@@ -122,7 +122,7 @@ function asksIngredients(text) {
 }
 
 function asksPrice(text) {
-  return /\b(precio|precios|cuesta|cuestan|cuanto)\b/.test(text);
+  return /\b(precio|precios|cuesta|cuestan|cuanto|beneficio|beneficios)\b/.test(text);
 }
 
 function priceSay(next) {
@@ -156,18 +156,19 @@ function soundsLikeBoneless(text) {
 }
 
 export function correctHeard(utterance) {
-  const text = fold(utterance);
+  const rewritten = String(utterance || "").replace(/\bbeneficios?\b/gi, "precios");
+  const text = fold(rewritten);
   if (!soundsLikeBoneless(text) || /boneless/.test(text)) {
-    return utterance;
+    return rewritten;
   }
-  const replaced = String(utterance).replace(/\b((?:pizza|pieza)\s+de\s+)\S+/i, "$1boneless");
-  if (replaced !== utterance) {
+  const replaced = rewritten.replace(/\b((?:pizza|pieza)\s+de\s+)\S+/i, "$1boneless");
+  if (replaced !== rewritten) {
     return replaced;
   }
   if (text.split(" ").filter(Boolean).length <= 2) {
     return "boneless";
   }
-  return utterance;
+  return rewritten;
 }
 
 export function matchPizza(utterance) {
@@ -563,8 +564,8 @@ export function orderedTurn(state, utterance) {
       next.drink = {};
       next.drinkOffered = true;
       next.cancelAsked = false;
-      next.askedAgree = true;
-      return { state: next, hangup: false, say: "Listo, quité la bebida. Seguimos con las pizzas. ¿Está de acuerdo con su pedido?" };
+      next.closingAsked = false;
+      return { state: next, hangup: false, say: "Listo, quité la bebida. Seguimos con las pizzas." };
     }
     if (/\bcancel/.test(text)) {
       next.cancelAsked = true;
@@ -766,24 +767,25 @@ export function orderedTurn(state, utterance) {
       next.drinkOffered = true;
     }
   }
-  if (!next.agreed) {
-    if (/\b(si|confirmo|confirmado|correcto|de acuerdo|esta bien|estaria bien)\b/.test(text) && next.askedAgree) {
-      next.agreed = true;
-    } else if (!next.askedAgree) {
-      next.askedAgree = true;
-      return {
-        state: next,
-        hangup: false,
-        say: `Su pedido es ${orderLine()}, a domicilio, en ${next.street} ${next.house}, colonia ${next.colony}, código ${speakPostal(next.postalCode)}. ¿Está de acuerdo?`
-      };
-    } else {
-      return { state: next, hangup: false, say: "¿Está de acuerdo con su pedido?" };
-    }
+  const done = /\b(no|nada|todo|gracias|ninguna|ninguno|listo|nop)\b/.test(text)
+    && !/\b(si|agreg|otra|pizza|bebida|soda|extra|duda|precio|cambia|quiero)\b/.test(text);
+  if (!next.closingAsked) {
+    next.closingAsked = true;
+    return {
+      state: next,
+      hangup: false,
+      say: "¿Tiene alguna duda o desea agregar algo más?"
+    };
   }
+  if (!done) {
+    next.closingAsked = false;
+    return { state: next, hangup: false, say: "Claro, dígame." };
+  }
+  next.agreed = true;
   return {
     state: next,
     hangup: false,
     save: true,
-    say: `Su pedido quedó confirmado con éxito. Su orden es ${orderLine()}. Llegará a su domicilio en aproximadamente 30 minutos. Que tenga buen día y gracias por llamar a Pizzería Hermosillo. Hasta pronto.`
+    say: "Muy bien, tu pedido quedó confirmado. Llegará a tu domicilio en aproximadamente 30 minutos. Muchas gracias por llamar a Pizzería Hermosillo. Que tenga buen día."
   };
 }
