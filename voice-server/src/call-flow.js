@@ -156,7 +156,10 @@ function soundsLikeBoneless(text) {
 }
 
 export function correctHeard(utterance) {
-  const rewritten = String(utterance || "").replace(/\bbeneficios?\b/gi, "precios");
+  const rewritten = String(utterance || "")
+    .replace(/([¿]?\s*)qu[eé]\s+beneficios?\s+tiene[n]?/gi, "$1Qué precio tienen")
+    .replace(/\bbeneficios\b/gi, "precios")
+    .replace(/\bbeneficio\b/gi, "precio");
   const text = fold(rewritten);
   if (!soundsLikeBoneless(text) || /boneless/.test(text)) {
     return rewritten;

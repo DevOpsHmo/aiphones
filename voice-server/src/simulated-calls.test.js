@@ -292,7 +292,7 @@ test("simulacion 18 que trae lee la pizza y el extra no la cambia", () => {
 });
 
 test("simulacion 20 beneficio es el precio, light no es ligera y sin direccion no cierra", () => {
-  assert.equal(correctHeard("¿Qué beneficio tiene?"), "¿Qué precios tiene?");
+  assert.equal(correctHeard("¿Qué beneficio tiene?"), "¿Qué precio tienen?");
   const price = orderedTurn({
     name: "Alfredo",
     product: "Lucco Boneless",

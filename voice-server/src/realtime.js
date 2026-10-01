@@ -245,7 +245,8 @@ export function createRealtimeSession({
             },
             transcription: {
               model: "gpt-4o-transcribe",
-              language: "es"
+              language: "es",
+              prompt: "Pedido de pizza por teléfono. Si preguntan cuánto cuesta, escribieron precio o precios. Nunca escribas beneficio ni beneficios. Vocabulario: precio, precios, mediana, grande, familiar, Light, Coca-Cola, boneless, barbiquiú, búfalo, domicilio, colonia."
             },
             turn_detection: {
               type: "server_vad",
