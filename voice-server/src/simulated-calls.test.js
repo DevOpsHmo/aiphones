@@ -354,6 +354,51 @@ test("simulacion 20 beneficio es el precio, light no es ligera y sin direccion n
   );
 });
 
+test("simulacion 21 el habla de hermosillo usa las mismas frases", () => {
+  assert.equal(heardFulfillment("pa'llevar"), "pickup");
+  assert.equal(heardFulfillment("para llevar"), "pickup");
+  assert.equal(heardFulfillment("pa'l jale"), "delivery");
+  assert.equal(heardFulfillment("me lo manda pa'l jale"), "delivery");
+  const price = orderedTurn({ name: "Ana", product: "Mexicana" }, "¿Cuánto sale?");
+  assert.match(price.say, /Mediana/);
+  assert.match(price.say, /grande/);
+  const timing = orderedTurn({ name: "Ana", product: "Mexicana" }, "¿En cuánto?");
+  assert.match(timing.say, /familiar/);
+  const how = orderedTurn({ name: "Ana" }, "¿A cómo?");
+  assert.match(how.say, /Mediana/);
+  const menu = orderedTurn({ name: "Ana" }, "¿Qué manejan?");
+  assert.match(menu.say, /Tenemos/);
+  assert.match(menu.say, /Hawaina/);
+  assert.equal(menu.state.product, "");
+  const listed = orderedTurn({ name: "Ana" }, "¿Qué hay?");
+  assert.match(listed.say, /Peperoni/);
+  const info = orderedTurn({
+    name: "Ana",
+    descriptions: { Hawaina: "Jamón y piña." }
+  }, "¿Qué trae la hawaiana?");
+  assert.match(info.say, /Jamón y piña/);
+  const carry = orderedTurn({
+    name: "Ana",
+    product: "Mexicana",
+    size: "grande",
+    offeredMore: true,
+    drinkOffered: true
+  }, "pa'llevar");
+  assert.equal(carry.state.fulfillment, "pickup");
+  const work = orderedTurn({
+    name: "Ana",
+    product: "Mexicana",
+    size: "grande",
+    offeredMore: true,
+    drinkOffered: true
+  }, "mándamelo pa'l jale");
+  assert.equal(work.state.fulfillment, "delivery");
+  assert.match(work.say, /código postal/);
+  const unnamed = orderedTurn({}, "¿Qué hay?");
+  assert.match(unnamed.say, /Tenemos/);
+  assert.equal(unnamed.state.name, "");
+});
+
 test("simulacion 19 fuera de horario avisa que estan cerrados", () => {
   const noon = new Date("2026-09-30T19:00:00Z");
   const night = new Date("2026-10-01T06:00:00Z");

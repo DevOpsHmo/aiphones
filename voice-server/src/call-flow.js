@@ -122,7 +122,17 @@ function asksIngredients(text) {
 }
 
 function asksPrice(text) {
-  return /\b(precio|precios|cuesta|cuestan|cuanto|beneficio|beneficios)\b/.test(text);
+  return /\b(precio|precios|cuesta|cuestan|cuanto|beneficio|beneficios|a como)\b/.test(text);
+}
+
+function asksMenu(text) {
+  return /\b(que hay|que manejan|que manejas|el menu)\b/.test(text);
+}
+
+function menuSay(next) {
+  const hidden = new Set((next.unavailable || []).map(item => fold(item)));
+  const names = MENU_PIZZAS.filter(name => !hidden.has(fold(name)));
+  return `Tenemos ${names.join(", ")}. ¿Cuál?`;
 }
 
 function priceSay(next) {
@@ -252,11 +262,11 @@ export function speakPostal(code) {
 }
 
 export function heardFulfillment(utterance) {
-  const text = fold(utterance);
-  if (/\brecoger\b/.test(text)) {
+  const text = fold(utterance).replace(/['’]/g, "");
+  if (/\b(recoger|para llevar|pa llevar|pallevar)\b/.test(text) || /pallevar|pa llevar/.test(text)) {
     return "pickup";
   }
-  if (/domicil|adomi/.test(text)) {
+  if (/domicil|adomi|\bjale\b/.test(text) || /\b(me lo manda|mandamelo)\b/.test(text)) {
     return "delivery";
   }
   const compact = text.replace(/\s+/g, "");
@@ -581,8 +591,21 @@ export function orderedTurn(state, utterance) {
     return { state: next, hangup: false, say: "¿Qué pizza desea agregar? Las que ya tenía se quedan." };
   }
   if (!next.name) {
+    if (asksMenu(text)) {
+      return { state: next, hangup: false, say: menuSay(next) };
+    }
+    if (asksPrice(text)) {
+      return { state: next, hangup: false, say: priceSay(next) };
+    }
+    if (asksIngredients(text)) {
+      return { state: next, hangup: false, say: "¿De cuál pizza quiere saber los ingredientes?" };
+    }
+    const earlyPlace = heardFulfillment(utterance);
+    if (earlyPlace) {
+      next.fulfillment = earlyPlace;
+    }
     const bare = text.trim().match(/^(?:me llamo |soy )?([a-z]{3,}(?:\s+[a-z]{3,}){0,2})$/);
-    if (bare && !matchPizza(utterance) && !mentionedSize(utterance)) {
+    if (bare && !earlyPlace && !matchPizza(utterance) && !mentionedSize(utterance)) {
       next.name = titleName(bare[1]);
       return { state: next, hangup: false, say: "¿Qué desea ordenar?" };
     }
@@ -640,6 +663,9 @@ export function orderedTurn(state, utterance) {
     next.fulfillment = fulfillment;
   }
   if (!next.product) {
+    if (asksMenu(text)) {
+      return { state: next, hangup: false, say: menuSay(next) };
+    }
     if (/\bpizza\b/.test(text)) {
       return sameQuestion(next, "No manejamos esa. Tenemos mexicana, peperoni y deluxe. ¿Cuál desea?");
     }
