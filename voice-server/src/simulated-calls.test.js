@@ -128,7 +128,8 @@ test("simulacion 13 sawayana es hawaiana y no repite para siempre", () => {
     state = turn.state;
     last = turn.say;
   }
-  assert.equal(last, "Disculpe, lo transferiré con un humano.");
+  assert.notEqual(last, "Disculpe, lo transferiré con un humano.");
+  assert.match(last, /mediana, grande o familiar|no le oí/i);
 });
 
 test("simulacion 14 la coca se pregunta y domicilio mal oido cuenta", () => {
@@ -149,9 +150,10 @@ test("simulacion 14 la coca se pregunta y domicilio mal oido cuenta", () => {
   assert.equal(place.said.at(-1), "¿Cuál es el código postal?");
 });
 
-test("simulacion 11 si se enoja transfiere a un humano", () => {
+test("simulacion 11 si se enoja sigue con el pedido", () => {
   const call = play(["ya te lo dije tres veces"], { name: "Ricardo", postalCode: "" });
-  assert.equal(call.said[0], "Disculpe, lo transferiré con un humano.");
+  assert.doesNotMatch(call.said[0], /humano|comunico/i);
+  assert.match(call.said[0], /ordenar|pizza|mediana/i);
 });
 
 test("simulacion 7 recoger no pide direccion", () => {

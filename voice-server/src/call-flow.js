@@ -277,17 +277,24 @@ export function heardFulfillment(utterance) {
   return nearDelivery ? "delivery" : "";
 }
 
+export function looksLikeQuestion(value) {
+  const raw = String(value || "");
+  const text = fold(raw);
+  if (!text) {
+    return false;
+  }
+  return /[?¿]/.test(raw) || /\b(que trae|que lleva|que tiene|cuanto|precio|horario|a que hora|donde estan|donde queda|donde se encuentran|tienen|que hay|promocion|promociones|ingrediente|aceptan|tarjeta|efectivo|abren|cierran)\b/.test(text);
+}
+
+export function isAnsweredQuestion(say) {
+  const text = String(say || "");
+  return /^(Mediana |La pizza |No tengo anotados|Tenemos |Hay más de una|No te preocupes|No manejamos)/.test(text)
+    || /\btrae\b/i.test(text);
+}
+
 function sameQuestion(next, say) {
   if (next.lastAsk === say) {
     next.sameCount = (next.sameCount || 0) + 1;
-    if (next.sameCount >= 2) {
-      return {
-        state: next,
-        hangup: false,
-        transfer: true,
-        say: "Disculpe, lo transferiré con un humano."
-      };
-    }
     const again = `Disculpe, no le oí bien. ${say}`;
     next.lastSay = again;
     return { state: next, hangup: false, say: again };
@@ -554,14 +561,6 @@ export function orderedTurn(state, utterance) {
     ...state
   };
   const text = fold(utterance).replace(/[.,!?¿¡]/g, " ").replace(/\bno la pizza\b/g, "una pizza").replace(/\s+/g, " ").trim();
-  if (/\b(ya te lo dije|no entiendes|no me escuch|estoy harto|confund|tres veces|cuatro veces|pendeja|pendejo|cabron|mierda|estupida|idiota|por que no puedes)\b/.test(text)) {
-    return {
-      state: next,
-      hangup: false,
-      transfer: true,
-      say: "Disculpe, lo transferiré con un humano."
-    };
-  }
   if (/\bcancel/.test(text) || next.cancelAsked) {
     const onlyDrink = /\b(bebida|soda|coca|refresco)\b/.test(text) || (next.cancelAsked && /\b(solo|nomas|nada mas)\b/.test(text));
     const whole = /\b(todo|pedido|orden)\b/.test(text);

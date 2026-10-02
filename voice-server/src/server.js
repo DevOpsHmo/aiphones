@@ -14,6 +14,7 @@ import {
 import {
   createCall,
   finishCall,
+  saveTranscript,
   getBusinessByTwilioPhone,
   getMonthUsageSeconds,
   normalizePhone,
@@ -416,7 +417,12 @@ wss.on(
                   openTime: menu?.open_time,
                   closeTime: menu?.close_time
                 }),
-                resumeTransfer: params.resume === "transfer"
+                resumeTransfer: params.resume === "transfer",
+                onTranscript: text => {
+                  saveTranscript({ callId, transcript: text }).catch(error => {
+                    console.error("No se guardó la conversación:", error.message);
+                  });
+                }
               });
 
             return;
@@ -491,6 +497,7 @@ wss.on(
           realtime &&
           callId
         ) {
+          await new Promise(resolve => setTimeout(resolve, 1500));
           await finishCall({
             callId,
             transcript:

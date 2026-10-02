@@ -15,7 +15,7 @@ import {
 import { config } from "./config.js";
 import { interruptionDecision } from "./turn-policy.js";
 import { wantsHuman } from "./human-transfer.js";
-import { correctHeard, emptyFacts, factsInstructions, lockFacts, orderedTurn } from "./call-flow.js";
+import { correctHeard, emptyFacts, factsInstructions, isAnsweredQuestion, lockFacts, looksLikeQuestion, orderedTurn } from "./call-flow.js";
 import { emptyPcmState, isPcmFormat, pcmToPcmuBase64 } from "./phone-audio.js";
 
 function isPromptEcho(text) {
@@ -59,7 +59,8 @@ export function createRealtimeSession({
   menuPrices = null,
   menuDescriptions = {},
   closedGreeting = "",
-  resumeTransfer = false
+  resumeTransfer = false,
+  onTranscript = null
 }) {
   const openaiSocket =
     new WebSocket(
@@ -74,6 +75,46 @@ export function createRealtimeSession({
 
   let transcript = "";
   let startedAt = Date.now();
+  let saveTimer = null;
+
+  function orderProgress(state) {
+    const flow = state || {};
+    return [
+      flow.name,
+      flow.product,
+      flow.size,
+      flow.fulfillment,
+      flow.postalCode,
+      flow.colony,
+      flow.street,
+      flow.house,
+      (flow.extras || []).join(","),
+      flow.sauce,
+      flow.offeredMore,
+      (flow.items || []).length
+    ].join("|");
+  }
+
+  function currentTranscript() {
+    let full = transcript;
+    for (const text of pendingAssistant.values()) {
+      const line = `IA: ${text}\n`;
+      if (text && !full.includes(line)) {
+        full += line;
+      }
+    }
+    return full;
+  }
+
+  function scheduleSave() {
+    if (!onTranscript) {
+      return;
+    }
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      onTranscript(currentTranscript());
+    }, 400);
+  }
   let timeWarned = false;
   let silenceTimer = null;
   let askedIfThere = false;
@@ -177,11 +218,24 @@ export function createRealtimeSession({
     if (greetingSent || openaiSocket.readyState !== WebSocket.OPEN) return;
     greetingSent = true;
     const phrase = closedGreeting || "Hola, bienvenido a Pizzería Hermosillo. ¿Cuál es su nombre?";
+    rememberAssistant(phrase);
     lastSpoken = phrase;
     openaiSocket.send(JSON.stringify({
       type: "response.create",
       response: exactSpeech(phrase)
     }));
+  }
+
+  function rememberAssistant(phrase) {
+    const clean = String(phrase || "").trim();
+    if (!clean) {
+      return;
+    }
+    const line = `IA: ${clean}\n`;
+    if (!transcript.endsWith(line)) {
+      transcript += line;
+    }
+    scheduleSave();
   }
 
   function speakExact(phrase) {
@@ -190,9 +244,35 @@ export function createRealtimeSession({
       return;
     }
     lastSpoken = clean;
+    rememberAssistant(clean);
     openaiSocket.send(JSON.stringify({
       type: "response.create",
       response: exactSpeech(clean)
+    }));
+  }
+
+  function speakAnswer(question, followUp) {
+    const clean = String(question || "").replace(/"/g, "").trim();
+    if (!clean || openaiSocket.readyState !== WebSocket.OPEN) {
+      if (followUp) {
+        speakExact(followUp);
+      }
+      return;
+    }
+    const next = followUp
+      ? ` Después, en la misma respuesta, pregunta exactamente: ${followUp}`
+      : "";
+    pendingScripts += 1;
+    lastSpoken = "";
+    openaiSocket.send(JSON.stringify({
+      type: "response.create",
+      response: {
+        output_modalities: ["audio"],
+        tool_choice: "none",
+        conversation: "none",
+        metadata: { source: "script" },
+        instructions: `Contesta en español de México, de usted, en una o dos frases, solo la pregunta del cliente: "${clean}". Usa únicamente el menú y los datos de esta pizzería. Si no está en el menú, di que no lo manejamos. No digas que vas a transferir ni que comunicarás con alguien. No confirmes el pedido. No saludes.${next}\n\nMENÚ:\n${menuText || "Menú no disponible."}`
+      }
     }));
   }
 
@@ -293,7 +373,7 @@ R6. Antes de create_order repite nombre, calle, número, colonia, código, cada 
 R7. Si corrige un dato, usa el nuevo y olvida el anterior.
 R8. Si no entendiste, di exactamente: "Disculpa, no entendí. ¿Puedes repetir?"
 R9. Si pregunta clima, política u otro tema, di "Solo puedo ayudarle con su pedido. ¿Continuamos?"
-R10. Si dice que no entiendes o pide un humano, di "Te comunico con un compañero, un momento." y llama transfer_to_human.
+R10. Contesta cualquier pregunta del cliente con el menú: precios, ingredientes, promociones, horarios y formas de pago. No transfieras por no entender. Si no oíste, di "Disculpa, no entendí. ¿Puedes repetir?"
 R11. "No" y "gracias" durante la toma no cuelgan. Solo end_call después del spoken de create_order, o si cancelaron.
 R12. No saludes: el servidor ya dijo la bienvenida una sola vez. Nunca repitas una frase. Orden de la llamada: nombre, qué desea ordenar, tamaño, una vez "¿Desea agregar algo más? ¿Alguna bebida?", después "¿A domicilio o para recoger?". Solo si es domicilio pide la ubicación en este orden, una pregunta por turno y sin opciones: código postal, colonia, calle y número. Si no entendiste la colonia, pide otra vez la colonia, no el código.
 
@@ -308,7 +388,7 @@ Si pregunta qué trae, qué lleva o qué ingredientes tiene una pizza, lee solo 
 Si piden un ingrediente que no viene en la descripción de esa pizza, es extra. Di el precio propio de ese ingrediente si está en el menú; si no tiene, di el extra general. No inventes el número. "Los champiñones no vienen en la pizza de pepperoni. Son un extra de 25" solo si el extra general es 25 y champiñones no tiene precio propio. "La piña no viene en la mexicana. Es un extra." Pasa ese ingrediente en extras. Si el ingrediente ya viene en la descripción, no lo cobres ni lo menciones como extra. Esto vale para cualquier ingrediente del menú. Orilla rellena de queso y queso extra usan su precio propio o, si no tienen, el extra general, aunque la pizza ya lleve queso. No escribas notas que el cliente no dijo. No pongas "Bien doradita" si no pidió la pizza más dorada. Si pide dos pizzas con el mismo extra, el extra se cobra en cada una: dos medianas con champiñones son 450, no 425. No calcules tú el total: usa el precio del menú, tamaño más extra, por cada pizza.
 Una calle, una colonia, Issste, un código postal o un "no" no son ingredientes. No agregues pollo ni ningún extra si no dijo "con" o "agrégale" ese ingrediente. Si dice que no pidió el extra, quítalo y repite el precio sin él.
 
-1. No llames transfer_to_human por tu cuenta. El servidor transfiere solo si la persona lo pide o está frustrada.
+1. No llames transfer_to_human. El servidor pasa la llamada solo si el cliente pide hablar con un encargado o con un humano. Una queja, una pregunta o repetir un dato no transfiere.
 Si preguntan cómo va su pedido, llama order_status y di exactamente spoken. No armes un pedido nuevo.
 Si el estado es preparing y preguntan cuánto tiempo, di "Aproximadamente 15 minutos."
 Si el estado es delivering y preguntan cuánto tiempo, di "En menos de 10 minutos."
@@ -527,7 +607,7 @@ ${menuText || "Menú no disponible."}
             type: "function",
             name: "transfer_to_human",
             description:
-              "Pasa la llamada a una persona en el teléfono de desborde. Úsala cuando pidan hablar con un humano.",
+              "Pasa la llamada solo si el cliente pidió hablar con un encargado o con un humano. No la uses por confusión ni por una pregunta.",
             parameters: {
               type: "object",
               properties: {},
@@ -646,6 +726,7 @@ ${menuText || "Menú no disponible."}
             const heard = correctHeard(event.transcript);
             transcript +=
               `Cliente: ${heard}\n`;
+            scheduleSave();
             const decision = interruptionDecision({
               event: "transcript",
               transcript: event.transcript
@@ -660,17 +741,14 @@ ${menuText || "Menú no disponible."}
             if (callState.closed) {
               return;
             }
-            if (wantsHuman(event.transcript)) {
+            if (wantsHuman(heard)) {
               callState.transferAsked = true;
               redirectToHuman();
             } else {
+              const before = orderProgress(callState.flow || {});
               const turn = orderedTurn(callState.flow || {}, heard);
               callState.flow = turn.state;
-              if (turn.transfer) {
-                callState.transferAsked = true;
-                speakExact(turn.say);
-                redirectToHuman();
-              } else if (turn.cancel) {
+              if (turn.cancel) {
                 callState.cancelled = true;
                 callState.closeWhenSpoken = true;
                 speakExact(turn.say);
@@ -779,7 +857,15 @@ ${menuText || "Menú no disponible."}
                 if (assistantSpeaking) {
                   stopTalking();
                 }
-                speakExact(turn.say);
+                if (
+                  looksLikeQuestion(heard) &&
+                  before === orderProgress(turn.state) &&
+                  !isAnsweredQuestion(turn.say)
+                ) {
+                  speakAnswer(heard, turn.say);
+                } else {
+                  speakExact(turn.say);
+                }
               }
             }
           }
@@ -792,10 +878,11 @@ ${menuText || "Menú no disponible."}
           if (event.response_id && scriptedIds.has(event.response_id)) {
             playedResponses.add(event.response_id);
             const waiting = pendingAssistant.get(event.response_id);
-            if (waiting) {
+            if (waiting && !transcript.includes(`IA: ${waiting}\n`)) {
               transcript += `IA: ${waiting}\n`;
-              pendingAssistant.delete(event.response_id);
+              scheduleSave();
             }
+            pendingAssistant.delete(event.response_id);
           }
         }
 
@@ -814,10 +901,7 @@ ${menuText || "Menú no disponible."}
                 `IA: ${event.transcript}\n`;
             }
             armSilence();
-            if (wantsHuman(event.transcript)) {
-              callState.transferAsked = true;
-              redirectToHuman();
-            }
+            scheduleSave();
             if (
               (callState.orderPlaced || callState.cancelled) &&
               /hasta luego|hasta pronto|tu pedido quedó confirmado/i.test(event.transcript) &&
@@ -881,7 +965,7 @@ ${menuText || "Menú no disponible."}
     socket: openaiSocket,
 
     getTranscript() {
-      return transcript;
+      return currentTranscript();
     },
 
     appendCallerAudio(payload) {

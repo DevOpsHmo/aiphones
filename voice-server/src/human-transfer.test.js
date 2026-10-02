@@ -28,7 +28,7 @@ for (const phrase of yes) {
   });
 }
 
-for (const phrase of ["¿Cuánto cuesta?", "Quiero una pizza", "¿Qué tamaños tienen?", "Espera", "Repíteme eso", "Estoy escuchando", "Gracias", "eh", "otra persona"]) {
+for (const phrase of ["¿Cuánto cuesta?", "Quiero una pizza", "¿Qué tamaños tienen?", "Espera", "Repíteme eso", "Estoy escuchando", "Gracias", "eh", "otra persona", "Claro, lo comunico con alguien de la pizzería", "ya te lo dije tres veces"]) {
   test(`no transfiere ${phrase}`, () => {
     assert.equal(wantsHuman(phrase), false);
   });

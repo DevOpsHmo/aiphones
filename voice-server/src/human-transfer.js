@@ -5,6 +5,9 @@ export function wantsHuman(value) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+  if (/comunico con alguien de la pizzeria/.test(text)) {
+    return false;
+  }
   if (/\botra persona\b/.test(text) && !/\b(humano|encargad|agente|pasame|comunica)\b/.test(text)) {
     return false;
   }

@@ -235,6 +235,20 @@ export async function createCall({
     .select()
     .single();
 
+  if (error?.code === "23505" && twilioCallSid) {
+    const { data: existing, error: readError } = await supabase
+      .from("calls")
+      .select("*")
+      .eq("twilio_call_sid", twilioCallSid)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (readError || !existing) {
+      throw error;
+    }
+    return existing;
+  }
+
   if (error) {
     throw error;
   }
@@ -242,16 +256,30 @@ export async function createCall({
   return data;
 }
 
+export async function saveTranscript({ callId, transcript }) {
+  const text = String(transcript || "").trim();
+  if (!callId || !text) {
+    return;
+  }
+  const { error } = await supabase
+    .from("calls")
+    .update({ transcript: text })
+    .eq("id", callId);
+  if (error) {
+    console.error("saveTranscript error:", error.message);
+  }
+}
+
 export async function finishCall({
   callId,
   transcript,
   durationSeconds
 }) {
+  await saveTranscript({ callId, transcript });
   const { error } = await supabase
     .from("calls")
     .update({
       status: "completed",
-      transcript: transcript || null,
       duration_seconds:
         durationSeconds || null,
       ended_at: new Date().toISOString()
