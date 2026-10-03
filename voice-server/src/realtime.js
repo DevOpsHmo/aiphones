@@ -15,7 +15,7 @@ import {
 import { config } from "./config.js";
 import { interruptionDecision } from "./turn-policy.js";
 import { wantsHuman } from "./human-transfer.js";
-import { correctHeard, emptyFacts, factsInstructions, isAnsweredQuestion, lockFacts, looksLikeQuestion, orderedTurn } from "./call-flow.js";
+import { correctHeard, emptyFacts, factsInstructions, inventedHeard, isAnsweredQuestion, lockFacts, looksLikeQuestion, orderedTurn } from "./call-flow.js";
 import { emptyPcmState, isPcmFormat, pcmToPcmuBase64 } from "./phone-audio.js";
 
 function isPromptEcho(text) {
@@ -326,7 +326,7 @@ export function createRealtimeSession({
             transcription: {
               model: "gpt-4o-transcribe",
               language: "es",
-              prompt: "Pedido de pizza por teléfono. Si preguntan cuánto cuesta, escribieron precio o precios. Nunca escribas beneficio ni beneficios. Vocabulario: precio, precios, mediana, grande, familiar, Light, Coca-Cola, boneless, barbiquiú, búfalo, domicilio, colonia."
+              prompt: "ISSSTE Federal, Modelo, Hermosillo, mediana, grande, familiar, Light, Coca-Cola, boneless, barbiquiú, búfalo, domicilio, colonia, precio"
             },
             turn_detection: {
               type: "server_vad",
@@ -722,8 +722,11 @@ ${menuText || "Menú no disponible."}
           event.type ===
           "conversation.item.input_audio_transcription.completed"
         ) {
-          if (event.transcript && !isPromptEcho(event.transcript)) {
+          if (event.transcript && !isPromptEcho(event.transcript) && !inventedHeard(event.transcript)) {
             const heard = correctHeard(event.transcript);
+            if (inventedHeard(heard)) {
+              return;
+            }
             transcript +=
               `Cliente: ${heard}\n`;
             scheduleSave();

@@ -784,6 +784,8 @@ function foldColony(value) {
   let text = foldText(value)
     .replace(/\bi\s+ese\s+ese\s+ese\s+te\s+e\b/g, "issste")
     .replace(/\bi\s+ese\s+ese\s+te\s+e\b/g, "issste")
+    .replace(/\biztacalco\s+federal\b/g, "issste federal")
+    .replace(/\biztacalco\b/g, "issste")
     .replace(/\bcero\b/g, "0")
     .replace(/\buno\b/g, "1")
     .replace(/\bdos\b/g, "2")

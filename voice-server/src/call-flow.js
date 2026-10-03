@@ -165,8 +165,22 @@ function soundsLikeBoneless(text) {
   return /^(bajo|baul|baules|borde|doble)$/.test(text.trim());
 }
 
+export function inventedHeard(value) {
+  const text = fold(value).replace(/[¡!¿?.,]/g, " ").replace(/\s+/g, " ").trim();
+  if (!text) {
+    return true;
+  }
+  return /^(provechito|provecho|buen provecho)$/.test(text);
+}
+
 export function correctHeard(utterance) {
   const rewritten = String(utterance || "")
+    .replace(/[¡!]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[¿]?\s*noins\s*[?]?\s*$/i, "Luis")
+    .replace(/\biztacalco\s+federal\b/gi, "ISSSTE Federal")
+    .replace(/\biztacalco\b/gi, "ISSSTE")
     .replace(/([¿]?\s*)qu[eé]\s+beneficios?\s+tiene[n]?/gi, "$1Qué precio tienen")
     .replace(/\bbeneficios\b/gi, "precios")
     .replace(/\bbeneficio\b/gi, "precio");

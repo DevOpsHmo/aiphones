@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { correctHeard, heardFulfillment, matchPizza, orderedTurn, speakPostal } from "./call-flow.js";
+import { correctHeard, heardFulfillment, inventedHeard, matchPizza, orderedTurn, speakPostal } from "./call-flow.js";
 import { deliveryAddress, kitchenClosedMessage, postalFromColony } from "./tools.js";
 import { interruptionDecision } from "./turn-policy.js";
 
@@ -295,6 +295,13 @@ test("simulacion 18 que trae lee la pizza y el extra no la cambia", () => {
 
 test("simulacion 20 beneficio es el precio, light no es ligera y sin direccion no cierra", () => {
   assert.equal(correctHeard("¿Qué beneficio tiene?"), "¿Qué precio tienen?");
+  assert.equal(correctHeard("¡Noins!"), "Luis");
+  assert.equal(correctHeard("Iztacalco Federal"), "ISSSTE Federal");
+  assert.equal(postalFromColony("Iztacalco Federal").colony, "ISSSTE Federal");
+  assert.equal(postalFromColony("Iztacalco Federal").postalCode, "83157");
+  assert.equal(inventedHeard("Provechito."), true);
+  assert.equal(inventedHeard("¿Cuánto cuesta la familiar?"), false);
+  assert.equal(orderedTurn({}, correctHeard("¡Noins!")).state.name, "Luis");
   const price = orderedTurn({
     name: "Alfredo",
     product: "Lucco Boneless",
