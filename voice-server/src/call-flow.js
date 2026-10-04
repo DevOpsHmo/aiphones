@@ -1,7 +1,7 @@
 import { mushroomIntent, mentionedQuantity } from "./turn-policy.js";
 import { buildConfirmation, paymentForOrder, priceLine } from "./confirmation.js";
 import { matchIngredients } from "./menu-ingredients.js";
-import { formatHeardStreet, parseSpokenPostalCode, postalFromColony, streetNumber } from "./tools.js";
+import { formatHeardStreet, parseSpokenPostalCode, postalFromColony, speakClock, streetNumber } from "./tools.js";
 
 export const MENU_PIZZAS = [
   "BBQ Chicken",
@@ -126,7 +126,424 @@ function asksPrice(text) {
 }
 
 function asksMenu(text) {
-  return /\b(que hay|que manejan|que manejas|el menu)\b/.test(text);
+  if (/\b(promocion|oferta|bebida|refresco|horario|ingrediente)\b/.test(text)) {
+    return false;
+  }
+  return /\b(que hay|que manejan|que manejas|el menu|que pizzas|que sabores|que venden)\b/.test(text)
+    || (/\bpizzas\b/.test(text) && /\b(que|cuales)\b/.test(text) && !/\b(cuanto|precio|cuesta)\b/.test(text));
+}
+
+function looksLikeAsk(utterance, text) {
+  if (/[?¿]/.test(String(utterance || ""))) {
+    return true;
+  }
+  return /^(que |cual |cuales |cuanto |cuando |donde |a que hora|tienen |hay |aceptan |puedo |se puede|me puede|me pueden|hasta que|todavia)\b/.test(text);
+}
+
+function asksPromotions(text) {
+  if (/\b(dos|2)\s+grandes?\b/.test(text) || /\b(dos|2)\s+familiares?\b/.test(text)) {
+    return false;
+  }
+  if (/\b(quiero|deme|dame|ponme|pido|puedes dar|me das|van a ser)\b/.test(text)) {
+    return false;
+  }
+  return /\bpromocion/.test(text);
+}
+
+function asksDrinkMenu(text) {
+  return /\b(que bebidas|que refrescos|que sodas|bebidas tienes|refrescos tienes|tienen de tomar)\b/.test(text)
+    || (/\bbebidas?\b/.test(text) && /\b(que|cuales|tienes|tienen|hay)\b/.test(text) && !/\b(agregar|desea|alguna)\b/.test(text));
+}
+
+function asksOwnPizzas(text) {
+  return /\b(de que son|mis pizzas|que pizzas pedi|que pedi)\b/.test(text);
+}
+
+function pairRequest(text) {
+  const grande = /\bgrandes?\b/.test(text);
+  const familiar = /\bfamiliares?\b/.test(text);
+  const two = /\b(dos|2)\b/.test(text);
+  const promo = /\bpromocion\b/.test(text);
+  if (grande && !familiar && (two || promo)) {
+    return "grande";
+  }
+  if (familiar && !grande && (two || promo)) {
+    return "familiar";
+  }
+  return "";
+}
+
+function finishing(text) {
+  if (/\bno es todo\b/.test(text) || /\btodavia no\b/.test(text) || /\baun no\b/.test(text)) {
+    return "more";
+  }
+  if (/\b(es todo|seria todo|nada mas|eso es todo|ya es todo|con eso|muchas gracias)\b/.test(text)) {
+    return "done";
+  }
+  if (/^(no|nop|nada|ninguna|ninguno|listo|gracias)\b/.test(text)) {
+    return "done";
+  }
+  return "";
+}
+
+const PIZZA_PATTERNS = [
+  [/hawai\w*|saway\w*|awaina\w*|awaiana\w*/g, "Hawaina"],
+  [/boneless|bonles|boneles|bodwe|\bbaule\w*|\bbaules\b|\bbound\w*/g, "Lucco Boneless"],
+  [/\bdeluxe\b|\bde luz\b|\bluz\b/g, "Deluxe"],
+  [/tejicana\w*|mejicana\w*|mexicana\w*/g, "Mexicana"],
+  [/\bitaliana\w*/g, "Italiana"],
+  [/\bmarguerita\w*|\bmargarita\w*/g, "Marguerita"],
+  [/peperoni\w*|pepperoni\w*/g, "Peperoni"],
+  [/\bsinaloense\w*/g, "Sinaloense"],
+  [/\bspincacoli\w*/g, "Spincacoli"],
+  [/\bstromboli\w*/g, "Stromboli"],
+  [/\bveggie\w*|\bvegetariana\w*/g, "Veggie"],
+  [/\bchipotle\w*/g, "Chipotle Chicken"],
+  [/\balfredo\w*/g, "Chicken Alfredo"],
+  [/\bostion\w*/g, "Ostiones"],
+  [/\bbbq chicken\b|\bbarbecue chicken\b/g, "BBQ Chicken"]
+];
+
+export function listedPizzas(utterance) {
+  const text = fold(utterance);
+  const hits = [];
+  for (const [re, name] of PIZZA_PATTERNS) {
+    const flags = new RegExp(re.source, "g");
+    let match;
+    while ((match = flags.exec(text))) {
+      if (name === "Peperoni") {
+        const before = text.slice(Math.max(0, match.index - 24), match.index);
+        if (/\b(extra|con|agrega|agregale|ponle)\b/.test(before)) {
+          continue;
+        }
+      }
+      hits.push({ index: match.index, name });
+    }
+  }
+  hits.sort((left, right) => left.index - right.index);
+  const unique = [];
+  for (const hit of hits) {
+    if (!unique.includes(hit.name)) {
+      unique.push(hit.name);
+    }
+  }
+  return unique;
+}
+
+export function isVocabularyEcho(value) {
+  const text = fold(value).replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  if (!text) {
+    return false;
+  }
+  if (text.includes("issste federal") && text.includes("modelo") && text.includes("boneless") && text.includes("precio")) {
+    return true;
+  }
+  const markers = ["issste", "modelo", "hermosillo", "mediana", "familiar", "boneless", "barbiquiu", "bufalo", "colonia", "precio", "coca", "light", "domicilio"];
+  const hits = markers.filter(token => new RegExp(`\\b${token}\\b`).test(text));
+  return hits.length >= 6;
+}
+
+export function strayEcho(utterance, state = {}) {
+  const text = fold(utterance).replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  if (text === "hermosillo") {
+    return true;
+  }
+  if (text !== "modelo") {
+    return false;
+  }
+  return !(state.fulfillment === "delivery" && !state.colony);
+}
+
+function spokenPizza(name) {
+  return fold(name).includes("boneless") ? "boneless" : name;
+}
+
+function promoSay(next) {
+  const promos = Array.isArray(next.promotions) ? next.promotions.filter(item => item && item.name) : [];
+  if (!promos.length) {
+    return "Las promociones de hoy son: dos familiares por 450 y dos grandes por 400.";
+  }
+  const line = promos
+    .map(item => `${item.name} por ${Math.round(Number(item.price) || 0)}`)
+    .join(" y ");
+  return `Las promociones de hoy son: ${line}.`;
+}
+
+function ownPizzasSay(next) {
+  const lines = [...(next.items || [])];
+  if (next.product) {
+    lines.push({ product: next.product, size: next.size || next.pairSize || "" });
+  }
+  if (!lines.length) {
+    const which = next.pairNeed === 2 ? " ¿De qué sabor quiere la primera?" : " ¿Cuál desea?";
+    return `Todavía no me ha dicho el sabor.${which}`;
+  }
+  const spoken = lines.map(item => `una ${item.size ? `${item.size} ` : ""}de ${spokenPizza(item.product)}`).join(" y ");
+  return `Sus pizzas son ${spoken}.`;
+}
+
+function moneyOf(next) {
+  const prices = next.prices || { mediana: 200, grande: 220, familiar: 250 };
+  const extra = Number(next.extraPrice ?? 25);
+  return { prices, extra };
+}
+
+function orderLines(next) {
+  const lines = [...(next.items || [])];
+  if (next.product && (next.size || next.pairSize)) {
+    lines.push({
+      product: next.product,
+      size: next.size || next.pairSize,
+      extras: next.extras || [],
+      sauce: next.sauce || ""
+    });
+  }
+  return lines;
+}
+
+function totalSay(next) {
+  const { prices, extra } = moneyOf(next);
+  const lines = orderLines(next);
+  if (!lines.length || lines.some(item => !prices[item.size])) {
+    return `Para decirle el total necesito sabor y tamaño. ${priceSay(next)}`;
+  }
+  const plainGrandes = lines.filter(item => item.size === "grande" && !(item.extras || []).length).length === 2
+    && lines.length === 2;
+  const plainFamiliares = lines.filter(item => item.size === "familiar" && !(item.extras || []).length).length === 2
+    && lines.length === 2;
+  let total = 0;
+  for (const item of lines) {
+    let unit = prices[item.size] + (item.extras || []).length * extra;
+    if (plainGrandes) {
+      unit = 200;
+    }
+    if (plainFamiliares) {
+      unit = 225;
+    }
+    total += unit;
+  }
+  const drink = next.drink || {};
+  if (drink.volume === "600") {
+    total += 30;
+  }
+  if (drink.volume === "2 litros") {
+    total += 50;
+  }
+  return `Su total va en ${total}. El domicilio no cobra envío aparte.`;
+}
+
+function hoursSay(next) {
+  if (next.openTime && next.closeTime) {
+    return `El horario es de ${speakClock(next.openTime)} a ${speakClock(next.closeTime)}. El domicilio se toma dentro de ese horario.`;
+  }
+  return "El horario es el del local. Si ya cerramos, la llamada se lo dice al entrar.";
+}
+
+function paymentSay(next) {
+  const card = next.payments?.card !== false;
+  const transfer = next.payments?.transfer !== false;
+  const pickup = [
+    "efectivo",
+    card ? "tarjeta" : "",
+    transfer ? "transferencia" : ""
+  ].filter(Boolean).join(", ");
+  return `A domicilio el pago es en efectivo, al recibir. Para recoger puede pagar con ${pickup}. La factura se pide en la sucursal.`;
+}
+
+function customerQuestion(next, utterance, text) {
+  if (!looksLikeAsk(utterance, text)) {
+    return null;
+  }
+  if (/\b(llego mal|equivocad|falt[oó]|cobraron|fria|quemad|cruda|danad|incompleto|reclam)\b/.test(text)) {
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: "Lamento que el pedido haya salido mal. Si quiere, lo comunico con un encargado."
+    };
+  }
+  if (/\b(ya esta listo|donde esta mi pedido|cuanto falta|ya salio|estado de mi pedido|ya viene el repartidor|por que esta tardando|se retraso)\b/.test(text)) {
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      status: true,
+      say: "Reviso el pedido de este teléfono."
+    };
+  }
+  if ((pairRequest(text) || listedPizzas(utterance).length) && !/\b(lleva|trae|ingrediente|cuesta|precio|sale|cuanto)\b/.test(text)) {
+    return null;
+  }
+  if (/\b(horario|abren|cierran|abiertos|domingo|festivo|hasta que hora)\b/.test(text) || /\ba que hora\b/.test(text)) {
+    return { state: next, hangup: false, answered: true, say: hoursSay(next) };
+  }
+  if (/\b(tarjeta|transferencia|efectivo|factura|debito|credito|formas de pago)\b/.test(text)) {
+    return { state: next, hangup: false, answered: true, say: paymentSay(next) };
+  }
+  if (/\b(envio|envios|costo de envio|cobran por llevar|cargo)\b/.test(text)) {
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: "El envío no tiene costo extra dentro de Hermosillo. El domicilio llega en unos 30 minutos."
+    };
+  }
+  if (/\b(tarda|demora|cuanto tiempo|repartidor|entrega rapida)\b/.test(text)) {
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: "El domicilio llega en unos 30 minutos. Para recoger también queda en unos 30 minutos."
+    };
+  }
+  if (/\b(llegan|zona de entrega|cobertura|hasta donde)\b/.test(text)) {
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: "Repartimos en Hermosillo. Dígame su código postal y le confirmo si llegamos."
+    };
+  }
+  if (/\b(donde estan|donde queda|sucursal|como llego|estacionamiento)\b/.test(text)) {
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: "Estamos en Hermosillo. Si va a recoger, le confirmo la sucursal al cerrar el pedido."
+    };
+  }
+  if (/\b(mitad|mitad y mitad)\b/.test(text)) {
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: "No armamos mitad y mitad. Puede pedir dos pizzas, cada una de un sabor."
+    };
+  }
+  if (/\b(rebanadas|para cuantas|cuanto mide|que tamanos|tamanos manejan|tamanos tienen)\b/.test(text)) {
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: "Manejamos mediana, grande y familiar. La familiar es la más grande. No tengo las medidas en centímetros ni el número de rebanadas."
+    };
+  }
+  if (/\b(ingrediente extra|queso extra|doble queso|doble pepperoni|cuanto cuesta agregar|cuanto cuesta el extra)\b/.test(text)) {
+    const { extra } = moneyOf(next);
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: `El ingrediente extra cuesta ${extra}. Quitar un ingrediente no tiene costo.`
+    };
+  }
+  if (/\b(vegetariana|sin carne|no come carne)\b/.test(text)) {
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: "Sí, tenemos la pizza Veggie. También le puedo quitar la carne a otra pizza."
+    };
+  }
+  if (/\b(solo queso|solamente con queso|solamente de queso|pizza de queso)\b/.test(text)) {
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: "La más sencilla de queso es la Marguerita. Si quiere, se la anoto."
+    };
+  }
+  if (/\b(pepsi|agua|alitas|papas|postre|ensalada|pasta)\b/.test(text)) {
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: "Eso no lo manejamos. De bebida tenemos Coca-Cola regular, Coca-Cola Light y refresco de fresa."
+    };
+  }
+  if (/\b(2x1|dos por uno|segunda pizza tiene descuento)\b/.test(text)) {
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: `Hoy no tenemos dos por uno. ${promoSay(next)}`
+    };
+  }
+  if (/\b(recomienda|mas vendida|mas popular|especialidad de)\b/.test(text)) {
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: "La gente pide mucho peperoni, hawaiana y mexicana. ¿Cuál desea?"
+    };
+  }
+  if (/\b(total|cuanto voy a pagar|cuanto seria|cuanto es todo|cuanto sale mi pedido|cuanto queda)\b/.test(text)) {
+    return { state: next, hangup: false, answered: true, say: totalSay(next) };
+  }
+  const oneSize = ["mediana", "grande", "familiar"].filter(size => text.includes(size));
+  if (/\b(puedo pedir|como puedo hacer un pedido|pedir por telefono|me puede tomar)\b/.test(text) && !pairRequest(text)) {
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: "Sí, con gusto le tomo el pedido por teléfono. ¿De qué sabor y de qué tamaño?"
+    };
+  }
+  if (oneSize.length === 1 && /\b(cuesta|cuestan|precio|sale|cuanto)\b/.test(text) && !/\b(envio|total|tarda)\b/.test(text)) {
+    const { prices } = moneyOf(next);
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: `La ${oneSize[0]} cuesta ${Math.round(Number(prices[oneSize[0]]) || 0)}.`
+    };
+  }
+  return null;
+}
+
+function infoReply(next, utterance, text) {
+  const asked = customerQuestion(next, utterance, text);
+  if (asked) {
+    return asked;
+  }
+  if (asksPromotions(text) || (looksLikeAsk(utterance, text) && /\b(oferta|combo)\b/.test(text))) {
+    return { state: next, hangup: false, answered: true, say: promoSay(next) };
+  }
+  if (asksDrinkMenu(text)) {
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: "Tenemos Coca-Cola regular, Coca-Cola Light y refresco de fresa. La de 600 mililitros cuesta 30 y la de 2 litros cuesta 50."
+    };
+  }
+  if (asksOwnPizzas(text)) {
+    return { state: next, hangup: false, answered: true, say: ownPizzasSay(next) };
+  }
+  if (asksIngredients(text)) {
+    const asked = matchPizza(utterance) || next.product;
+    if (asked && !next.product && !next.pairNeed) {
+      next.product = asked;
+    }
+    const description = describePizza(next.descriptions, asked);
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: asked
+        ? (description
+          ? `La pizza ${spokenPizza(asked)} trae ${description}.`
+          : `No tengo anotados los ingredientes de la pizza ${spokenPizza(asked)}.`)
+        : "¿De cuál pizza quiere saber los ingredientes?"
+    };
+  }
+  if (asksPrice(text)) {
+    return { state: next, hangup: false, answered: true, say: priceSay(next) };
+  }
+  if (asksMenu(text)) {
+    return { state: next, hangup: false, answered: true, say: menuSay(next) };
+  }
+  return null;
 }
 
 function menuSay(next) {
@@ -170,7 +587,7 @@ export function inventedHeard(value) {
   if (!text) {
     return true;
   }
-  return /^(provechito|provecho|buen provecho)$/.test(text);
+  return /^(provechito|provecho|buen provecho)$/.test(text) || isVocabularyEcho(value);
 }
 
 export function correctHeard(utterance) {
@@ -208,6 +625,9 @@ export function matchPizza(utterance) {
   }
   if (/\bdeluxe\b|\bde luz\b|\bluz\b/.test(text)) {
     return "Deluxe";
+  }
+  if (/tejicana|mejicana/.test(text)) {
+    return "Mexicana";
   }
   const named = MENU_PIZZAS.find(name => fold(name) !== "peperoni" && text.includes(fold(name)));
   if (named) {
@@ -302,7 +722,7 @@ export function looksLikeQuestion(value) {
 
 export function isAnsweredQuestion(say) {
   const text = String(say || "");
-  return /^(Mediana |La pizza |No tengo anotados|Tenemos |Hay más de una|No te preocupes|No manejamos)/.test(text)
+  return /^(Mediana |La pizza |No tengo anotados|Tenemos |Hay más de una|No te preocupes|No manejamos|Las promociones|La promoción|Anoté|Sus pizzas|Todavía|Su orden)/.test(text)
     || /\btrae\b/i.test(text);
 }
 
@@ -562,6 +982,13 @@ export function nextReply(state, utterance) {
 }
 
 export function orderedTurn(state, utterance) {
+  if (isVocabularyEcho(utterance) || strayEcho(utterance, state)) {
+    return {
+      state,
+      hangup: false,
+      say: "Disculpe, no le oí bien. ¿Me lo repite?"
+    };
+  }
   const next = {
     name: "",
     product: "",
@@ -599,9 +1026,13 @@ export function orderedTurn(state, utterance) {
     }
     next.cancelAsked = false;
   }
-  if (/\b(agregar|otra pizza|pedido anterior)\b/.test(text)) {
+  if (/\b(agregar|otra pizza|pedido anterior)\b/.test(text) && !asksPromotions(text) && !asksIngredients(text) && !asksOwnPizzas(text)) {
     next.adding = true;
     return { state: next, hangup: false, say: "¿Qué pizza desea agregar? Las que ya tenía se quedan." };
+  }
+  const info = infoReply(next, utterance, text);
+  if (info) {
+    return info;
   }
   if (!next.name) {
     if (asksMenu(text)) {
@@ -647,13 +1078,51 @@ export function orderedTurn(state, utterance) {
   if (foundExtras.length) {
     const folded = foundExtras.map(name => fold(name).replace(/pepperoni/g, "peperoni"));
     const unique = foundExtras.filter((name, index) => folded.indexOf(folded[index]) === index);
-    next.extras = [...new Set([...(next.extras || []), ...unique])];
+    const removing = /\b(sin|quita|quitale|no quiero)\b/.test(text) && !/\b(extra|ponle|agrega|agregale)\b/.test(text);
+    if (removing) {
+      next.without = [...new Set([...(next.without || []), ...unique])];
+      next.extras = (next.extras || []).filter(name => !unique.includes(name));
+    } else {
+      next.extras = [...new Set([...(next.extras || []), ...unique])];
+    }
   }
   if (size) {
     next.size = size;
   }
   if (heardSauce(text) && fold(next.product).includes("boneless")) {
     next.sauce = heardSauce(text);
+  }
+  const namedNow = listedPizzas(utterance);
+  const pair = pairRequest(text);
+  if (pair) {
+    next.pairNeed = 2;
+    next.pairSize = pair;
+    next.size = pair;
+  }
+  if (namedNow.length >= 2 && (pair || next.pairNeed === 2) && (next.items || []).length < 2) {
+    const chosen = next.pairSize || pair || "grande";
+    const sauce = heardSauce(text);
+    next.pairNeed = 2;
+    next.pairSize = chosen;
+    next.size = chosen;
+    if (fold(namedNow[0]).includes("boneless") && !sauce) {
+      next.items = [];
+      next.pendingSecond = namedNow[1];
+      next.product = namedNow[0];
+      next.sauce = "";
+      next.extras = [];
+    } else {
+      next.items = [{
+        product: namedNow[0],
+        size: chosen,
+        sauce: fold(namedNow[0]).includes("boneless") ? sauce : "",
+        extras: []
+      }];
+      next.product = namedNow[1];
+      next.pendingSecond = "";
+      next.sauce = fold(namedNow[1]).includes("boneless") ? sauce : "";
+      next.extras = [];
+    }
   }
   if (asksIngredients(text)) {
     if (!next.product) {
@@ -676,6 +1145,14 @@ export function orderedTurn(state, utterance) {
     next.fulfillment = fulfillment;
   }
   if (!next.product) {
+    if (next.pairNeed === 2 && (next.items || []).length < 2) {
+      const which = (next.items || []).length ? "segunda" : "primera";
+      const price = (next.pairSize || "grande") === "familiar" ? 450 : 400;
+      const intro = (next.items || []).length
+        ? ""
+        : `La promoción es de dos pizzas ${next.pairSize}s por ${price}. `;
+      return { state: next, hangup: false, say: `${intro}¿De qué sabor quiere la ${which}?` };
+    }
     if (asksMenu(text)) {
       return { state: next, hangup: false, say: menuSay(next) };
     }
@@ -689,7 +1166,38 @@ export function orderedTurn(state, utterance) {
     return sameQuestion(next, `${next.product}${extraLabel}, ¿mediana, grande o familiar?`);
   }
   if (fold(next.product).includes("boneless") && !next.sauce) {
-    return sameQuestion(next, "Lucco Boneless, ¿salsa barbiquiú o búfalo?");
+    return sameQuestion(next, "La pizza boneless, ¿salsa barbiquiú o búfalo?");
+  }
+  if (next.pendingSecond && next.product && (!fold(next.product).includes("boneless") || next.sauce)) {
+    next.items = [...(next.items || []), {
+      product: next.product,
+      size: next.pairSize || next.size,
+      sauce: next.sauce || "",
+      extras: next.extras || []
+    }];
+    next.product = next.pendingSecond;
+    next.pendingSecond = "";
+    next.sauce = fold(next.product).includes("boneless") ? next.sauce : "";
+    next.extras = [];
+    next.size = next.pairSize || next.size;
+  }
+  if (next.pairNeed === 2 && next.product && (next.items || []).length < 1 && !next.pendingSecond) {
+    const saved = spokenPizza(next.product);
+    next.items = [{
+      product: next.product,
+      size: next.pairSize || next.size,
+      sauce: next.sauce || "",
+      extras: next.extras || []
+    }];
+    next.product = "";
+    next.sauce = "";
+    next.extras = [];
+    next.size = next.pairSize || next.size;
+    return {
+      state: next,
+      hangup: false,
+      say: `Anoté una ${next.pairSize || next.size} de ${saved}. ¿De qué sabor quiere la segunda?`
+    };
   }
   if (!next.offeredMore && !/\bno\b/.test(text) && !/\b(coca|soda|fresa)\b/.test(text)) {
     next.offeredMore = true;
@@ -773,7 +1281,7 @@ export function orderedTurn(state, utterance) {
     }
     const pizzas = lines.map(item => {
       const topping = (item.extras || []).length ? ` con extra de ${item.extras.join(" y ")}` : "";
-      return `una pizza ${item.size} de ${item.product}${item.sauce ? ` con ${sauceWord(item.sauce)}` : ""}${topping}`;
+      return `una pizza ${item.size} de ${spokenPizza(item.product)}${item.sauce ? ` con ${sauceWord(item.sauce)}` : ""}${topping}`;
     }).join(" y ");
     const drink = next.drink || {};
     if (!drink.volume) {
@@ -809,9 +1317,9 @@ export function orderedTurn(state, utterance) {
       next.drinkOffered = true;
     }
   }
-  const done = /\b(no|nada|todo|gracias|ninguna|ninguno|listo|nop)\b/.test(text)
-    && !/\b(si|agreg|otra|pizza|bebida|soda|extra|duda|precio|cambia|quiero)\b/.test(text);
-  if (!next.closingAsked) {
+  const end = finishing(text);
+  const explicitDone = end === "done" && /\b(es todo|seria todo|nada mas|eso es todo|ya es todo|con eso|muchas gracias)\b/.test(text);
+  if (!next.closingAsked && !explicitDone) {
     next.closingAsked = true;
     return {
       state: next,
@@ -819,7 +1327,14 @@ export function orderedTurn(state, utterance) {
       say: "¿Tiene alguna duda o desea agregar algo más?"
     };
   }
-  if (!done) {
+  if (end === "more" || (listedPizzas(utterance).length && end !== "done")) {
+    next.closingAsked = false;
+    if (listedPizzas(utterance).length) {
+      return { state: next, hangup: false, say: `Anoté ${orderLine()}. ¿Desea agregar algo más?` };
+    }
+    return { state: next, hangup: false, say: "Claro, dígame. ¿Qué desea agregar?" };
+  }
+  if (end !== "done") {
     next.closingAsked = false;
     return { state: next, hangup: false, say: "Claro, dígame." };
   }
@@ -828,6 +1343,6 @@ export function orderedTurn(state, utterance) {
     state: next,
     hangup: false,
     save: true,
-    say: "Muy bien, tu pedido quedó confirmado. Llegará a tu domicilio en aproximadamente 30 minutos. Muchas gracias por llamar a Pizzería Hermosillo. Que tenga buen día."
+    say: `Su orden es ${orderLine()}. Muy bien, tu pedido quedó confirmado. Llegará a tu domicilio en aproximadamente 30 minutos. Muchas gracias por llamar a Pizzería Hermosillo. Que tenga buen día.`
   };
 }

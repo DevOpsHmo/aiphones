@@ -408,6 +408,12 @@ wss.on(
                 businessId,
                 menuText,
                 menuPrices: menu?.pizza_sizes || null,
+                menuPromotions: (menu?.products || [])
+                  .filter(product => product.category === "Promociones")
+                  .map(product => ({ name: product.name, price: Number(product.price) })),
+                menuHours: { open: menu?.open_time || "", close: menu?.close_time || "" },
+                menuExtra: menu?.extra_price ?? null,
+                menuPayments: menu?.payments || null,
                 menuDescriptions: Object.fromEntries(
                   (menu?.products || [])
                     .filter(product => product.description)

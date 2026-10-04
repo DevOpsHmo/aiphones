@@ -357,10 +357,10 @@ test("simulacion 20 beneficio es el precio, light no es ligera y sin direccion n
     closingAsked: true
   }, "no");
   assert.equal(placed.save, true);
-  assert.equal(
-    placed.say,
-    "Muy bien, tu pedido quedó confirmado. Llegará a tu domicilio en aproximadamente 30 minutos. Muchas gracias por llamar a Pizzería Hermosillo. Que tenga buen día."
-  );
+  assert.match(placed.say, /Su orden es una pizza familiar de boneless con búfalo y una Coca-Cola regular de 600 mililitros/);
+  assert.match(placed.say, /tu pedido quedó confirmado/);
+  assert.match(placed.say, /30 minutos/);
+  assert.match(placed.say, /Muchas gracias por llamar a Pizzería Hermosillo/);
 });
 
 test("simulacion 21 el habla de hermosillo usa las mismas frases", () => {
@@ -418,6 +418,88 @@ test("simulacion 19 fuera de horario avisa que estan cerrados", () => {
   assert.match(closed, /las diez de la noche/);
   assert.match(closed, /Que tengas buen día/);
   assert.equal(kitchenClosedMessage({ openTime: "", closeTime: "", now: night }), "");
+});
+
+test("simulacion 22 la promo de dos grandes pide cada sabor y no se traga la pregunta", () => {
+  const asked = orderedTurn({ name: "Roberto" }, "¿Qué promociones tiene el día de hoy?");
+  assert.match(asked.say, /dos familiares por 450/);
+  assert.match(asked.say, /dos grandes por 400/);
+  assert.equal(asked.state.product, "");
+  const again = orderedTurn(asked.state, "¿Qué promociones tienes el día de hoy?");
+  assert.match(again.say, /400/);
+  const promo = orderedTurn(again.state, "Dos grandes, una promoción de dos grandes a domicilio.");
+  assert.equal(promo.state.fulfillment, "delivery");
+  assert.equal(promo.state.pairNeed, 2);
+  assert.match(promo.say, /De qué sabor quiere la primera/);
+  const first = orderedTurn(promo.state, "boneless");
+  assert.match(first.say, /barbiquiú o búfalo/);
+  const sauce = orderedTurn(first.state, "búfalo");
+  assert.match(sauce.say, /segunda/);
+  assert.equal(sauce.state.items[0].product, "Lucco Boneless");
+  const second = orderedTurn(sauce.state, "una tejicana");
+  assert.equal(second.state.product, "Mexicana");
+  assert.match(second.say, /agregar algo más/i);
+  const both = orderedTurn(promo.state, "Hacer una de boneless y una tejicana");
+  assert.equal(both.state.pendingSecond, "Mexicana");
+  assert.match(both.say, /barbiquiú o búfalo/);
+  const echo = orderedTurn({ name: "Roberto", product: "Mexicana", size: "grande" }, "ISSSTE Federal, Modelo, Hermosillo, mediana, grande, familiar, Light, Coca-Cola, boneless, barbiquiú, búfalo, domicilio, colonia, precio");
+  assert.equal(echo.state.product, "Mexicana");
+  assert.equal(echo.state.size, "grande");
+  assert.match(echo.say, /no le oí/);
+  const stray = orderedTurn({ name: "Roberto", product: "Mexicana", size: "grande" }, "Modelo");
+  assert.equal(stray.state.product, "Mexicana");
+  assert.equal(stray.state.colony || "", "");
+  const own = orderedTurn(second.state, "¿de qué son mis pizzas?");
+  assert.match(own.say, /boneless/);
+  assert.match(own.say, /Mexicana/);
+  const more = orderedTurn({
+    ...second.state,
+    offeredMore: true,
+    drinkOffered: true,
+    fulfillment: "delivery",
+    postalCode: "83010",
+    colony: "ISSSTE Federal",
+    street: "Lázaro Cárdenas",
+    house: "1",
+    closingAsked: true
+  }, "No es todo.");
+  assert.notEqual(more.save, true);
+  assert.match(more.say, /agregar/);
+  const done = orderedTurn(more.state, "Es todo, muchas gracias.");
+  assert.equal(done.save, true);
+  assert.match(done.say, /tu pedido quedó confirmado/);
+  assert.match(done.say, /30 minutos/);
+  assert.match(done.say, /Mexicana/);
+});
+
+test("simulacion 23 preguntas frecuentes no se tragan el pedido", () => {
+  const price = orderedTurn({ name: "Ana", prices: { mediana: 180, grande: 210, familiar: 240 } }, "¿Cuánto cuesta la grande?");
+  assert.equal(price.say, "La grande cuesta 210.");
+  assert.equal(price.state.product, "");
+  const sizes = orderedTurn({ name: "Ana" }, "¿Cuántas rebanadas trae la familiar?");
+  assert.match(sizes.say, /mediana, grande y familiar/);
+  const time = orderedTurn({ name: "Ana", product: "Mexicana", size: "grande" }, "¿Cuánto tarda el domicilio?");
+  assert.match(time.say, /30 minutos/);
+  assert.equal(time.state.product, "Mexicana");
+  const ship = orderedTurn({ name: "Ana" }, "¿Cuánto cobran de envío?");
+  assert.match(ship.say, /no tiene costo extra/);
+  const pay = orderedTurn({ name: "Ana" }, "¿Aceptan tarjeta?");
+  assert.match(pay.say, /efectivo/);
+  const hours = orderedTurn({ name: "Ana", openTime: "11:00", closeTime: "22:00" }, "¿A qué hora cierran?");
+  assert.match(hours.say, /diez de la noche/);
+  const promo = orderedTurn({ name: "Ana" }, "¿Hay 2x1?");
+  assert.match(promo.say, /no tenemos dos por uno/);
+  assert.match(promo.say, /dos grandes por 400/);
+  const half = orderedTurn({ name: "Ana" }, "¿Puedo pedir mitad y mitad?");
+  assert.match(half.say, /No armamos mitad y mitad/);
+  const drinks = orderedTurn({ name: "Ana" }, "¿Tienen Pepsi?");
+  assert.match(drinks.say, /no lo manejamos/i);
+  const menu = orderedTurn({ name: "Ana" }, "¿Qué pizzas tienen?");
+  assert.match(menu.say, /Hawaina/);
+  assert.equal(menu.state.product, "");
+  const order = orderedTurn(price.state, "Quiero una grande de pepperoni");
+  assert.equal(order.state.product, "Peperoni");
+  assert.equal(order.state.size, "grande");
 });
 
 test("simulacion 10 la hawaiana apagada no se vende", () => {

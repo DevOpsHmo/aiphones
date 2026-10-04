@@ -11,8 +11,11 @@ export function wantsHuman(value) {
   if (/\botra persona\b/.test(text) && !/\b(humano|encargad|agente|pasame|comunica)\b/.test(text)) {
     return false;
   }
-  const role = /\b(humano|encargad\w*|agente|persona|alguien)\b/;
-  const ask = /\b(hablar con|pasame|comunica\w*|atienda|atender|necesito hablar)\b/;
+  if (/\b(maquina|robot)\b/.test(text) && /\b(persona|humano|alguien)\b/.test(text)) {
+    return true;
+  }
+  const role = /\b(humano|encargad\w*|agente|persona|alguien|empleado|gerente)\b/;
+  const ask = /\b(hablar con|pasar\w*|pasame|comunica\w*|atienda|atender|necesito hablar)\b/;
   return role.test(text) && ask.test(text);
 }
 

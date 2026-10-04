@@ -15,13 +15,16 @@ import {
 import { config } from "./config.js";
 import { interruptionDecision } from "./turn-policy.js";
 import { wantsHuman } from "./human-transfer.js";
-import { correctHeard, emptyFacts, factsInstructions, inventedHeard, isAnsweredQuestion, lockFacts, looksLikeQuestion, orderedTurn } from "./call-flow.js";
+import { correctHeard, emptyFacts, factsInstructions, inventedHeard, isAnsweredQuestion, isVocabularyEcho, lockFacts, looksLikeQuestion, orderedTurn, strayEcho } from "./call-flow.js";
 import { emptyPcmState, isPcmFormat, pcmToPcmuBase64 } from "./phone-audio.js";
 
 function isPromptEcho(text) {
   const normalized = text.trim().toLowerCase();
   return (
+    isVocabularyEcho(text) ||
     normalized.startsWith("español de méxico") ||
+    normalized.startsWith("conversación telefónica") ||
+    normalized.startsWith("conversacion telefonica") ||
     (normalized.includes("boneless") && normalized.includes("bordes")) ||
     normalized === "vocabulario" ||
     normalized.includes("vocabulario:") ||
@@ -57,6 +60,10 @@ export function createRealtimeSession({
   knownAddress = "",
   menuText = "",
   menuPrices = null,
+  menuPromotions = [],
+  menuHours = null,
+  menuExtra = null,
+  menuPayments = null,
   menuDescriptions = {},
   closedGreeting = "",
   resumeTransfer = false,
@@ -126,6 +133,11 @@ export function createRealtimeSession({
     closeWhenSpoken: Boolean(closedGreeting),
     flow: {
       prices: menuPrices || undefined,
+      promotions: menuPromotions || [],
+      openTime: menuHours?.open || "",
+      closeTime: menuHours?.close || "",
+      extraPrice: menuExtra ?? undefined,
+      payments: menuPayments || undefined,
       descriptions: menuDescriptions || {}
     }
   };
@@ -326,7 +338,7 @@ export function createRealtimeSession({
             transcription: {
               model: "gpt-4o-transcribe",
               language: "es",
-              prompt: "ISSSTE Federal, Modelo, Hermosillo, mediana, grande, familiar, Light, Coca-Cola, boneless, barbiquiú, búfalo, domicilio, colonia, precio"
+              prompt: "Conversación telefónica en español de México sobre un pedido de pizza."
             },
             turn_detection: {
               type: "server_vad",
@@ -724,7 +736,7 @@ ${menuText || "Menú no disponible."}
         ) {
           if (event.transcript && !isPromptEcho(event.transcript) && !inventedHeard(event.transcript)) {
             const heard = correctHeard(event.transcript);
-            if (inventedHeard(heard)) {
+            if (inventedHeard(heard) || strayEcho(heard, callState.flow || {})) {
               return;
             }
             transcript +=
@@ -856,6 +868,13 @@ ${menuText || "Menú no disponible."}
                   console.error("No se pudo guardar el pedido confirmado:", error.message);
                   speakExact("No pude dejar listo el pedido. ¿Me confirma otra vez?");
                 });
+              } else if (turn.status) {
+                orderStatusTool({ businessId, callerPhone }).then(result => {
+                  speakExact(result?.spoken || turn.say);
+                }).catch(error => {
+                  console.error("No se pudo consultar el pedido:", error.message);
+                  speakExact(turn.say);
+                });
               } else if (turn.say) {
                 if (assistantSpeaking) {
                   stopTalking();
@@ -863,6 +882,7 @@ ${menuText || "Menú no disponible."}
                 if (
                   looksLikeQuestion(heard) &&
                   before === orderProgress(turn.state) &&
+                  !turn.answered &&
                   !isAnsweredQuestion(turn.say)
                 ) {
                   speakAnswer(heard, turn.say);
