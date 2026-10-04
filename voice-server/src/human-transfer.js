@@ -14,9 +14,7 @@ export function wantsHuman(value) {
   if (/\b(maquina|robot)\b/.test(text) && /\b(persona|humano|alguien)\b/.test(text)) {
     return true;
   }
-  const role = /\b(humano|encargad\w*|agente|persona|alguien|empleado|gerente)\b/;
-  const ask = /\b(hablar con|pasar\w*|pasame|comunica\w*|atienda|atender|necesito hablar)\b/;
-  return role.test(text) && ask.test(text);
+  return /\b(puedo|quiero)\s+hablar\s+con\s+un\s+humano\b/.test(text);
 }
 
 export function requestTransfer(callSid) {

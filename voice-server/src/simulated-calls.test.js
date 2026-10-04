@@ -124,12 +124,15 @@ test("simulacion 13 sawayana es hawaiana y no repite para siempre", () => {
   assert.equal(heard.state.product, "Hawaina");
   let state = { name: "Oscar", product: "Mexicana" };
   let last = "";
+  let transferred = false;
   for (let i = 0; i < 3; i += 1) {
     const turn = orderedTurn(state, "que");
     state = turn.state;
     last = turn.say;
+    transferred = turn.transfer === true;
   }
-  assert.equal(last, "Disculpe, lo transferiré con un humano.");
+  assert.match(last, /no le oí|mediana, grande o familiar/i);
+  assert.equal(transferred, false);
 });
 
 test("simulacion 14 la coca se pregunta y domicilio mal oido cuenta", () => {
@@ -642,6 +645,29 @@ test("simulacion 28 lo mal oido se confirma antes de anotarlo", () => {
   }, "modalo");
   assert.equal(saidColony.state.colony || "", "");
   assert.match(saidColony.say, /¿Acaso se refiere a la colonia Modelo\?/);
+});
+
+test("simulacion 29 la promo se pide sin decir que no esta y mexicana no transfiere", () => {
+  const ask = orderedTurn({ name: "Carlos" }, "¿Qué promociones tienes el día de hoy?");
+  assert.equal(ask.answered, true);
+  assert.match(ask.say, /familiares por 450/);
+  const promo = orderedTurn(ask.state, "Deme la promoción de dos familiares.");
+  assert.equal(promo.answered, true);
+  assert.equal(promo.state.pairNeed, 2);
+  assert.match(promo.say, /dos pizzas familiares por 450/);
+  assert.match(promo.say, /sabor quiere la primera/);
+  assert.notEqual(promo.transfer, true);
+  const again = orderedTurn(promo.state, "Sí, pues dame la promoción de esas de dos pizzas familiares");
+  assert.equal(again.answered, true);
+  assert.match(again.say, /sabor quiere la primera/);
+  assert.doesNotMatch(again.say, /no le oí/);
+  assert.notEqual(again.transfer, true);
+  assert.equal(correctHeard("Necesitamos."), "Mexicana");
+  const flavor = orderedTurn(again.state, "Necesitamos.");
+  assert.equal(flavor.state.items[0].product, "Mexicana");
+  assert.equal(flavor.state.items[0].size, "familiar");
+  assert.match(flavor.say, /segunda/);
+  assert.notEqual(flavor.transfer, true);
 });
 
 test("simulacion 10 la hawaiana apagada no se vende", () => {

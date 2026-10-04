@@ -641,7 +641,8 @@ export function correctHeard(utterance) {
     .replace(/\biztacalco\b/gi, "ISSSTE")
     .replace(/([¿]?\s*)qu[eé]\s+beneficios?\s+tiene[n]?/gi, "$1Qué precio tienen")
     .replace(/\bbeneficios\b/gi, "precios")
-    .replace(/\bbeneficio\b/gi, "precio");
+    .replace(/\bbeneficio\b/gi, "precio")
+    .replace(/^[¿]?\s*necesitamos?[.!?]*\s*$/i, "Mexicana");
   const text = fold(rewritten);
   if (!soundsLikeBoneless(text) || /boneless/.test(text)) {
     return rewritten;
@@ -663,6 +664,9 @@ export function matchPizza(utterance) {
   }
   if (soundsLikeBoneless(text)) {
     return "Lucco Boneless";
+  }
+  if (/^necesitamos?$/.test(text.replace(/[^a-z\s]/g, "").trim())) {
+    return "Mexicana";
   }
   if (/\bdeluxe\b|\bde luz\b|\bluz\b/.test(text)) {
     return "Deluxe";
@@ -974,14 +978,6 @@ export function isAnsweredQuestion(say) {
 function sameQuestion(next, say) {
   if (next.lastAsk === say) {
     next.sameCount = (next.sameCount || 0) + 1;
-    if (next.sameCount >= 2) {
-      return {
-        state: next,
-        hangup: false,
-        transfer: true,
-        say: "Disculpe, lo transferiré con un humano."
-      };
-    }
     const again = `Disculpe, no le oí bien. ${say}`;
     next.lastSay = again;
     return { state: next, hangup: false, say: again };
@@ -1487,7 +1483,14 @@ export function orderedTurn(state, utterance) {
       const intro = (next.items || []).length
         ? ""
         : `La promoción es de dos pizzas ${sizeWord(next.pairSize, true)} por ${price}. `;
-      return sameQuestion(next, `${intro}¿De qué sabor quiere la ${which}?`);
+      const flavorAsk = `${intro}¿De qué sabor quiere la ${which}?`;
+      if (pair || /\bpromocion\b/.test(text)) {
+        next.lastAsk = flavorAsk;
+        next.sameCount = 0;
+        next.lastSay = flavorAsk;
+        return { state: next, hangup: false, answered: true, say: flavorAsk };
+      }
+      return { ...sameQuestion(next, flavorAsk), answered: true };
     }
     if (asksMenu(text)) {
       return { state: next, hangup: false, say: menuSay(next) };

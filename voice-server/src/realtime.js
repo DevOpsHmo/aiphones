@@ -15,7 +15,7 @@ import {
 import { config } from "./config.js";
 import { interruptionDecision } from "./turn-policy.js";
 import { wantsHuman } from "./human-transfer.js";
-import { correctHeard, emptyFacts, factsInstructions, inventedHeard, isVocabularyEcho, lockFacts, looksLikeQuestion, orderedTurn, strayEcho } from "./call-flow.js";
+import { correctHeard, emptyFacts, factsInstructions, inventedHeard, isAnsweredQuestion, isVocabularyEcho, lockFacts, looksLikeQuestion, orderedTurn, strayEcho } from "./call-flow.js";
 import { emptyPcmState, isPcmFormat, pcmToPcmuBase64 } from "./phone-audio.js";
 
 function isPromptEcho(text) {
@@ -875,7 +875,7 @@ ${menuText || "Menú no disponible."}
                 if (assistantSpeaking) {
                   stopTalking();
                 }
-                if (looksLikeQuestion(heard) && !turn.answered) {
+                if (looksLikeQuestion(heard) && !turn.answered && !isAnsweredQuestion(turn.say)) {
                   speakExact(`Eso no está en el menú. ${turn.say}`);
                 } else {
                   speakExact(turn.say);

@@ -12,13 +12,7 @@ import { priceLine } from "./confirmation.js";
 
 const yes = [
   "Quiero hablar con un humano",
-  "Quiero hablar con una persona",
-  "Pásame con alguien",
-  "Quiero hablar con el encargado",
-  "Comunícame con un agente",
-  "Necesito hablar con alguien",
-  "Me puede atender alguien",
-  "Quiero que me atienda una persona",
+  "Puedo hablar con un humano?",
   "Espera, quiero hablar con un humano"
 ];
 
@@ -28,7 +22,7 @@ for (const phrase of yes) {
   });
 }
 
-for (const phrase of ["¿Cuánto cuesta?", "Quiero una pizza", "¿Qué tamaños tienen?", "Espera", "Repíteme eso", "Estoy escuchando", "Gracias", "eh", "otra persona", "Claro, lo comunico con alguien de la pizzería", "ya te lo dije tres veces"]) {
+for (const phrase of ["¿Cuánto cuesta?", "Quiero una pizza", "¿Qué tamaños tienen?", "Espera", "Repíteme eso", "Estoy escuchando", "Gracias", "eh", "otra persona", "Necesitamos", "Pásame con alguien", "Quiero hablar con una persona", "Claro, lo comunico con alguien de la pizzería", "ya te lo dije tres veces"]) {
   test(`no transfiere ${phrase}`, () => {
     assert.equal(wantsHuman(phrase), false);
   });
