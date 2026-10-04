@@ -670,6 +670,17 @@ test("simulacion 29 la promo se pide sin decir que no esta y mexicana no transfi
   assert.notEqual(flavor.transfer, true);
 });
 
+test("simulacion 30 luisa pide el pedido y mande repite la pregunta", () => {
+  const named = orderedTurn({}, "Luisa.");
+  assert.equal(named.state.name, "Luisa");
+  assert.equal(named.say, "¿Qué desea ordenar?");
+  const again = orderedTurn(named.state, "¿Mande?");
+  assert.equal(again.answered, true);
+  assert.equal(again.say, "¿Qué desea ordenar?");
+  assert.equal(again.state.name, "Luisa");
+  assert.notEqual(again.transfer, true);
+});
+
 test("simulacion 10 la hawaiana apagada no se vende", () => {
   const call = play(["Luis", "una pizza hawaiana"], { unavailable: ["Hawaina"] });
   assert.match(call.said.at(-1), /no está disponible/);

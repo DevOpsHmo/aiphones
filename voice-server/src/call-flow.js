@@ -1316,6 +1316,14 @@ export function orderedTurn(state, utterance) {
     ...state
   };
   const text = fold(utterance).replace(/[.,!?¿¡]/g, " ").replace(/\bno la pizza\b/g, "una pizza").replace(/\s+/g, " ").trim();
+  if (/^(mande|como dice|no entendi|no le oi|no oi|repiteme|repita|puede repetir)$/.test(text)) {
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: next.lastSay || missingSlot(next) || "¿Qué desea ordenar?"
+    };
+  }
   if (/\bcancel/.test(text) || next.cancelAsked) {
     const onlyDrink = /\b(bebida|soda|coca|refresco)\b/.test(text) || (next.cancelAsked && /\b(solo|nomas|nada mas)\b/.test(text));
     const whole = /\b(todo|pedido|orden)\b/.test(text);
@@ -1383,6 +1391,7 @@ export function orderedTurn(state, utterance) {
     const blockedName = /^(claro|bueno|bien|gracias|si|esta|promocion|devolver|quiero|hola)\b/;
     if (bare && !blockedName.test(bare[1]) && !looksLikeQuestion(utterance) && !earlyPlace && !matchPizza(utterance) && !mentionedSize(utterance)) {
       next.name = titleName(bare[1]);
+      next.lastSay = "¿Qué desea ordenar?";
       return { state: next, hangup: false, say: "¿Qué desea ordenar?" };
     }
     return { state: next, hangup: false, say: "¿Cuál es su nombre?" };
