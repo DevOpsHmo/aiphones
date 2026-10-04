@@ -1,7 +1,7 @@
 import { mushroomIntent, mentionedQuantity } from "./turn-policy.js";
 import { buildConfirmation, paymentForOrder, priceLine } from "./confirmation.js";
 import { matchIngredients } from "./menu-ingredients.js";
-import { acceptedPostal, formatHeardStreet, parseSpokenPostalCode, postalFromColony, speakClock, spokenDigitHouse, streetNumber, suggestColony, suggestPostal } from "./tools.js";
+import { acceptedPostal, formatHeardStreet, parseSpokenPostalCode, postalFromColony, speakClock, streetNumber, streetPlacement, suggestColony, suggestPostal } from "./tools.js";
 
 export const MENU_PIZZAS = [
   "BBQ Chicken",
@@ -891,6 +891,9 @@ function applyGuess(next) {
   } else if (guess.slot === "street") {
     next.street = guess.value;
     next.house = guess.extra;
+  } else if (guess.slot === "name") {
+    next.name = guess.value;
+    next.lastSay = "¿Qué desea ordenar?";
   } else if (guess.slot === "drink" && guess.drink) {
     next.drink = { ...(next.drink || {}), ...guess.drink };
     next.offeredMore = true;
@@ -1399,7 +1402,11 @@ export function orderedTurn(state, utterance) {
       return afterGuess(next);
     }
     if (no) {
+      const wasName = next.guess.slot === "name";
       next.guess = null;
+      if (wasName) {
+        return { state: next, hangup: false, answered: true, say: "¿Cuál es su nombre?" };
+      }
       return sameQuestion(next, missingSlot(next) || "¿Me lo repite?");
     }
     next.guess = null;
@@ -1433,11 +1440,23 @@ export function orderedTurn(state, utterance) {
     const bare = text.trim().match(/^(?:me llamo |soy )?([a-z]{3,}(?:\s+[a-z]{3,}){0,2})$/);
     const blockedName = /^(claro|bueno|bien|gracias|si|esta|promocion|devolver|quiero|hola)\b/;
     if (bare && !blockedName.test(bare[1]) && !looksLikeQuestion(utterance) && !earlyPlace && !matchPizza(utterance) && !mentionedSize(utterance)) {
-      next.name = titleName(bare[1]);
-      next.lastSay = "¿Qué desea ordenar?";
-      return { state: next, hangup: false, say: "¿Qué desea ordenar?" };
+      const heardName = titleName(bare[1]);
+      next.nameMisses = 0;
+      return confirmGuess(next, {
+        slot: "name",
+        value: heardName,
+        ask: `¿Su nombre es ${heardName}?`
+      });
     }
-    return { state: next, hangup: false, answered: true, say: "¿Cuál es su nombre?" };
+    next.nameMisses = (next.nameMisses || 0) + 1;
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: next.nameMisses >= 2
+        ? "Disculpe, no le oí el nombre. ¿Me lo dice despacio?"
+        : "¿Cuál es su nombre?"
+    };
   }
   const pizza = matchPizza(text);
   const size = heardSize(text);
@@ -1755,21 +1774,28 @@ export function orderedTurn(state, utterance) {
     const house = heard ? streetNumber(utterance) : "";
     if (heard && house) {
       const streetName = heard.replace(/\s+\d+$/, "").trim();
-      if (spokenDigitHouse(utterance)) {
-        const other = postalFromColony(streetName);
-        const elsewhere = other.postalCode && other.postalCode !== next.postalCode
-          || (other.options || []).some(item => item.postalCode !== next.postalCode);
-        const warning = elsewhere ? "Ese nombre también es una colonia de otro código. " : "";
-        next.addressSaid = true;
-        return confirmGuess(next, {
-          slot: "street",
-          value: streetName,
-          extra: house,
-          ask: `${warning}Anoté ${streetName}, número ${speakHouse(house)}, colonia ${next.colony}. ¿Está bien?`
-        });
+      const placement = streetPlacement(streetName, next.postalCode);
+      if (placement.known && !placement.here && next.rejectedStreet !== placement.core) {
+        next.rejectedStreet = placement.core;
+        const where = placement.postals.slice(0, 2).map(code => speakPostal(code)).join(" o ");
+        return {
+          state: next,
+          hangup: false,
+          answered: true,
+          say: `${streetName} no está en ${next.colony}. La tengo en el código ${where}. ¿Cuál es la calle y el número?`
+        };
       }
-      next.house = house;
-      next.street = streetName;
+      const other = placement.known ? { postalCode: "", options: [] } : postalFromColony(streetName);
+      const elsewhere = Boolean(other.postalCode && other.postalCode !== next.postalCode)
+        || (other.options || []).some(item => item.postalCode !== next.postalCode);
+      const warning = elsewhere ? "Ese nombre también es una colonia de otro código. " : "";
+      next.addressSaid = true;
+      return confirmGuess(next, {
+        slot: "street",
+        value: streetName,
+        extra: house,
+        ask: `${warning}La dirección quedó ${streetName}, número ${speakHouse(house)}, colonia ${next.colony}, código ${speakPostal(next.postalCode)}. ¿Está bien?`
+      });
     } else {
       const known = learnedPostal ? `Colonia ${next.colony}, código ${speakPostal(next.postalCode)}. ` : "";
       return sameQuestion(next, `${known}¿Cuál es la calle y el número?`);

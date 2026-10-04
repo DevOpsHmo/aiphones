@@ -31,6 +31,29 @@ function loadHermosilloCatalog() {
 
 loadHermosilloCatalog();
 
+const streetCatalog = JSON.parse(readFileSync(path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../data/hermosillo-streets.json"
+), "utf8"));
+
+export function streetCore(value) {
+  return foldText(value)
+    .replace(/^(calle|avenida|av|blvd|boulevard|bulevard|paseo|privada|andador)\s+/, "")
+    .trim();
+}
+
+export function streetPlacement(streetName, postalCode) {
+  const core = streetCore(streetName);
+  const row = streetCatalog.find(item => item.core === core);
+  if (!row) {
+    return { known: false, here: false, core, postals: [] };
+  }
+  const postals = [...new Set(row.postals.map(item => item.postal).filter(Boolean))];
+  const unknownPostal = row.postals.some(item => !item.postal);
+  const here = unknownPostal || postals.includes(String(postalCode || ""));
+  return { known: true, here, core, postals };
+}
+
 export async function refreshHermosilloCatalog() {
   return loadHermosilloCatalog();
 }

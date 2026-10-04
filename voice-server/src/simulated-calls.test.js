@@ -20,26 +20,29 @@ function play(lines, start = {}) {
 
 test("simulacion 1 el nombre no pide la calle", () => {
   const call = play(["Ernesto"]);
-  assert.equal(call.state.name, "Ernesto");
-  assert.equal(call.said[0], "¿Qué desea ordenar?");
+  assert.equal(call.state.name, "");
+  assert.match(call.said[0], /Su nombre es Ernesto/);
   assert.doesNotMatch(call.said[0], /calle/i);
+  const yes = play(["sí"], call.state);
+  assert.equal(yes.state.name, "Ernesto");
+  assert.equal(yes.said[0], "¿Qué desea ordenar?");
 });
 
 test("simulacion 2 el precio de cualquier pizza son los tres tamaños", () => {
-  const call = play(["Ernesto", "mexicana", "qué precio tiene"]);
+  const call = play(["Ernesto", "sí", "mexicana", "qué precio tiene"]);
   assert.match(call.said.at(-1), /200/);
   assert.match(call.said.at(-1), /220/);
   assert.match(call.said.at(-1), /250/);
 });
 
 test("simulacion 3 domicilio pide el codigo antes que la calle", () => {
-  const call = play(["Octavio", "mexicana", "familiar", "no", "a domicilio"]);
+  const call = play(["Octavio", "sí", "mexicana", "familiar", "no", "a domicilio"]);
   assert.equal(call.said.at(-1), "¿Cuál es el código postal?");
   assert.doesNotMatch(call.said.join(" "), /Privada|calle y número/i);
 });
 
 test("simulacion 4 una colonia que no corresponde no se guarda", () => {
-  const call = play(["Octavio", "mexicana", "familiar", "no", "domicilio", "83157", "Montecarlo"]);
+  const call = play(["Octavio", "sí", "mexicana", "familiar", "no", "domicilio", "83157", "Montecarlo"]);
   assert.equal(call.state.colony, "");
   assert.match(call.said.at(-1), /no corresponde|otra vez la colonia/i);
   assert.doesNotMatch(call.said.join(" "), /vocabulario/i);
@@ -55,6 +58,7 @@ test("simulacion 5 ciento 50 no es una calle", () => {
 test("simulacion 6 el cierre pide un si antes de confirmar", () => {
   const call = play([
     "Ricardo.",
+    "sí",
     "peperoni",
     "mediana",
     "no",
@@ -62,6 +66,7 @@ test("simulacion 6 el cierre pide un si antes de confirmar", () => {
     "ochenta y tres ciento cincuenta y siete",
     "Issste Federal",
     "Lázaro Cárdenas número 1",
+    "sí",
     "no"
   ]);
   assert.equal(call.state.name, "Ricardo");
@@ -78,6 +83,7 @@ test("simulacion 6 el cierre pide un si antes de confirmar", () => {
 test("simulacion 15 dos pizzas se confirman juntas y la calle queda sin puntos", () => {
   const call = play([
     "Ivan Valencia",
+    "sí",
     "una pizza hawaiana",
     "familiar",
     "y una pizza de pepperoni mediana",
@@ -86,6 +92,7 @@ test("simulacion 15 dos pizzas se confirman juntas y la calle queda sin puntos",
     "83280",
     "Colonia San Pablo.",
     "Pablitos . 13",
+    "sí",
     "no"
   ]);
   assert.equal(call.state.items[0].product, "Hawaina");
@@ -101,7 +108,7 @@ test("simulacion 12 familias es familiar y veracruz cincuenta y seis es calle", 
   const sized = play(["familias"], { name: "Oscar", product: "Mexicana" });
   assert.equal(sized.state.size, "familiar");
   assert.match(sized.said.at(-1), /agregar algo más/i);
-  const street = play(["Veracruz cincuenta y seis"], {
+  const street = play(["Veracruz cincuenta y seis", "sí"], {
     name: "Oscar",
     product: "Mexicana",
     size: "familiar",
@@ -160,7 +167,7 @@ test("simulacion 11 si se enoja sigue con el pedido", () => {
 });
 
 test("simulacion 7 recoger no pide direccion", () => {
-  const call = play(["Ana", "deluxe", "grande", "no", "recoger"]);
+  const call = play(["Ana", "sí", "deluxe", "grande", "no", "recoger"]);
   assert.match(call.said.at(-1), /recoger/);
   assert.doesNotMatch(call.said.at(-1), /código postal/);
 });
@@ -304,7 +311,9 @@ test("simulacion 20 beneficio es el precio, light no es ligera y sin direccion n
   assert.equal(postalFromColony("Iztacalco Federal").postalCode, "83157");
   assert.equal(inventedHeard("Provechito."), true);
   assert.equal(inventedHeard("¿Cuánto cuesta la familiar?"), false);
-  assert.equal(orderedTurn({}, correctHeard("¡Noins!")).state.name, "Luis");
+  const heardLuis = orderedTurn({}, correctHeard("¡Noins!"));
+  assert.equal(heardLuis.state.guess.value, "Luis");
+  assert.equal(orderedTurn(heardLuis.state, "sí").state.name, "Luis");
   const price = orderedTurn({
     name: "Alfredo",
     product: "Lucco Boneless",
@@ -674,9 +683,12 @@ test("simulacion 29 la promo se pide sin decir que no esta y mexicana no transfi
 
 test("simulacion 30 luisa pide el pedido y mande repite la pregunta", () => {
   const named = orderedTurn({}, "Luisa.");
-  assert.equal(named.state.name, "Luisa");
-  assert.equal(named.say, "¿Qué desea ordenar?");
-  const again = orderedTurn(named.state, "¿Mande?");
+  assert.equal(named.state.name, "");
+  assert.match(named.say, /Su nombre es Luisa/);
+  const accepted = orderedTurn(named.state, "sí");
+  assert.equal(accepted.state.name, "Luisa");
+  assert.equal(accepted.say, "¿Qué desea ordenar?");
+  const again = orderedTurn(accepted.state, "¿Mande?");
   assert.equal(again.answered, true);
   assert.equal(again.say, "¿Qué desea ordenar?");
   assert.equal(again.state.name, "Luisa");
@@ -748,17 +760,22 @@ test("simulacion 32 la mitad se anota y el numero se oye completo", () => {
     colony: "ISSSTE Federal"
   }, "Calle Benito Juárez número dos cinco nueve.");
   assert.equal(street.state.street || "", "");
-  assert.equal(street.state.guess.extra, "259");
-  assert.equal(street.state.guess.value, "Benito Juárez");
-  assert.match(street.say, /doscientos cincuenta y nueve/);
-  assert.match(street.say, /ISSSTE Federal/);
-  assert.match(street.say, /otro código/);
-  const yes = orderedTurn(street.state, "Sí.");
+  assert.equal(street.state.guess || null, null);
+  assert.match(street.say, /no está en ISSSTE Federal/);
+  assert.match(street.say, /ciento cuarenta/);
+  const again = orderedTurn(street.state, "Calle Benito Juárez número dos cinco nueve.");
+  assert.equal(again.state.guess.extra, "259");
+  assert.equal(again.state.guess.value, "Benito Juárez");
+  assert.match(again.say, /doscientos cincuenta y nueve/);
+  assert.match(again.say, /código ochenta y tres ciento cincuenta y siete/);
+  const yes = orderedTurn(again.state, "Sí.");
   assert.equal(yes.state.house, "259");
   assert.equal(yes.state.street, "Benito Juárez");
+  const slow = orderedTurn(named.state, "Hello, good evening?");
+  assert.match(slow.say, /despacio/);
 });
 
 test("simulacion 10 la hawaiana apagada no se vende", () => {
-  const call = play(["Luis", "una pizza hawaiana"], { unavailable: ["Hawaina"] });
+  const call = play(["Luis", "sí", "una pizza hawaiana"], { unavailable: ["Hawaina"] });
   assert.match(call.said.at(-1), /no está disponible/);
 });
