@@ -184,9 +184,6 @@ export function createRealtimeSession({
   const heardById = new Set();
   let pendingScripts = 0;
   let queuedPhrase = "";
-  let pendingFollowUp = "";
-  let openQuestionPending = false;
-  let openQuestionId = "";
 
   function exactSpeech(phrase) {
     pendingScripts += 1;
@@ -208,10 +205,6 @@ export function createRealtimeSession({
         if (queuedPhrase) {
           expectedById.set(id, queuedPhrase);
           queuedPhrase = "";
-        }
-        if (openQuestionPending) {
-          openQuestionId = id;
-          openQuestionPending = false;
         }
       }
       activeResponseId = id;
@@ -257,29 +250,6 @@ export function createRealtimeSession({
     openaiSocket.send(JSON.stringify({
       type: "response.create",
       response: exactSpeech(clean)
-    }));
-  }
-
-  function speakOpenQuestion(question, followUp) {
-    const clean = String(question || "").replace(/"/g, "").trim();
-    if (!clean || openaiSocket.readyState !== WebSocket.OPEN) {
-      speakExact(followUp);
-      return;
-    }
-    pendingFollowUp = String(followUp || "").trim();
-    openQuestionPending = true;
-    pendingScripts += 1;
-    lastSpoken = "";
-    queuedPhrase = "";
-    openaiSocket.send(JSON.stringify({
-      type: "response.create",
-      response: {
-        output_modalities: ["audio"],
-        tool_choice: "none",
-        conversation: "none",
-        metadata: { source: "script" },
-        instructions: `Contesta solo esta pregunta del cliente, en una o dos frases, de usted y con amabilidad. Usa el menú. Si el dato no está, dilo sin inventar precios ni productos. No saludes. No confirmes el pedido. No pidas datos. No te despidas.\nPregunta: "${clean}"\n\nMENÚ:\n${menuText || "Menú no disponible."}`
-      }
     }));
   }
 
@@ -712,18 +682,11 @@ ${menuText || "Menú no disponible."}
         ) {
           assistantSpeaking = false;
           const doneId = event.response?.id || event.response_id || "";
-          const wasOpen = Boolean(doneId && doneId === openQuestionId);
           if (event.type === "response.done" && doneId && expectedById.has(doneId) && !heardById.has(doneId)) {
             rememberAssistant(expectedById.get(doneId));
             heardById.add(doneId);
           }
-          if (event.type === "response.done" && wasOpen && pendingFollowUp) {
-            const follow = pendingFollowUp;
-            pendingFollowUp = "";
-            openQuestionId = "";
-            speakExact(follow);
-          }
-          if (event.type === "response.done" && callState.closeWhenSpoken && !callState.hangupScheduled && !wasOpen) {
+          if (event.type === "response.done" && callState.closeWhenSpoken && !callState.hangupScheduled) {
             callState.hangupScheduled = true;
             endCallTool(callSid).catch(error => {
               console.error("No se pudo colgar:", error.message);
@@ -791,7 +754,11 @@ ${menuText || "Menú no disponible."}
             } else {
               const turn = orderedTurn(callState.flow || {}, heard);
               callState.flow = turn.state;
-              if (turn.cancel) {
+              if (turn.transfer) {
+                callState.transferAsked = true;
+                speakExact(turn.say);
+                redirectToHuman();
+              } else if (turn.cancel) {
                 callState.cancelled = true;
                 callState.closeWhenSpoken = true;
                 speakExact(turn.say);
@@ -890,7 +857,8 @@ ${menuText || "Menú no disponible."}
                   if (result?.success) {
                     callState.orderPlaced = true;
                     callState.closeWhenSpoken = true;
-                    speakExact(turn.say);
+                    const number = result.order_number ? `Su pedido quedó guardado con el número ${result.order_number}. ` : "";
+                    speakExact(`${number}${turn.say}`);
                   }
                 }).catch(error => {
                   console.error("No se pudo guardar el pedido confirmado:", error.message);
@@ -908,7 +876,7 @@ ${menuText || "Menú no disponible."}
                   stopTalking();
                 }
                 if (looksLikeQuestion(heard) && !turn.answered) {
-                  speakOpenQuestion(heard, turn.say);
+                  speakExact(`Eso no está en el menú. ${turn.say}`);
                 } else {
                   speakExact(turn.say);
                 }

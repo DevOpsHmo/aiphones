@@ -745,39 +745,125 @@ export function readPostalCode(value) {
 
   const catalogHits = [...new Set(candidates.filter(inCatalog))];
   if (catalogHits.length === 1) {
-    return { code: catalogHits[0], options: [] };
+    return { code: catalogHits[0], options: [], repaired: false };
   }
   if (catalogHits.length > 1) {
-    return { code: "", options: catalogHits.slice(0, 4) };
+    return { code: "", options: catalogHits.slice(0, 4), repaired: false };
   }
 
   const repaired = [...new Set(
     [joined, digits].flatMap(insertions)
   )];
   if (repaired.length === 1) {
-    return { code: repaired[0], options: [] };
+    return { code: repaired[0], options: [], repaired: true };
   }
   if (repaired.length > 1) {
     if (/\bciento\b/.test(folded)) {
       const withOne = repaired.find(cp => /^\d{2}1\d{2}$/.test(cp));
       if (withOne) {
-        return { code: withOne, options: [] };
+        return { code: withOne, options: [], repaired: true };
       }
     }
     if (/\bcero\b/.test(folded)) {
       const withZero = repaired.find(cp => /^\d{2}0\d{2}$/.test(cp));
       if (withZero) {
-        return { code: withZero, options: [] };
+        return { code: withZero, options: [], repaired: true };
       }
     }
-    return { code: "", options: repaired.slice(0, 4) };
+    return { code: "", options: repaired.slice(0, 4), repaired: false };
   }
 
-  return { code: "", options: [] };
+  return { code: "", options: [], repaired: false };
 }
 
 export function parseSpokenPostalCode(value) {
   return readPostalCode(value).code;
+}
+
+function postalPhonetic(value) {
+  return foldText(value)
+    .replace(/qu/g, "k")
+    .replace(/ll/g, "y")
+    .replace(/ce/g, "se")
+    .replace(/ci/g, "si")
+    .replace(/v/g, "b")
+    .replace(/z/g, "s")
+    .replace(/h/g, "")
+    .replace(/c/g, "k")
+    .replace(/[aeiou]/g, "")
+    .replace(/(.)\1+/g, "$1");
+}
+
+function closestNumberWord(token) {
+  if (!token || token.length < 4 || token in SPANISH_NUMBERS) {
+    return "";
+  }
+  const heard = postalPhonetic(token);
+  let best = "";
+  let bestDistance = Infinity;
+  let second = Infinity;
+  for (const word of Object.keys(SPANISH_NUMBERS)) {
+    if (word.length < 4) {
+      continue;
+    }
+    const raw = editDistance(token, word);
+    if (raw > 2) {
+      continue;
+    }
+    const distance = Math.min(raw, editDistance(heard, postalPhonetic(word)));
+    if (distance < bestDistance) {
+      second = bestDistance;
+      bestDistance = distance;
+      best = word;
+    } else if (distance < second) {
+      second = distance;
+    }
+  }
+  if (!best || bestDistance > 1 || second === bestDistance) {
+    return "";
+  }
+  return best;
+}
+
+function repairPostalWords(utterance) {
+  const tokens = foldText(utterance).split(" ").filter(Boolean);
+  let changed = false;
+  const fixed = tokens.map(token => {
+    const word = closestNumberWord(token);
+    if (!word) {
+      return token;
+    }
+    changed = true;
+    return word;
+  });
+  return changed ? fixed.join(" ") : "";
+}
+
+export function suggestPostal(utterance) {
+  const messy = foldText(utterance).split(" ").some(token =>
+    token.length >= 3
+    && token !== "mil"
+    && token !== "miles"
+    && !(token in SPANISH_NUMBERS)
+    && !/^\d+$/.test(token)
+  );
+  const fixed = messy ? repairPostalWords(utterance) : "";
+  const reading = readPostalCode(fixed || utterance);
+  if (reading.code && (messy || reading.repaired) && (!messy || fixed)) {
+    return reading.code;
+  }
+  if (!fixed && reading.repaired && reading.code) {
+    return reading.code;
+  }
+  return "";
+}
+
+export function acceptedPostal(utterance) {
+  if (suggestPostal(utterance)) {
+    return "";
+  }
+  const reading = readPostalCode(utterance);
+  return reading.code && !reading.repaired ? reading.code : "";
 }
 
 function foldColony(value) {
@@ -855,21 +941,51 @@ function coloniesByName() {
   return map;
 }
 
-export function postalFromColony(utterance) {
-  const said = foldColony(String(utterance || "")
+function colonyUtterance(utterance) {
+  return foldColony(String(utterance || "")
     .replace(/\bno (me lo |me |lo )?(se|acuerdo|recuerdo)\b/gi, " ")
     .replace(/\b(el c[oó]digo postal|c[oó]digo postal|c[oó]digo)\b/gi, " ")
     .replace(/\b(colonia|fraccionamiento|fracc|barrio)\b/gi, " ")
     .replace(/[^a-z0-9áéíóúñ\s]/gi, " "));
+}
+
+export function suggestColony(utterance, postalCode = "") {
+  const said = colonyUtterance(utterance);
+  if (!said || said.length < 4 || /^(no|si|gracias)$/.test(said)) {
+    return null;
+  }
+  const ranked = [];
+  for (const [key, rows] of coloniesByName()) {
+    const score = colonyScore(said, key);
+    if (score < 64 || score >= 88) {
+      continue;
+    }
+    const fitting = postalCode ? rows.filter(item => item.postalCode === postalCode) : rows;
+    if (fitting.length === 1) {
+      ranked.push({ score, colony: fitting[0].colony, postalCode: fitting[0].postalCode });
+    }
+  }
+  ranked.sort((left, right) => right.score - left.score);
+  if (!ranked.length) {
+    return null;
+  }
+  if (ranked.length > 1 && ranked[0].score - ranked[1].score < 8) {
+    return null;
+  }
+  return { colony: ranked[0].colony, postalCode: ranked[0].postalCode };
+}
+
+export function postalFromColony(utterance) {
+  const said = colonyUtterance(utterance);
   if (!said || said.length < 3 || /^(no|si|gracias)$/.test(said)) {
-    return { colony: "", postalCode: "", options: [] };
+    return { colony: "", postalCode: "", options: [], exact: false };
   }
   const exact = coloniesByName().get(said) || [];
   if (exact.length === 1) {
-    return { colony: exact[0].colony, postalCode: exact[0].postalCode, options: [] };
+    return { colony: exact[0].colony, postalCode: exact[0].postalCode, options: [], exact: true };
   }
   if (exact.length > 1) {
-    return { colony: "", postalCode: "", options: exact };
+    return { colony: "", postalCode: "", options: exact, exact: false };
   }
   const ranked = [];
   for (const [key, rows] of coloniesByName()) {
@@ -880,18 +996,19 @@ export function postalFromColony(utterance) {
   }
   ranked.sort((left, right) => right.score - left.score);
   if (!ranked.length) {
-    return { colony: "", postalCode: "", options: [] };
+    return { colony: "", postalCode: "", options: [], exact: false };
   }
   if (ranked.length === 1 || ranked[0].score - ranked[1].score >= 12) {
     if (ranked[0].rows.length === 1) {
-      return { colony: ranked[0].rows[0].colony, postalCode: ranked[0].rows[0].postalCode, options: [] };
+      return { colony: ranked[0].rows[0].colony, postalCode: ranked[0].rows[0].postalCode, options: [], exact: false };
     }
-    return { colony: "", postalCode: "", options: ranked[0].rows };
+    return { colony: "", postalCode: "", options: ranked[0].rows, exact: false };
   }
   return {
     colony: "",
     postalCode: "",
-    options: ranked.slice(0, 3).flatMap(item => item.rows).slice(0, 4)
+    options: ranked.slice(0, 3).flatMap(item => item.rows).slice(0, 4),
+    exact: false
   };
 }
 
@@ -1349,6 +1466,7 @@ async function saveOrder({
     currency: "MXN",
     payment_method: paymentMethod,
     customer_name: customerName,
+    order_number: String(order.order_number || nextNumber || "1"),
     spoken: confirmation.ok
       ? confirmation.spoken
       : `¡Excelente! Su pedido quedó confirmado. El precio es ${total}. Llegará en aproximadamente 30 minutos a su domicilio. Que tenga buen día y gracias por llamar a Pizzería Hermosillo.`

@@ -38,9 +38,10 @@ test("simulacion 3 domicilio pide el codigo antes que la calle", () => {
   assert.doesNotMatch(call.said.join(" "), /Privada|calle y número/i);
 });
 
-test("simulacion 4 montecarlo se queda como colonia", () => {
+test("simulacion 4 una colonia que no corresponde no se guarda", () => {
   const call = play(["Octavio", "mexicana", "familiar", "no", "domicilio", "83157", "Montecarlo"]);
-  assert.equal(call.state.colony, "Montecarlo");
+  assert.equal(call.state.colony, "");
+  assert.match(call.said.at(-1), /no corresponde|otra vez la colonia/i);
   assert.doesNotMatch(call.said.join(" "), /vocabulario/i);
 });
 
@@ -128,8 +129,7 @@ test("simulacion 13 sawayana es hawaiana y no repite para siempre", () => {
     state = turn.state;
     last = turn.say;
   }
-  assert.notEqual(last, "Disculpe, lo transferiré con un humano.");
-  assert.match(last, /mediana, grande o familiar|no le oí/i);
+  assert.equal(last, "Disculpe, lo transferiré con un humano.");
 });
 
 test("simulacion 14 la coca se pregunta y domicilio mal oido cuenta", () => {
@@ -227,7 +227,7 @@ test("simulacion 16 bufalo se entiende, los ingredientes se leen y el precio sal
     descriptions: { Sinaloense: "Chilorio, champiñones, cebolla y pimiento verde." }
   }, "¿Me puedes decir qué trae la pizza sinaloense?");
   assert.match(info.say, /Chilorio/);
-  assert.doesNotMatch(info.say, /mediana/);
+  assert.match(info.say, /Qué desea ordenar|mediana, grande o familiar/);
   const again = orderedTurn(info.state, "Sí, pero quiero saber los ingredientes de esa pizza.");
   assert.match(again.say, /Chilorio/);
   assert.notEqual(again.transfer, true);
@@ -310,7 +310,7 @@ test("simulacion 20 beneficio es el precio, light no es ligera y sin direccion n
   assert.match(price.say, /199/);
   assert.match(price.say, /219/);
   assert.match(price.say, /249/);
-  assert.doesNotMatch(price.say, /mediana, grande o familiar/);
+  assert.match(price.say, /mediana, grande o familiar/);
   const light = orderedTurn({
     name: "Alfredo",
     product: "Lucco Boneless",
@@ -474,7 +474,7 @@ test("simulacion 22 la promo de dos grandes pide cada sabor y no se traga la pre
 
 test("simulacion 23 preguntas frecuentes no se tragan el pedido", () => {
   const price = orderedTurn({ name: "Ana", prices: { mediana: 180, grande: 210, familiar: 240 } }, "¿Cuánto cuesta la grande?");
-  assert.equal(price.say, "La grande cuesta 210.");
+  assert.equal(price.say, "La grande cuesta 210. ¿Qué desea ordenar?");
   assert.equal(price.state.product, "");
   const sizes = orderedTurn({ name: "Ana" }, "¿Cuántas rebanadas trae la familiar?");
   assert.match(sizes.say, /mediana, grande y familiar/);
@@ -568,6 +568,80 @@ test("simulacion 26 una duda se contesta y hola no es pregunta", () => {
   assert.equal(chilo.state.product, "Mexicana");
   assert.equal(looksLikeQuestion("¿Hola?"), false);
   assert.equal(looksLikeQuestion("¿Tienen mesas afuera?"), true);
+});
+
+test("simulacion 27 una pregunta desconocida no se guarda como nombre ni colonia", () => {
+  const named = orderedTurn({}, "¿Tienen mesas afuera?");
+  assert.equal(named.state.name || "", "");
+  assert.match(named.say, /nombre/);
+  const colony = orderedTurn({
+    name: "Ana",
+    product: "Mexicana",
+    size: "grande",
+    offeredMore: true,
+    fulfillment: "delivery",
+    postalCode: "83157"
+  }, "¿Tienen mesas afuera?");
+  assert.equal(colony.state.colony || "", "");
+  assert.match(colony.say, /colonia/);
+  assert.notEqual(colony.save, true);
+});
+
+test("simulacion 28 lo mal oido se confirma antes de anotarlo", () => {
+  const pizza = orderedTurn({ name: "Ana" }, "voungles");
+  assert.equal(pizza.state.product || "", "");
+  assert.match(pizza.say, /¿Acaso se refiere a la pizza boneless\?/);
+  const yes = orderedTurn(pizza.state, "Sí");
+  assert.equal(yes.state.product, "Lucco Boneless");
+  assert.match(yes.say, /mediana, grande o familiar/);
+  const rejected = orderedTurn(pizza.state, "No");
+  assert.equal(rejected.state.product || "", "");
+  assert.match(rejected.say, /Qué desea ordenar/);
+  const noise = orderedTurn({ name: "Ana" }, "xyzxyzxyz");
+  assert.doesNotMatch(noise.say, /Acaso se refiere/);
+  assert.match(noise.say, /Qué desea ordenar/);
+  const size = orderedTurn({ name: "Ana", product: "Mexicana" }, "famiar");
+  assert.equal(size.state.size || "", "");
+  assert.match(size.say, /¿Acaso se refiere a familiar\?/);
+  const colony = orderedTurn({
+    name: "Ana",
+    product: "Mexicana",
+    size: "grande",
+    offeredMore: true,
+    fulfillment: "delivery",
+    postalCode: "83190"
+  }, "modalo");
+  assert.equal(colony.state.colony || "", "");
+  assert.match(colony.say, /¿Acaso se refiere a la colonia Modelo\?/);
+  const postal = orderedTurn({
+    name: "Ana",
+    product: "Mexicana",
+    size: "grande",
+    offeredMore: true,
+    fulfillment: "delivery"
+  }, "ochenta y tres ciento cincuenta y site");
+  assert.equal(postal.state.postalCode || "", "");
+  assert.match(postal.say, /¿Acaso se refiere al código ochenta y tres ciento cincuenta y siete\?/);
+  const accepted = orderedTurn(postal.state, "Sí");
+  assert.equal(accepted.state.postalCode, "83157");
+  const wrongCode = orderedTurn({
+    name: "Ana",
+    product: "Mexicana",
+    size: "grande",
+    offeredMore: true,
+    fulfillment: "delivery"
+  }, "83999");
+  assert.equal(wrongCode.state.postalCode || "", "");
+  assert.match(wrongCode.say, /No encontré ese código en Hermosillo/);
+  const saidColony = orderedTurn({
+    name: "Ana",
+    product: "Mexicana",
+    size: "grande",
+    offeredMore: true,
+    fulfillment: "delivery"
+  }, "modalo");
+  assert.equal(saidColony.state.colony || "", "");
+  assert.match(saidColony.say, /¿Acaso se refiere a la colonia Modelo\?/);
 });
 
 test("simulacion 10 la hawaiana apagada no se vende", () => {

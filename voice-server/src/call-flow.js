@@ -1,7 +1,7 @@
 import { mushroomIntent, mentionedQuantity } from "./turn-policy.js";
 import { buildConfirmation, paymentForOrder, priceLine } from "./confirmation.js";
 import { matchIngredients } from "./menu-ingredients.js";
-import { formatHeardStreet, parseSpokenPostalCode, postalFromColony, speakClock, streetNumber } from "./tools.js";
+import { acceptedPostal, formatHeardStreet, parseSpokenPostalCode, postalFromColony, speakClock, streetNumber, suggestColony, suggestPostal } from "./tools.js";
 
 export const MENU_PIZZAS = [
   "BBQ Chicken",
@@ -212,7 +212,7 @@ function notAPlace(text) {
   if (!clean || finishing(clean)) {
     return true;
   }
-  return /^(hola|si|sip|bueno|ok|okay)$/.test(clean);
+  return /^(hola|si|sip|bueno|ok|okay)$/.test(clean) || looksLikeQuestion(clean);
 }
 
 const PIZZA_PATTERNS = [
@@ -704,6 +704,210 @@ function editDistance(left, right) {
   return row[right.length];
 }
 
+function phoneticKey(value) {
+  const text = fold(value)
+    .replace(/[^a-z\s]/g, "")
+    .replace(/qu/g, "k")
+    .replace(/ll/g, "y")
+    .replace(/ce/g, "se")
+    .replace(/ci/g, "si")
+    .replace(/ge/g, "je")
+    .replace(/gi/g, "ji")
+    .replace(/v/g, "b")
+    .replace(/z/g, "s")
+    .replace(/x/g, "j")
+    .replace(/h/g, "")
+    .replace(/c/g, "k")
+    .replace(/[aeiou]/g, "")
+    .replace(/(.)\1+/g, "$1")
+    .replace(/\s+/g, "");
+  return text;
+}
+
+export function closestChoice(utterance, choices) {
+  const raw = fold(utterance).replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  const tokens = raw.split(" ").filter(token => token.length >= 4);
+  const pieces = [...tokens];
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    pieces.push(tokens[index] + tokens[index + 1]);
+  }
+  if (!pieces.length && raw.replace(/\s+/g, "").length >= 4) {
+    pieces.push(raw.replace(/\s+/g, ""));
+  }
+  let best = null;
+  let second = Infinity;
+  for (const choice of choices) {
+    const keys = (choice.keys || [choice.value]).map(phoneticKey).filter(key => key.length >= 3);
+    let distance = Infinity;
+    for (const key of keys) {
+      for (const piece of pieces) {
+        const heard = phoneticKey(piece);
+        if (heard.length < 3) {
+          continue;
+        }
+        distance = Math.min(distance, editDistance(heard, key));
+      }
+    }
+    if (!Number.isFinite(distance)) {
+      continue;
+    }
+    if (!best || distance < best.distance) {
+      second = best ? best.distance : Infinity;
+      best = { ...choice, distance };
+    } else if (distance < second) {
+      second = distance;
+    }
+  }
+  if (!best || best.distance > 1 || second === best.distance) {
+    return null;
+  }
+  return best;
+}
+
+function pizzaChoices(next) {
+  const hidden = new Set((next.unavailable || []).map(item => fold(item)));
+  return MENU_PIZZAS.filter(name => !hidden.has(fold(name))).map(name => ({
+    slot: "pizza",
+    value: name,
+    phrase: `la pizza ${spokenPizza(name)}`,
+    keys: fold(name).includes("boneless")
+      ? ["boneless"]
+      : [name, spokenPizza(name)]
+  }));
+}
+
+function sizeChoices() {
+  return ["mediana", "grande", "familiar"].map(size => ({
+    slot: "size",
+    value: size,
+    phrase: size,
+    keys: [size]
+  }));
+}
+
+function sauceChoices() {
+  return [
+    { slot: "sauce", value: "bbq", phrase: "la salsa barbiquiú", keys: ["barbiquiu", "barbacoa", "barbecue"] },
+    { slot: "sauce", value: "buffalo", phrase: "la salsa búfalo", keys: ["bufalo", "buffalo"] }
+  ];
+}
+
+function drinkChoices(drink = {}) {
+  const kind = drink.kind || "";
+  if (kind === "regular" || kind === "Light" || kind === "fresa") {
+    return [
+      { slot: "drink", value: "600", phrase: "600 mililitros", drink: { kind, volume: "600" }, keys: ["seiscientos", "seiscientas"] },
+      { slot: "drink", value: "2 litros", phrase: "2 litros", drink: { kind, volume: "2 litros" }, keys: ["doslitros", "litros"] }
+    ];
+  }
+  if (kind === "coca") {
+    return [
+      { slot: "drink", value: "regular", phrase: "Coca-Cola regular", drink: { kind: "regular" }, keys: ["regular"] },
+      { slot: "drink", value: "Light", phrase: "Coca-Cola Light", drink: { kind: "Light" }, keys: ["light", "ligera", "lite"] }
+    ];
+  }
+  return [
+    { slot: "drink", value: "coca", phrase: "una Coca-Cola", drink: { kind: "coca" }, keys: ["cocacola", "coca"] },
+    { slot: "drink", value: "fresa", phrase: "el refresco de fresa", drink: { kind: "fresa" }, keys: ["fresa"] }
+  ];
+}
+
+function fulfillmentChoices() {
+  return [
+    { slot: "fulfillment", value: "delivery", phrase: "domicilio", keys: ["domicilio", "adomicilio"] },
+    { slot: "fulfillment", value: "pickup", phrase: "para recoger", keys: ["recoger", "llevar"] }
+  ];
+}
+
+function confirmGuess(next, choice) {
+  next.guess = {
+    slot: choice.slot,
+    value: choice.value,
+    extra: choice.extra || "",
+    drink: choice.drink || null
+  };
+  const say = choice.ask || `¿Acaso se refiere a ${choice.phrase}?`;
+  next.lastAsk = say;
+  next.sameCount = 0;
+  next.lastSay = say;
+  return { state: next, hangup: false, answered: true, say };
+}
+
+function offerGuess(next, utterance, choices, fallback) {
+  if (looksLikeQuestion(utterance) || notAPlace(fold(utterance))) {
+    return sameQuestion(next, fallback);
+  }
+  const choice = closestChoice(utterance, choices);
+  if (!choice) {
+    return sameQuestion(next, fallback);
+  }
+  return confirmGuess(next, choice);
+}
+
+function colonyFallback(next, utterance, fallback) {
+  if (!looksLikeQuestion(utterance)) {
+    const suggested = suggestColony(utterance, next.postalCode);
+    if (suggested) {
+      return confirmGuess(next, {
+        slot: "colony",
+        value: suggested.colony,
+        extra: suggested.postalCode,
+        phrase: `la colonia ${suggested.colony}`
+      });
+    }
+  }
+  return sameQuestion(next, fallback);
+}
+
+function postalAsk(code) {
+  return {
+    slot: "postal",
+    value: code,
+    ask: `¿Acaso se refiere al código ${speakPostal(code)}?`
+  };
+}
+
+function applyGuess(next) {
+  const guess = next.guess || {};
+  if (guess.slot === "pizza") {
+    next.product = guess.value;
+  } else if (guess.slot === "size") {
+    next.size = guess.value;
+  } else if (guess.slot === "sauce") {
+    next.sauce = guess.value;
+  } else if (guess.slot === "fulfillment") {
+    next.fulfillment = guess.value;
+  } else if (guess.slot === "colony") {
+    next.colony = guess.value;
+    if (!next.postalCode && guess.extra) {
+      next.postalCode = guess.extra;
+    }
+  } else if (guess.slot === "postal") {
+    next.postalCode = guess.value;
+  } else if (guess.slot === "drink" && guess.drink) {
+    next.drink = { ...(next.drink || {}), ...guess.drink };
+    next.offeredMore = true;
+  }
+  next.guess = null;
+}
+
+function afterGuess(next) {
+  const slot = missingSlot(next);
+  if (slot) {
+    return { state: next, hangup: false, say: slot };
+  }
+  if (next.fulfillment === "pickup") {
+    const confirmation = buildConfirmation({
+      customerName: next.name,
+      orderType: "pickup",
+      paymentMethod: "efectivo",
+      items: [{ name: next.product, size: next.size, quantity: 1 }]
+    });
+    return { state: next, hangup: false, say: confirmation.spoken };
+  }
+  return { state: next, hangup: false, say: "¿Tiene alguna duda o desea agregar algo más?" };
+}
+
 export function speakPostal(code) {
   const digits = String(code || "").replace(/\D/g, "");
   if (!/^\d{5}$/.test(digits)) {
@@ -770,6 +974,14 @@ export function isAnsweredQuestion(say) {
 function sameQuestion(next, say) {
   if (next.lastAsk === say) {
     next.sameCount = (next.sameCount || 0) + 1;
+    if (next.sameCount >= 2) {
+      return {
+        state: next,
+        hangup: false,
+        transfer: true,
+        say: "Disculpe, lo transferiré con un humano."
+      };
+    }
     const again = `Disculpe, no le oí bien. ${say}`;
     next.lastSay = again;
     return { state: next, hangup: false, say: again };
@@ -778,6 +990,71 @@ function sameQuestion(next, say) {
   next.sameCount = 0;
   next.lastSay = say;
   return { state: next, hangup: false, say };
+}
+
+function missingSlot(next) {
+  if (!next.name) {
+    return "¿Cuál es su nombre?";
+  }
+  if (!next.product) {
+    return "¿Qué desea ordenar?";
+  }
+  if (!next.size) {
+    const extra = (next.extras || []).length ? ` con extra de ${next.extras.join(" y ")}` : "";
+    return `${next.product}${extra}, ¿mediana, grande o familiar?`;
+  }
+  if (fold(next.product).includes("boneless") && !next.sauce) {
+    return "La pizza boneless, ¿salsa barbiquiú o búfalo?";
+  }
+  if (!next.offeredMore && !next.drink?.volume) {
+    return "¿Desea agregar algo más? ¿Alguna bebida?";
+  }
+  const drink = next.drink || {};
+  if ((drink.kind === "coca" || drink.kind === "regular" || drink.kind === "Light" || drink.kind === "fresa") && !drink.volume) {
+    if (drink.kind === "fresa") {
+      return "Refresco de fresa, ¿600 mililitros o 2 litros?";
+    }
+    const kind = drink.kind === "coca" ? "" : ` ${drink.kind}`;
+    return `Coca-Cola${kind}, ¿600 mililitros o 2 litros?`;
+  }
+  if (!next.fulfillment) {
+    return "¿A domicilio o para recoger?";
+  }
+  if (next.fulfillment === "pickup") {
+    return "";
+  }
+  if (!next.postalCode) {
+    return "¿Cuál es el código postal?";
+  }
+  if (!next.colony) {
+    return `Muy bien ${next.name}, ¿y la colonia cuál es?`;
+  }
+  if (!next.street || !next.house) {
+    return "¿Cuál es la calle y el número?";
+  }
+  if (!next.closingAsked) {
+    return "¿Tiene alguna duda o desea agregar algo más?";
+  }
+  return "";
+}
+
+function orderReady(next) {
+  if (!next.name || !next.product || !next.size) {
+    return false;
+  }
+  if (fold(next.product).includes("boneless") && !next.sauce) {
+    return false;
+  }
+  const drink = next.drink || {};
+  if (drink.kind && !drink.volume) {
+    return false;
+  }
+  if (next.fulfillment === "pickup") {
+    return true;
+  }
+  return next.fulfillment === "delivery"
+    && /^\d{5}$/.test(String(next.postalCode || ""))
+    && Boolean(next.colony && next.street && next.house);
 }
 
 export function emptyFacts() {
@@ -1067,23 +1344,40 @@ export function orderedTurn(state, utterance) {
     }
     next.cancelAsked = false;
   }
+  if (next.guess?.slot) {
+    const yes = /^(si|sip|simon|claro|correcto|exacto|esa|ese|eso|asi es|aja|ok|okay)$/.test(text);
+    const no = /^(no|nop|nel|negativo)$/.test(text);
+    if (yes) {
+      applyGuess(next);
+      return afterGuess(next);
+    }
+    if (no) {
+      next.guess = null;
+      return sameQuestion(next, missingSlot(next) || "¿Me lo repite?");
+    }
+    next.guess = null;
+  }
   if (/\b(agregar|otra pizza|pedido anterior)\b/.test(text) && !asksPromotions(text) && !asksIngredients(text) && !asksOwnPizzas(text)) {
     next.adding = true;
     return { state: next, hangup: false, say: "¿Qué pizza desea agregar? Las que ya tenía se quedan." };
   }
   const info = infoReply(next, utterance, text);
   if (info) {
+    const slot = missingSlot(info.state || next);
+    if (slot && info.say && !info.say.includes(slot)) {
+      info.say = `${String(info.say).replace(/\.+$/, ".")} ${slot}`;
+    }
     return info;
   }
   if (!next.name) {
     if (asksMenu(text)) {
-      return { state: next, hangup: false, say: menuSay(next) };
+      return { state: next, hangup: false, answered: true, say: menuSay(next) };
     }
     if (asksPrice(text)) {
-      return { state: next, hangup: false, say: priceSay(next) };
+      return { state: next, hangup: false, answered: true, say: priceSay(next) };
     }
     if (asksIngredients(text)) {
-      return { state: next, hangup: false, say: "¿De cuál pizza quiere saber los ingredientes?" };
+      return { state: next, hangup: false, answered: true, say: "¿De cuál pizza quiere saber los ingredientes?" };
     }
     const earlyPlace = heardFulfillment(utterance);
     if (earlyPlace) {
@@ -1091,7 +1385,7 @@ export function orderedTurn(state, utterance) {
     }
     const bare = text.trim().match(/^(?:me llamo |soy )?([a-z]{3,}(?:\s+[a-z]{3,}){0,2})$/);
     const blockedName = /^(claro|bueno|bien|gracias|si|esta|promocion|devolver|quiero|hola)\b/;
-    if (bare && !blockedName.test(bare[1]) && !earlyPlace && !matchPizza(utterance) && !mentionedSize(utterance)) {
+    if (bare && !blockedName.test(bare[1]) && !looksLikeQuestion(utterance) && !earlyPlace && !matchPizza(utterance) && !mentionedSize(utterance)) {
       next.name = titleName(bare[1]);
       return { state: next, hangup: false, say: "¿Qué desea ordenar?" };
     }
@@ -1198,20 +1492,24 @@ export function orderedTurn(state, utterance) {
     if (asksMenu(text)) {
       return { state: next, hangup: false, say: menuSay(next) };
     }
+    if (/\bpizza\b/.test(text) && /\bredonda\b/.test(text)) {
+      return sameQuestion(next, "Tenemos mexicana, peperoni y deluxe. ¿Cuál desea?");
+    }
+    const guessedPizza = !looksLikeQuestion(utterance) ? closestChoice(utterance, pizzaChoices(next)) : null;
+    if (guessedPizza) {
+      return confirmGuess(next, guessedPizza);
+    }
     if (/\bpizza\b/.test(text)) {
-      if (/\bredonda\b/.test(text)) {
-        return sameQuestion(next, "Tenemos mexicana, peperoni y deluxe. ¿Cuál desea?");
-      }
       return sameQuestion(next, "No manejamos esa. Tenemos mexicana, peperoni y deluxe. ¿Cuál desea?");
     }
     return sameQuestion(next, "¿Qué desea ordenar?");
   }
   const extraLabel = (next.extras || []).length ? ` con extra de ${(next.extras || []).join(" y ")}` : "";
   if (!next.size) {
-    return sameQuestion(next, `${next.product}${extraLabel}, ¿mediana, grande o familiar?`);
+    return offerGuess(next, utterance, sizeChoices(), `${next.product}${extraLabel}, ¿mediana, grande o familiar?`);
   }
   if (fold(next.product).includes("boneless") && !next.sauce) {
-    return sameQuestion(next, "La pizza boneless, ¿salsa barbiquiú o búfalo?");
+    return offerGuess(next, utterance, sauceChoices(), "La pizza boneless, ¿salsa barbiquiú o búfalo?");
   }
   if (next.pendingSecond && next.product && (!fold(next.product).includes("boneless") || next.sauce)) {
     next.items = [...(next.items || []), {
@@ -1245,6 +1543,9 @@ export function orderedTurn(state, utterance) {
     };
   }
   if (!next.offeredMore && !/\bno\b/.test(text) && !/\b(coca|soda|fresa)\b/.test(text)) {
+    if (looksLikeQuestion(utterance)) {
+      return { state: next, hangup: false, say: "¿Desea agregar algo más? ¿Alguna bebida?" };
+    }
     next.offeredMore = true;
     return { state: next, hangup: false, say: "¿Desea agregar algo más? ¿Alguna bebida?" };
   }
@@ -1253,14 +1554,14 @@ export function orderedTurn(state, utterance) {
     const drink = drinkQuestion(utterance, next.drink || {});
     if (drink?.say) {
       next.drink = drink.drink;
-      return sameQuestion(next, drink.say);
+      return offerGuess(next, utterance, drinkChoices(drink.drink), drink.say);
     }
     if (drink?.drink) {
       next.drink = drink.drink;
     }
   }
   if (!next.fulfillment) {
-    return sameQuestion(next, "¿A domicilio o para recoger?");
+    return offerGuess(next, utterance, fulfillmentChoices(), "¿A domicilio o para recoger?");
   }
   if (next.fulfillment === "pickup") {
     const confirmation = buildConfirmation({
@@ -1271,20 +1572,28 @@ export function orderedTurn(state, utterance) {
     });
     return { state: next, hangup: false, say: confirmation.spoken };
   }
-  const postal = text.match(/\b(\d{5})\b/)?.[1] || parseSpokenPostalCode(utterance);
+  const postal = acceptedPostal(utterance);
   const doesNotKnowPostal = /\bno (me lo |me |lo )?(se|acuerdo|recuerdo)\b/.test(text)
     || /\bno (tengo|manejo)\b/.test(text)
     || /^no$/.test(text);
+  const triedPostal = /\d{4,5}/.test(text) || /\b(ochenta|ciento|doscientos|trescientos|cuatrocientos|quinientos|seiscientos|setecientos|ochocientos|novecientos|mil)\b/.test(text);
   let learnedPostal = false;
   if (!next.postalCode) {
     if (/^\d{5}$/.test(postal)) {
       next.postalCode = postal;
     } else {
       const found = postalFromColony(utterance);
-      if (found.postalCode) {
+      if (found.exact && found.postalCode) {
         next.postalCode = found.postalCode;
         next.colony = found.colony;
         learnedPostal = true;
+      } else if (found.postalCode && found.colony) {
+        return confirmGuess(next, {
+          slot: "colony",
+          value: found.colony,
+          extra: found.postalCode,
+          phrase: `la colonia ${found.colony}`
+        });
       } else if (found.options.length) {
         next.postalFromColony = true;
         const choices = found.options.slice(0, 3)
@@ -1294,9 +1603,28 @@ export function orderedTurn(state, utterance) {
       } else if (doesNotKnowPostal && !next.postalFromColony) {
         next.postalFromColony = true;
         return { state: next, hangup: false, say: "No te preocupes, dime qué colonia es" };
-      } else if (next.postalFromColony) {
-        return sameQuestion(next, "No encontré esa colonia en Hermosillo. ¿Me dice otra vez la colonia?");
-      } else {
+      } else if (!doesNotKnowPostal && !looksLikeQuestion(utterance)) {
+        const nearCode = suggestPostal(utterance);
+        if (nearCode) {
+          return confirmGuess(next, postalAsk(nearCode));
+        }
+        const nearColony = suggestColony(utterance, "");
+        if (nearColony) {
+          return confirmGuess(next, {
+            slot: "colony",
+            value: nearColony.colony,
+            extra: nearColony.postalCode,
+            phrase: `la colonia ${nearColony.colony}`
+          });
+        }
+      }
+      if (!next.postalCode) {
+        if (next.postalFromColony) {
+          return colonyFallback(next, utterance, "No encontré esa colonia en Hermosillo. ¿Me dice otra vez la colonia?");
+        }
+        if (triedPostal) {
+          return sameQuestion(next, "No encontré ese código en Hermosillo. ¿Me lo repite?");
+        }
         return sameQuestion(next, "¿Cuál es el código postal?");
       }
     }
@@ -1304,15 +1632,49 @@ export function orderedTurn(state, utterance) {
   const postalSpeech = /\b(ochenta|cero|diez|ciento|veinte|treinta)\b/.test(text) || Boolean(parseSpokenPostalCode(utterance));
   if (!next.colony) {
     if (text.length > 2 && !/^\d+$/.test(text) && !postalSpeech && !notAPlace(text)) {
-      next.colony = utterance.trim();
+      const found = postalFromColony(utterance);
+      const sameCode = !next.postalCode || !found.postalCode || found.postalCode === next.postalCode;
+      const matching = found.options.length
+        ? found.options.filter(item => !next.postalCode || item.postalCode === next.postalCode)
+        : [];
+      if (found.exact && found.postalCode && found.colony && sameCode) {
+        next.colony = found.colony;
+        if (!next.postalCode) {
+          next.postalCode = found.postalCode;
+        }
+      } else if (found.postalCode && found.colony && sameCode) {
+        return confirmGuess(next, {
+          slot: "colony",
+          value: found.colony,
+          extra: found.postalCode,
+          phrase: `la colonia ${found.colony}`
+        });
+      } else if (matching.length === 1) {
+        next.colony = matching[0].colony;
+        if (!next.postalCode) {
+          next.postalCode = matching[0].postalCode;
+        }
+      } else if (found.options.length && !next.postalCode) {
+        const choices = found.options.slice(0, 3)
+          .map(item => `${item.colony}, código ${speakPostal(item.postalCode)}`)
+          .join(", o ");
+        return { state: next, hangup: false, say: `Hay más de una. ¿Es ${choices}?` };
+      } else if (found.options.length && next.postalCode) {
+        return sameQuestion(next, "Esa colonia no corresponde a ese código. ¿Me dice otra vez la colonia?");
+      } else if (found.postalCode && next.postalCode && found.postalCode !== next.postalCode) {
+        return sameQuestion(next, "Esa colonia no corresponde a ese código. ¿Me dice otra vez la colonia?");
+      } else {
+        return colonyFallback(next, utterance, "No encontré esa colonia en Hermosillo. ¿Me dice otra vez la colonia?");
+      }
     } else {
       return sameQuestion(next, `Muy bien ${next.name}, ¿y la colonia cuál es?`);
     }
   }
   if (!next.street) {
     const heard = notAPlace(text) ? "" : formatHeardStreet(utterance);
-    if (heard) {
-      next.house = streetNumber(utterance);
+    const house = heard ? streetNumber(utterance) : "";
+    if (heard && house) {
+      next.house = house;
       next.street = heard.replace(/\s+\d+$/, "").trim();
     } else {
       const known = learnedPostal ? `Colonia ${next.colony}, código ${speakPostal(next.postalCode)}. ` : "";
@@ -1382,6 +1744,9 @@ export function orderedTurn(state, utterance) {
   if (end !== "done") {
     next.closingAsked = false;
     return { state: next, hangup: false, say: "Claro, dígame." };
+  }
+  if (!orderReady(next)) {
+    return { state: next, hangup: false, say: missingSlot(next) || "¿Me repite el dato que falta?" };
   }
   next.agreed = true;
   return {
