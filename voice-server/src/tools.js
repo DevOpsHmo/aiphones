@@ -603,6 +603,9 @@ export function deliveryAddress({ street = "", number = "", colony = "", postalC
 }
 
 export function formatHeardStreet(utterance) {
+  if (/\b(pizza|pizzas|promoci[oó]n|sabor|pedido|orden)\b/i.test(String(utterance || ""))) {
+    return "";
+  }
   const number = streetNumber(utterance);
   if (!number) {
     return "";
@@ -1332,9 +1335,10 @@ async function saveOrder({
 
     total += subtotal;
 
+    const half = /\bmitad\b/i.test(String(item.note || "")) ? String(item.note) : "";
     calculatedItems.push({
       product_id: product.id,
-      name: product.name,
+      name: half ? `Pizza ${half}` : product.name,
       quantity,
       unit_price: unitPrice,
       subtotal,
@@ -1342,7 +1346,7 @@ async function saveOrder({
         size,
         sauce,
         priced?.extras?.map(entry => entry.nombre).join(", "),
-        item.note || item.comment
+        half ? "" : (item.note || item.comment)
       ) || null
     });
   }
@@ -1444,7 +1448,7 @@ async function saveOrder({
     postalCode: (address || "").match(/\b(\d{5})\b/)?.[1] || "",
     items: calculatedItems.map(item => {
       const notes = (item.notes || "").split(",").map(part => part.trim()).filter(Boolean);
-      const extras = notes.slice(1).filter(part => part !== "bbq" && part !== "buffalo" && part !== "Bien doradita" && !part.startsWith("promoción"));
+      const extras = notes.slice(1).filter(part => part !== "bbq" && part !== "buffalo" && part !== "Bien doradita" && !part.startsWith("promoción") && !/^mitad\b/i.test(part));
       return {
         name: item.name,
         size: notes[0],
@@ -1805,12 +1809,12 @@ export async function transferToHumanTool(callSid) {
   return { success: true, state: "TRANSFERRED" };
 }
 
-export async function endCallTool(callSid) {
+export async function endCallTool(callSid, delayMs = 8000) {
   if (!callSid) {
     return { success: false };
   }
 
-  await new Promise(resolve => setTimeout(resolve, 8000));
+  await new Promise(resolve => setTimeout(resolve, delayMs));
 
   if (humanTransferStarted(callSid)) {
     return { success: true, skipped: true };

@@ -1434,13 +1434,20 @@ export function orderedTurn(state, utterance) {
     next.sauce = heardSauce(text);
   }
   const namedNow = listedPizzas(utterance);
+  const halves = /\bmitad\b/.test(text) && namedNow.length >= 2 ? namedNow.slice(0, 2) : null;
   const pair = pairRequest(text);
   if (pair) {
     next.pairNeed = 2;
     next.pairSize = pair;
     next.size = pair;
   }
-  if (namedNow.length >= 2 && (pair || next.pairNeed === 2) && (next.items || []).length < 2) {
+  if (halves) {
+    next.half = `mitad ${halves[0]} y mitad ${halves[1]}`;
+    next.product = halves[0];
+    next.size = next.pairSize || next.size || size || "";
+    next.extras = [];
+    next.sauce = "";
+  } else if (namedNow.length >= 2 && (pair || next.pairNeed === 2) && (next.items || []).length < 2) {
     const chosen = next.pairSize || pair || "grande";
     const sauce = heardSauce(text);
     next.pairNeed = 2;
@@ -1635,7 +1642,7 @@ export function orderedTurn(state, utterance) {
           return colonyFallback(next, utterance, "No encontré esa colonia en Hermosillo. ¿Me dice otra vez la colonia?");
         }
         if (triedPostal) {
-          return sameQuestion(next, "No encontré ese código en Hermosillo. ¿Me lo repite?");
+          return sameQuestion(next, "Disculpa, ¿me lo podría decir número por número?");
         }
         return sameQuestion(next, "¿Cuál es el código postal?");
       }
@@ -1696,10 +1703,19 @@ export function orderedTurn(state, utterance) {
   const orderLine = () => {
     const lines = [...(next.items || [])];
     if (next.product && next.size) {
-      lines.push({ product: next.product, size: next.size, sauce: next.sauce || "", extras: next.extras || [] });
+      lines.push({
+        product: next.product,
+        size: next.size,
+        sauce: next.sauce || "",
+        extras: next.extras || [],
+        half: next.half || ""
+      });
     }
     const pizzas = lines.map(item => {
       const topping = (item.extras || []).length ? ` con extra de ${item.extras.join(" y ")}` : "";
+      if (item.half) {
+        return `una pizza ${item.size} ${item.half}`;
+      }
       return `una pizza ${item.size} de ${spokenPizza(item.product)}${item.sauce ? ` con ${sauceWord(item.sauce)}` : ""}${topping}`;
     }).join(" y ");
     const drink = next.drink || {};

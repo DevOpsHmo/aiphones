@@ -273,9 +273,12 @@ export function createRealtimeSession({
         }));
         await new Promise(resolve => setTimeout(resolve, 20));
       }
+      if (generation === speechGeneration && /que tenga buen d[ií]a/i.test(phrase)) {
+        callState.closeWhenSpoken = true;
+      }
       if (generation === speechGeneration && callState.closeWhenSpoken && !callState.hangupScheduled) {
         callState.hangupScheduled = true;
-        endCallTool(callSid).catch(error => {
+        endCallTool(callSid, 600).catch(error => {
           console.error("No se pudo colgar:", error.message);
         });
       }
@@ -760,7 +763,7 @@ export function createRealtimeSession({
                 const flow = turn.state;
                 const wanted = [...(flow.items || [])];
                 if (flow.product && flow.size) {
-                  wanted.push({ product: flow.product, size: flow.size, sauce: flow.sauce || "", extras: flow.extras || [] });
+                  wanted.push({ product: flow.product, size: flow.size, sauce: flow.sauce || "", extras: flow.extras || [], half: flow.half || "" });
                 }
                 getMenuTool(businessId).then(async menu => {
                   const foldName = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/pepperoni/g, "peperoni").replace(/hawaiana/g, "hawaina");
@@ -799,7 +802,7 @@ export function createRealtimeSession({
                 getMenuTool(businessId).then(menu => {
                   const wanted = [...(flow.items || [])];
                   if (flow.product && flow.size) {
-                    wanted.push({ product: flow.product, size: flow.size, sauce: flow.sauce || "", extras: flow.extras || [] });
+                    wanted.push({ product: flow.product, size: flow.size, sauce: flow.sauce || "", extras: flow.extras || [], half: flow.half || "" });
                   }
                   const foldName = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/pepperoni/g, "peperoni").replace(/hawaiana/g, "hawaina");
                   const items = wanted.map(line => {
@@ -808,7 +811,7 @@ export function createRealtimeSession({
                       const have = foldName(item.name);
                       return (name.includes("boneless") && have.includes("boneless")) || have.includes(name) || name.includes(have);
                     });
-                    return product ? { product_id: product.id, quantity: 1, size: line.size, sauce: line.sauce || "", extras: line.extras || [] } : null;
+                    return product ? { product_id: product.id, quantity: 1, size: line.size, sauce: line.sauce || "", extras: line.extras || [], note: line.half || "" } : null;
                   });
                   if (flow.drink?.volume) {
                     const volumeKey = flow.drink.volume === "600" ? "600" : "2";

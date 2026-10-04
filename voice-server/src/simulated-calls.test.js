@@ -635,7 +635,7 @@ test("simulacion 28 lo mal oido se confirma antes de anotarlo", () => {
     fulfillment: "delivery"
   }, "83999");
   assert.equal(wrongCode.state.postalCode || "", "");
-  assert.match(wrongCode.say, /No encontré ese código en Hermosillo/);
+  assert.match(wrongCode.say, /número por número/);
   const saidColony = orderedTurn({
     name: "Ana",
     product: "Mexicana",
@@ -679,6 +679,41 @@ test("simulacion 30 luisa pide el pedido y mande repite la pregunta", () => {
   assert.equal(again.say, "¿Qué desea ordenar?");
   assert.equal(again.state.name, "Luisa");
   assert.notEqual(again.transfer, true);
+});
+
+test("simulacion 31 la mitad no borra la primera pizza ni la calle es una pizza", () => {
+  let turn = orderedTurn({ name: "Oscar" }, "Dame una promoción de dos grandes.");
+  assert.match(turn.say, /primera/);
+  turn = orderedTurn(turn.state, "Mexicana");
+  assert.equal(turn.state.items[0].product, "Mexicana");
+  assert.equal(turn.state.items[0].size, "grande");
+  turn = orderedTurn(turn.state, "Mitad hawaiana y mitad pepperoni.");
+  assert.equal(turn.state.items[0].product, "Mexicana");
+  assert.equal(turn.state.half, "mitad Hawaina y mitad Peperoni");
+  assert.match(turn.say, /bebida/);
+  const street = orderedTurn({
+    name: "Oscar",
+    product: "Hawaina",
+    half: "mitad Hawaina y mitad Peperoni",
+    size: "grande",
+    items: [{ product: "Mexicana", size: "grande", sauce: "", extras: [] }],
+    offeredMore: true,
+    drink: { kind: "regular", volume: "2 litros" },
+    fulfillment: "delivery",
+    postalCode: "83157",
+    colony: "ISSSTE Federal"
+  }, "Para la pizza número uno");
+  assert.equal(street.state.street || "", "");
+  assert.match(street.say, /calle y el número/);
+  const postal = orderedTurn({
+    name: "Oscar",
+    product: "Mexicana",
+    size: "grande",
+    offeredMore: true,
+    fulfillment: "delivery"
+  }, "Ocho veintitrés ciento cincuenta y siete");
+  assert.match(postal.say, /número por número/);
+  assert.equal(postal.state.postalCode || "", "");
 });
 
 test("simulacion 10 la hawaiana apagada no se vende", () => {
