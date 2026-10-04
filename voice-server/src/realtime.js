@@ -15,7 +15,7 @@ import {
 import { config } from "./config.js";
 import { interruptionDecision } from "./turn-policy.js";
 import { wantsHuman } from "./human-transfer.js";
-import { correctHeard, emptyFacts, factsInstructions, inventedHeard, isAnsweredQuestion, isVocabularyEcho, lockFacts, looksLikeQuestion, orderedTurn, strayEcho } from "./call-flow.js";
+import { correctHeard, emptyFacts, factsInstructions, inventedHeard, isVocabularyEcho, lockFacts, looksLikeQuestion, orderedTurn, strayEcho } from "./call-flow.js";
 import { emptyPcmState, isPcmFormat, pcmToPcmuBase64 } from "./phone-audio.js";
 
 function isPromptEcho(text) {
@@ -83,24 +83,6 @@ export function createRealtimeSession({
   let transcript = "";
   let startedAt = Date.now();
   let saveTimer = null;
-
-  function orderProgress(state) {
-    const flow = state || {};
-    return [
-      flow.name,
-      flow.product,
-      flow.size,
-      flow.fulfillment,
-      flow.postalCode,
-      flow.colony,
-      flow.street,
-      flow.house,
-      (flow.extras || []).join(","),
-      flow.sauce,
-      flow.offeredMore,
-      (flow.items || []).length
-    ].join("|");
-  }
 
   function currentTranscript() {
     let full = transcript;
@@ -198,7 +180,13 @@ export function createRealtimeSession({
 
   let lastSpoken = "";
   const scriptedIds = new Set();
+  const expectedById = new Map();
+  const heardById = new Set();
   let pendingScripts = 0;
+  let queuedPhrase = "";
+  let pendingFollowUp = "";
+  let openQuestionPending = false;
+  let openQuestionId = "";
 
   function exactSpeech(phrase) {
     pendingScripts += 1;
@@ -213,10 +201,19 @@ export function createRealtimeSession({
 
   function acceptScripted(response) {
     const id = response?.id || "";
-    const source = response?.metadata?.source;
-    if (source === "script" || (!source && pendingScripts > 0)) {
+    if (response?.metadata?.source === "script") {
       if (pendingScripts > 0) pendingScripts -= 1;
-      if (id) scriptedIds.add(id);
+      if (id) {
+        scriptedIds.add(id);
+        if (queuedPhrase) {
+          expectedById.set(id, queuedPhrase);
+          queuedPhrase = "";
+        }
+        if (openQuestionPending) {
+          openQuestionId = id;
+          openQuestionPending = false;
+        }
+      }
       activeResponseId = id;
       return true;
     }
@@ -230,8 +227,8 @@ export function createRealtimeSession({
     if (greetingSent || openaiSocket.readyState !== WebSocket.OPEN) return;
     greetingSent = true;
     const phrase = closedGreeting || "Hola, bienvenido a Pizzería Hermosillo. ¿Cuál es su nombre?";
-    rememberAssistant(phrase);
     lastSpoken = phrase;
+    queuedPhrase = phrase;
     openaiSocket.send(JSON.stringify({
       type: "response.create",
       response: exactSpeech(phrase)
@@ -256,26 +253,24 @@ export function createRealtimeSession({
       return;
     }
     lastSpoken = clean;
-    rememberAssistant(clean);
+    queuedPhrase = clean;
     openaiSocket.send(JSON.stringify({
       type: "response.create",
       response: exactSpeech(clean)
     }));
   }
 
-  function speakAnswer(question, followUp) {
+  function speakOpenQuestion(question, followUp) {
     const clean = String(question || "").replace(/"/g, "").trim();
     if (!clean || openaiSocket.readyState !== WebSocket.OPEN) {
-      if (followUp) {
-        speakExact(followUp);
-      }
+      speakExact(followUp);
       return;
     }
-    const next = followUp
-      ? ` Después, en la misma respuesta, pregunta exactamente: ${followUp}`
-      : "";
+    pendingFollowUp = String(followUp || "").trim();
+    openQuestionPending = true;
     pendingScripts += 1;
     lastSpoken = "";
+    queuedPhrase = "";
     openaiSocket.send(JSON.stringify({
       type: "response.create",
       response: {
@@ -283,9 +278,31 @@ export function createRealtimeSession({
         tool_choice: "none",
         conversation: "none",
         metadata: { source: "script" },
-        instructions: `Contesta en español de México, de usted, en una o dos frases, solo la pregunta del cliente: "${clean}". Usa únicamente el menú y los datos de esta pizzería. Si no está en el menú, di que no lo manejamos. No digas que vas a transferir ni que comunicarás con alguien. No confirmes el pedido. No saludes.${next}\n\nMENÚ:\n${menuText || "Menú no disponible."}`
+        instructions: `Contesta solo esta pregunta del cliente, en una o dos frases, de usted y con amabilidad. Usa el menú. Si el dato no está, dilo sin inventar precios ni productos. No saludes. No confirmes el pedido. No pidas datos. No te despidas.\nPregunta: "${clean}"\n\nMENÚ:\n${menuText || "Menú no disponible."}`
       }
     }));
+  }
+
+  function writeSpoken(id, spoken) {
+    const clean = String(spoken || "").trim();
+    if (!clean) {
+      return;
+    }
+    const spokenLine = `IA: ${clean}\n`;
+    const expected = id ? expectedById.get(id) : "";
+    const expectedLine = expected ? `IA: ${expected}\n` : "";
+    if (expected && transcript.endsWith(expectedLine)) {
+      if (spokenLine !== expectedLine) {
+        transcript = transcript.slice(0, -expectedLine.length) + spokenLine;
+      }
+    } else if (!transcript.endsWith(spokenLine)) {
+      transcript += spokenLine;
+    }
+    if (id) {
+      heardById.add(id);
+    }
+    scheduleSave();
+    armSilence();
   }
 
   function armSilence() {
@@ -694,7 +711,19 @@ ${menuText || "Menú no disponible."}
           event.type === "response.cancelled"
         ) {
           assistantSpeaking = false;
-          if (event.type === "response.done" && callState.closeWhenSpoken && !callState.hangupScheduled) {
+          const doneId = event.response?.id || event.response_id || "";
+          const wasOpen = Boolean(doneId && doneId === openQuestionId);
+          if (event.type === "response.done" && doneId && expectedById.has(doneId) && !heardById.has(doneId)) {
+            rememberAssistant(expectedById.get(doneId));
+            heardById.add(doneId);
+          }
+          if (event.type === "response.done" && wasOpen && pendingFollowUp) {
+            const follow = pendingFollowUp;
+            pendingFollowUp = "";
+            openQuestionId = "";
+            speakExact(follow);
+          }
+          if (event.type === "response.done" && callState.closeWhenSpoken && !callState.hangupScheduled && !wasOpen) {
             callState.hangupScheduled = true;
             endCallTool(callSid).catch(error => {
               console.error("No se pudo colgar:", error.message);
@@ -760,7 +789,6 @@ ${menuText || "Menú no disponible."}
               callState.transferAsked = true;
               redirectToHuman();
             } else {
-              const before = orderProgress(callState.flow || {});
               const turn = orderedTurn(callState.flow || {}, heard);
               callState.flow = turn.state;
               if (turn.cancel) {
@@ -779,7 +807,7 @@ ${menuText || "Menú no disponible."}
                     const name = foldName(line.product);
                     const product = (menu.products || []).find(item => {
                       const have = foldName(item.name);
-                      return have.includes(name) || name.includes(have);
+                      return (name.includes("boneless") && have.includes("boneless")) || have.includes(name) || name.includes(have);
                     });
                     if (!product) {
                       throw new Error("No encontré esa pizza en el menú.");
@@ -817,7 +845,7 @@ ${menuText || "Menú no disponible."}
                     const name = foldName(line.product);
                     const product = (menu.products || []).find(item => {
                       const have = foldName(item.name);
-                      return have.includes(name) || name.includes(have);
+                      return (name.includes("boneless") && have.includes("boneless")) || have.includes(name) || name.includes(have);
                     });
                     return product ? { product_id: product.id, quantity: 1, size: line.size, sauce: line.sauce || "", extras: line.extras || [] } : null;
                   });
@@ -833,8 +861,8 @@ ${menuText || "Menú no disponible."}
                     }
                   }
                   if (items.some(item => !item)) {
-                    callState.flow = { ...flow, agreed: false, askedAgree: false };
-                    speakExact("No encontré esa pizza en el menú. ¿Cuál desea?");
+                    callState.flow = { ...flow, agreed: false, closingAsked: true };
+                    speakExact("No pude dejar listo el pedido. ¿Me confirma otra vez?");
                     return null;
                   }
                   const place = `${flow.street} ${flow.house}, ${flow.colony}, C.P. ${flow.postalCode}, Hermosillo, Sonora`
@@ -879,13 +907,8 @@ ${menuText || "Menú no disponible."}
                 if (assistantSpeaking) {
                   stopTalking();
                 }
-                if (
-                  looksLikeQuestion(heard) &&
-                  before === orderProgress(turn.state) &&
-                  !turn.answered &&
-                  !isAnsweredQuestion(turn.say)
-                ) {
-                  speakAnswer(heard, turn.say);
+                if (looksLikeQuestion(heard) && !turn.answered) {
+                  speakOpenQuestion(heard, turn.say);
                 } else {
                   speakExact(turn.say);
                 }
@@ -916,7 +939,9 @@ ${menuText || "Menú no disponible."}
           "response.audio_transcript.done"
         ) {
           if (!event.response_id || scriptedIds.has(event.response_id)) {
-          if (event.transcript && event.response_id && !playedResponses.has(event.response_id)) {
+          if (event.transcript && event.response_id && scriptedIds.has(event.response_id)) {
+            writeSpoken(event.response_id, event.transcript);
+          } else if (event.transcript && event.response_id && !playedResponses.has(event.response_id)) {
             pendingAssistant.set(event.response_id, event.transcript);
           } else if (event.transcript && (!event.response_id || playedResponses.has(event.response_id))) {
             if (!event.response_id || !transcript.endsWith(`IA: ${event.transcript}\n`)) {

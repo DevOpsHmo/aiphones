@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { correctHeard, heardFulfillment, inventedHeard, matchPizza, orderedTurn, speakPostal } from "./call-flow.js";
+import { correctHeard, heardFulfillment, inventedHeard, looksLikeQuestion, matchPizza, orderedTurn, speakPostal } from "./call-flow.js";
 import { deliveryAddress, kitchenClosedMessage, postalFromColony } from "./tools.js";
 import { interruptionDecision } from "./turn-policy.js";
 
@@ -517,6 +517,57 @@ test("simulacion 24 mediana no es promo y devolver es boneless", () => {
   const again = orderedTurn(familiar.state, "Bueno");
   assert.match(again.say, /no le oí/);
   assert.match(again.say, /sabor/);
+});
+
+test("simulacion 25 alfonso no guarda seria todo como colonia y todo cierra", () => {
+  const redonda = orderedTurn({ name: "Alfonso" }, "Una pizza redonda.");
+  assert.match(redonda.say, /Tenemos mexicana, peperoni y deluxe/);
+  assert.doesNotMatch(redonda.say, /No manejamos/);
+  assert.equal(redonda.state.product, "");
+  const ready = {
+    name: "Alfonso",
+    product: "Lucco Boneless",
+    size: "familiar",
+    sauce: "buffalo",
+    offeredMore: true,
+    drinkOffered: true,
+    drink: { kind: "regular", volume: "2 litros" },
+    fulfillment: "delivery",
+    postalCode: "83157"
+  };
+  const colony = orderedTurn(ready, "Sería todo.");
+  assert.equal(colony.state.colony || "", "");
+  assert.match(colony.say, /colonia cuál es/);
+  assert.notEqual(colony.save, true);
+  const placed = {
+    ...ready,
+    colony: "ISSSTE Federal",
+    street: "Lázaro Cárdenas",
+    house: "1",
+    closingAsked: true
+  };
+  const hola = orderedTurn(placed, "Hola, todo.");
+  assert.equal(hola.save, true);
+  assert.equal(hola.state.product, "Lucco Boneless");
+  assert.equal(hola.state.colony, "ISSSTE Federal");
+  assert.equal(hola.state.street, "Lázaro Cárdenas");
+  assert.match(hola.say, /Su orden es/);
+  assert.match(hola.say, /tu pedido quedó confirmado/);
+  assert.match(hola.say, /30 minutos/);
+  const yes = orderedTurn(placed, "Sí, es todo.");
+  assert.equal(yes.save, true);
+  const thanks = orderedTurn({ ...placed, closingAsked: false }, "Sí, muchas gracias.");
+  assert.equal(thanks.save, true);
+  assert.match(thanks.say, /Muchas gracias por llamar a Pizzería Hermosillo/);
+});
+
+test("simulacion 26 una duda se contesta y hola no es pregunta", () => {
+  const chilo = orderedTurn({ name: "Alfonso", product: "Mexicana" }, "¿Está chilo?");
+  assert.equal(chilo.answered, true);
+  assert.match(chilo.say, /peperoni, hawaiana y mexicana/);
+  assert.equal(chilo.state.product, "Mexicana");
+  assert.equal(looksLikeQuestion("¿Hola?"), false);
+  assert.equal(looksLikeQuestion("¿Tienen mesas afuera?"), true);
 });
 
 test("simulacion 10 la hawaiana apagada no se vende", () => {

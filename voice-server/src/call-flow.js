@@ -137,6 +137,9 @@ function looksLikeAsk(utterance, text) {
   if (/[?¿]/.test(String(utterance || ""))) {
     return true;
   }
+  if (/\b(chilo|chila|recomienda|recomiendas)\b/.test(text)) {
+    return true;
+  }
   return /^(que |cual |cuales |cuanto |cuando |donde |a que hora|tienen |hay |aceptan |puedo |se puede|me puede|me pueden|hasta que|todavia)\b/.test(text);
 }
 
@@ -195,13 +198,21 @@ function finishing(text) {
   if (/\bno es todo\b/.test(text) || /\btodavia no\b/.test(text) || /\baun no\b/.test(text)) {
     return "more";
   }
-  if (/\b(es todo|seria todo|nada mas|eso es todo|ya es todo|con eso|muchas gracias)\b/.test(text)) {
+  if (/\b(es todo|seria todo|nada mas|eso es todo|ya es todo|con eso|muchas gracias)\b/.test(text) || /\btodo\b/.test(text)) {
     return "done";
   }
   if (/^(no|nop|nada|ninguna|ninguno|listo|gracias)\b/.test(text)) {
     return "done";
   }
   return "";
+}
+
+function notAPlace(text) {
+  const clean = String(text || "").trim();
+  if (!clean || finishing(clean)) {
+    return true;
+  }
+  return /^(hola|si|sip|bueno|ok|okay)$/.test(clean);
 }
 
 const PIZZA_PATTERNS = [
@@ -487,7 +498,7 @@ function customerQuestion(next, utterance, text) {
       say: `Hoy no tenemos dos por uno. ${promoSay(next)}`
     };
   }
-  if (/\b(recomienda|mas vendida|mas popular|especialidad de)\b/.test(text)) {
+  if (/\b(recomienda|recomiendas|mas vendida|mas popular|especialidad de|chilo|chila|esta rico|esta rica)\b/.test(text)) {
     return {
       state: next,
       hangup: false,
@@ -743,11 +754,11 @@ export function heardFulfillment(utterance) {
 
 export function looksLikeQuestion(value) {
   const raw = String(value || "");
-  const text = fold(raw);
-  if (!text) {
+  const text = fold(raw).replace(/[¿?¡!.,]/g, " ").replace(/\s+/g, " ").trim();
+  if (!text || /^(hola|alo|bueno|ok|okay|si|no|gracias|nop)$/.test(text)) {
     return false;
   }
-  return /[?¿]/.test(raw) || /\b(que trae|que lleva|que tiene|cuanto|precio|horario|a que hora|donde estan|donde queda|donde se encuentran|tienen|que hay|promocion|promociones|ingrediente|aceptan|tarjeta|efectivo|abren|cierran)\b/.test(text);
+  return /[?¿]/.test(raw) || /\b(que|cual|cuales|cuanto|cuando|donde|como|precio|horario|tienen|promocion|ingrediente|aceptan|tarjeta|factura|recomiend|chilo|chila|rico|rica)\b/.test(text);
 }
 
 export function isAnsweredQuestion(say) {
@@ -1188,6 +1199,9 @@ export function orderedTurn(state, utterance) {
       return { state: next, hangup: false, say: menuSay(next) };
     }
     if (/\bpizza\b/.test(text)) {
+      if (/\bredonda\b/.test(text)) {
+        return sameQuestion(next, "Tenemos mexicana, peperoni y deluxe. ¿Cuál desea?");
+      }
       return sameQuestion(next, "No manejamos esa. Tenemos mexicana, peperoni y deluxe. ¿Cuál desea?");
     }
     return sameQuestion(next, "¿Qué desea ordenar?");
@@ -1289,14 +1303,14 @@ export function orderedTurn(state, utterance) {
   }
   const postalSpeech = /\b(ochenta|cero|diez|ciento|veinte|treinta)\b/.test(text) || Boolean(parseSpokenPostalCode(utterance));
   if (!next.colony) {
-    if (text.length > 2 && !/^\d+$/.test(text) && !postalSpeech) {
+    if (text.length > 2 && !/^\d+$/.test(text) && !postalSpeech && !notAPlace(text)) {
       next.colony = utterance.trim();
     } else {
       return sameQuestion(next, `Muy bien ${next.name}, ¿y la colonia cuál es?`);
     }
   }
   if (!next.street) {
-    const heard = formatHeardStreet(utterance);
+    const heard = notAPlace(text) ? "" : formatHeardStreet(utterance);
     if (heard) {
       next.house = streetNumber(utterance);
       next.street = heard.replace(/\s+\d+$/, "").trim();
@@ -1349,7 +1363,7 @@ export function orderedTurn(state, utterance) {
     }
   }
   const end = finishing(text);
-  const explicitDone = end === "done" && /\b(es todo|seria todo|nada mas|eso es todo|ya es todo|con eso|muchas gracias)\b/.test(text);
+  const explicitDone = end === "done" && /\b(es todo|seria todo|nada mas|eso es todo|ya es todo|con eso|muchas gracias|todo)\b/.test(text);
   if (!next.closingAsked && !explicitDone) {
     next.closingAsked = true;
     return {
