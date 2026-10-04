@@ -1,7 +1,7 @@
 import { mushroomIntent, mentionedQuantity } from "./turn-policy.js";
 import { buildConfirmation, paymentForOrder, priceLine } from "./confirmation.js";
 import { matchIngredients } from "./menu-ingredients.js";
-import { acceptedPostal, formatHeardStreet, parseSpokenPostalCode, postalFromColony, speakClock, streetNumber, suggestColony, suggestPostal } from "./tools.js";
+import { acceptedPostal, formatHeardStreet, parseSpokenPostalCode, postalFromColony, speakClock, spokenDigitHouse, streetNumber, suggestColony, suggestPostal } from "./tools.js";
 
 export const MENU_PIZZAS = [
   "BBQ Chicken",
@@ -441,12 +441,12 @@ function customerQuestion(next, utterance, text) {
       say: "Estamos en Hermosillo. Si va a recoger, le confirmo la sucursal al cerrar el pedido."
     };
   }
-  if (/\b(mitad|mitad y mitad)\b/.test(text)) {
+  if (/\bmitad\b/.test(text) && listedPizzas(utterance).length < 2) {
     return {
       state: next,
       hangup: false,
       answered: true,
-      say: "No armamos mitad y mitad. Puede pedir dos pizzas, cada una de un sabor."
+      say: "Sí, la puede pedir mitad y mitad. ¿De qué dos sabores la quiere?"
     };
   }
   if (/\b(rebanadas|para cuantas|cuanto mide|que tamanos|tamanos manejan|tamanos tienen)\b/.test(text)) {
@@ -888,6 +888,9 @@ function applyGuess(next) {
     }
   } else if (guess.slot === "postal") {
     next.postalCode = guess.value;
+  } else if (guess.slot === "street") {
+    next.street = guess.value;
+    next.house = guess.extra;
   } else if (guess.slot === "drink" && guess.drink) {
     next.drink = { ...(next.drink || {}), ...guess.drink };
     next.offeredMore = true;
@@ -896,6 +899,10 @@ function applyGuess(next) {
 }
 
 function afterGuess(next) {
+  if (next.street && next.house && !next.drinkOffered && !next.drink?.volume && next.fulfillment === "delivery") {
+    next.drinkOffered = true;
+    return { state: next, hangup: false, say: "¿Desea agregar alguna bebida o soda?" };
+  }
   const slot = missingSlot(next);
   if (slot) {
     return { state: next, hangup: false, say: slot };
@@ -910,6 +917,42 @@ function afterGuess(next) {
     return { state: next, hangup: false, say: confirmation.spoken };
   }
   return { state: next, hangup: false, say: "¿Tiene alguna duda o desea agregar algo más?" };
+}
+
+export function speakHouse(value) {
+  const number = Number(String(value || "").replace(/\D/g, ""));
+  if (!Number.isInteger(number) || number < 0 || number > 9999) {
+    return String(value || "");
+  }
+  const ones = ["cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez", "once", "doce", "trece", "catorce", "quince", "dieciséis", "diecisiete", "dieciocho", "diecinueve"];
+  const tens = ["", "", "veinte", "treinta", "cuarenta", "cincuenta", "sesenta", "setenta", "ochenta", "noventa"];
+  const hundreds = ["", "ciento", "doscientos", "trescientos", "cuatrocientos", "quinientos", "seiscientos", "setecientos", "ochocientos", "novecientos"];
+  const under100 = current => {
+    if (current < 20) {
+      return ones[current];
+    }
+    const ten = Math.floor(current / 10);
+    const one = current % 10;
+    if (!one) {
+      return tens[ten];
+    }
+    if (ten === 2) {
+      return ["", "veintiuno", "veintidós", "veintitrés", "veinticuatro", "veinticinco", "veintiséis", "veintisiete", "veintiocho", "veintinueve"][one];
+    }
+    return `${tens[ten]} y ${ones[one]}`;
+  };
+  if (number < 100) {
+    return under100(number);
+  }
+  if (number === 100) {
+    return "cien";
+  }
+  if (number < 1000) {
+    const rest = number % 100;
+    const head = hundreds[Math.floor(number / 100)];
+    return rest ? `${head} ${under100(rest)}` : head;
+  }
+  return `${under100(Math.floor(number / 100))} ${speakHouse(number % 100)}`.replace(/\s+/g, " ").trim();
 }
 
 export function speakPostal(code) {
@@ -1349,7 +1392,7 @@ export function orderedTurn(state, utterance) {
     next.cancelAsked = false;
   }
   if (next.guess?.slot) {
-    const yes = /^(si|sip|simon|claro|correcto|exacto|esa|ese|eso|asi es|aja|ok|okay)$/.test(text);
+    const yes = /^(si|sip|simon|claro|correcto|exacto|esa|ese|eso|asi es|aja|ok|okay|esta bien|si esta bien|perfecto)$/.test(text);
     const no = /^(no|nop|nel|negativo)$/.test(text);
     if (yes) {
       applyGuess(next);
@@ -1394,11 +1437,13 @@ export function orderedTurn(state, utterance) {
       next.lastSay = "¿Qué desea ordenar?";
       return { state: next, hangup: false, say: "¿Qué desea ordenar?" };
     }
-    return { state: next, hangup: false, say: "¿Cuál es su nombre?" };
+    return { state: next, hangup: false, answered: true, say: "¿Cuál es su nombre?" };
   }
   const pizza = matchPizza(text);
   const size = heardSize(text);
-  if (pizza && next.product && pizza !== next.product && next.size) {
+  const namedNow = listedPizzas(utterance);
+  const halves = /\bmitad\b/.test(text) && namedNow.length >= 2 ? namedNow.slice(0, 2) : null;
+  if (!halves && pizza && next.product && pizza !== next.product && next.size) {
     next.items = [...(next.items || []), {
       product: next.product,
       size: next.size,
@@ -1433,8 +1478,6 @@ export function orderedTurn(state, utterance) {
   if (heardSauce(text) && fold(next.product).includes("boneless")) {
     next.sauce = heardSauce(text);
   }
-  const namedNow = listedPizzas(utterance);
-  const halves = /\bmitad\b/.test(text) && namedNow.length >= 2 ? namedNow.slice(0, 2) : null;
   const pair = pairRequest(text);
   if (pair) {
     next.pairNeed = 2;
@@ -1447,6 +1490,24 @@ export function orderedTurn(state, utterance) {
     next.size = next.pairSize || next.size || size || "";
     next.extras = [];
     next.sauce = "";
+    if (!next.drink?.volume) {
+      next.offeredMore = false;
+    }
+    if (!next.size) {
+      return {
+        state: next,
+        hangup: false,
+        answered: true,
+        say: `Mitad ${halves[0]} y mitad ${halves[1]}. ¿Mediana, grande o familiar?`
+      };
+    }
+    const slot = missingSlot(next);
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: slot ? `Anoté una pizza ${next.size} ${next.half}. ${slot}` : `Anoté una pizza ${next.size} ${next.half}.`
+    };
   } else if (namedNow.length >= 2 && (pair || next.pairNeed === 2) && (next.items || []).length < 2) {
     const chosen = next.pairSize || pair || "grande";
     const sauce = heardSauce(text);
@@ -1693,8 +1754,22 @@ export function orderedTurn(state, utterance) {
     const heard = notAPlace(text) ? "" : formatHeardStreet(utterance);
     const house = heard ? streetNumber(utterance) : "";
     if (heard && house) {
+      const streetName = heard.replace(/\s+\d+$/, "").trim();
+      if (spokenDigitHouse(utterance)) {
+        const other = postalFromColony(streetName);
+        const elsewhere = other.postalCode && other.postalCode !== next.postalCode
+          || (other.options || []).some(item => item.postalCode !== next.postalCode);
+        const warning = elsewhere ? "Ese nombre también es una colonia de otro código. " : "";
+        next.addressSaid = true;
+        return confirmGuess(next, {
+          slot: "street",
+          value: streetName,
+          extra: house,
+          ask: `${warning}Anoté ${streetName}, número ${speakHouse(house)}, colonia ${next.colony}. ¿Está bien?`
+        });
+      }
       next.house = house;
-      next.street = heard.replace(/\s+\d+$/, "").trim();
+      next.street = streetName;
     } else {
       const known = learnedPostal ? `Colonia ${next.colony}, código ${speakPostal(next.postalCode)}. ` : "";
       return sameQuestion(next, `${known}¿Cuál es la calle y el número?`);
@@ -1747,19 +1822,34 @@ export function orderedTurn(state, utterance) {
       next.drinkOffered = true;
     } else if (!/\bno\b/.test(text)) {
       next.drinkOffered = true;
-      return { state: next, hangup: false, say: "Disculpe, ¿desea agregar alguna bebida o soda?" };
+      const place = next.street && next.house && !next.addressSaid
+        ? `Anoté ${next.street}, número ${speakHouse(next.house)}, colonia ${next.colony}. `
+        : "Disculpe, ";
+      next.addressSaid = true;
+      return { state: next, hangup: false, say: `${place}¿Desea agregar alguna bebida o soda?` };
     } else {
       next.drinkOffered = true;
     }
+  }
+  if (next.street && /\b(calle|numero|direccion|colonia)\b/.test(text) && /\b(mal|incorrect|equivoc|no es|otra)\b/.test(text)) {
+    next.street = "";
+    next.house = "";
+    next.closingAsked = false;
+    next.addressSaid = false;
+    return { state: next, hangup: false, answered: true, say: "¿Cuál es la calle y el número?" };
   }
   const end = finishing(text);
   const explicitDone = end === "done" && /\b(es todo|seria todo|nada mas|eso es todo|ya es todo|con eso|muchas gracias|todo)\b/.test(text);
   if (!next.closingAsked && !explicitDone) {
     next.closingAsked = true;
+    const place = next.fulfillment === "delivery" && next.street && next.house && !next.addressSaid
+      ? `La dirección quedó ${next.street}, número ${speakHouse(next.house)}, colonia ${next.colony}. `
+      : "";
+    next.addressSaid = true;
     return {
       state: next,
       hangup: false,
-      say: "¿Tiene alguna duda o desea agregar algo más?"
+      say: `${place}¿Tiene alguna duda o desea agregar algo más?`
     };
   }
   if (end === "more" || (listedPizzas(utterance).length && end !== "done")) {

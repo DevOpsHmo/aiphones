@@ -494,7 +494,9 @@ test("simulacion 23 preguntas frecuentes no se tragan el pedido", () => {
   assert.match(promo.say, /no tenemos dos por uno/);
   assert.match(promo.say, /dos grandes por 400/);
   const half = orderedTurn({ name: "Ana" }, "¿Puedo pedir mitad y mitad?");
-  assert.match(half.say, /No armamos mitad y mitad/);
+  assert.match(half.say, /mitad y mitad/);
+  assert.match(half.say, /dos sabores/);
+  assert.doesNotMatch(half.say, /No armamos/);
   const drinks = orderedTurn({ name: "Ana" }, "¿Tienen Pepsi?");
   assert.match(drinks.say, /no lo manejamos/i);
   const menu = orderedTurn({ name: "Ana" }, "¿Qué pizzas tienen?");
@@ -714,6 +716,46 @@ test("simulacion 31 la mitad no borra la primera pizza ni la calle es una pizza"
   }, "Ocho veintitrés ciento cincuenta y siete");
   assert.match(postal.say, /número por número/);
   assert.equal(postal.state.postalCode || "", "");
+});
+
+test("simulacion 32 la mitad se anota y el numero se oye completo", () => {
+  const named = orderedTurn({}, "Hola, ¿de Divo?");
+  assert.equal(named.state.name || "", "");
+  assert.equal(named.answered, true);
+  assert.match(named.say, /nombre/);
+  assert.doesNotMatch(named.say, /no está en el menú/);
+  const half = orderedTurn({
+    name: "Francisco",
+    product: "Mexicana",
+    size: "familiar",
+    offeredMore: true
+  }, "Hey, ¿puedes hacer la pizza mitad mexicana y mitad pepperoni, por favor?");
+  assert.equal(half.answered, true);
+  assert.equal(half.state.half, "mitad Mexicana y mitad Peperoni");
+  assert.equal(half.state.product, "Mexicana");
+  assert.match(half.say, /Anoté una pizza familiar mitad Mexicana y mitad Peperoni/);
+  assert.match(half.say, /bebida/);
+  assert.doesNotMatch(half.say, /no está en el menú|No armamos|domicilio/);
+  const street = orderedTurn({
+    name: "Francisco",
+    product: "Mexicana",
+    half: "mitad Mexicana y mitad Peperoni",
+    size: "familiar",
+    offeredMore: true,
+    drinkOffered: true,
+    fulfillment: "delivery",
+    postalCode: "83157",
+    colony: "ISSSTE Federal"
+  }, "Calle Benito Juárez número dos cinco nueve.");
+  assert.equal(street.state.street || "", "");
+  assert.equal(street.state.guess.extra, "259");
+  assert.equal(street.state.guess.value, "Benito Juárez");
+  assert.match(street.say, /doscientos cincuenta y nueve/);
+  assert.match(street.say, /ISSSTE Federal/);
+  assert.match(street.say, /otro código/);
+  const yes = orderedTurn(street.state, "Sí.");
+  assert.equal(yes.state.house, "259");
+  assert.equal(yes.state.street, "Benito Juárez");
 });
 
 test("simulacion 10 la hawaiana apagada no se vende", () => {

@@ -666,15 +666,28 @@ export function streetNumber(value) {
   if (!atoms.length) {
     return "";
   }
-  if (atoms.length === 1) {
-    return String(atoms[0]);
+  if (atoms.every(number => number < 10)) {
+    return atoms.join("").slice(0, 5);
   }
-  const tens = atoms[atoms.length - 2];
-  const ones = atoms[atoms.length - 1];
-  if (tens >= 20 && tens % 10 === 0 && ones < 10) {
-    return String(tens + ones);
+  const groups = postalChunks(atoms);
+  return String(groups[groups.length - 1] ?? "");
+}
+
+export function spokenDigitHouse(value) {
+  const folded = foldText(value);
+  if (/\d+\s*$/.test(folded)) {
+    return false;
   }
-  return String(atoms[atoms.length - 1]);
+  const tokens = folded.split(" ").filter(token => token && token !== "y" && token !== "numero" && token !== "casa" && token !== "calle");
+  const atoms = [];
+  for (const token of tokens) {
+    if (token in HOUSE_NUMBERS && HOUSE_NUMBERS[token] < 10) {
+      atoms.push(HOUSE_NUMBERS[token]);
+    } else {
+      atoms.length = 0;
+    }
+  }
+  return atoms.length >= 2;
 }
 
 function fiveDigit(candidate) {
