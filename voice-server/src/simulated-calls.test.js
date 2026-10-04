@@ -502,6 +502,23 @@ test("simulacion 23 preguntas frecuentes no se tragan el pedido", () => {
   assert.equal(order.state.size, "grande");
 });
 
+test("simulacion 24 mediana no es promo y devolver es boneless", () => {
+  const mediana = orderedTurn({ name: "Luis" }, "Quiero una promoción de dos pizzas medianas.");
+  assert.match(mediana.say, /No hay promoción de dos pizzas medianas/);
+  assert.match(mediana.say, /dos grandes por 400/);
+  assert.equal(mediana.state.pairNeed, undefined);
+  const familiar = orderedTurn({ name: "Luis" }, "Quiero promoción de dos pizzas familiares.");
+  assert.match(familiar.say, /dos pizzas familiares por 450/);
+  assert.doesNotMatch(familiar.say, /familiars/);
+  assert.match(familiar.say, /primera/);
+  const flavor = orderedTurn(familiar.state, "Devolver");
+  assert.equal(flavor.state.product, "Lucco Boneless");
+  assert.match(flavor.say, /barbiquiú o búfalo/);
+  const again = orderedTurn(familiar.state, "Bueno");
+  assert.match(again.say, /no le oí/);
+  assert.match(again.say, /sabor/);
+});
+
 test("simulacion 10 la hawaiana apagada no se vende", () => {
   const call = play(["Luis", "una pizza hawaiana"], { unavailable: ["Hawaina"] });
   assert.match(call.said.at(-1), /no está disponible/);

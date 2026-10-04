@@ -162,8 +162,12 @@ function asksOwnPizzas(text) {
 function pairRequest(text) {
   const grande = /\bgrandes?\b/.test(text);
   const familiar = /\bfamiliares?\b/.test(text);
+  const mediana = /\bmedianas?\b/.test(text);
   const two = /\b(dos|2)\b/.test(text);
   const promo = /\bpromocion\b/.test(text);
+  if (mediana && (two || promo)) {
+    return "";
+  }
   if (grande && !familiar && (two || promo)) {
     return "grande";
   }
@@ -171,6 +175,20 @@ function pairRequest(text) {
     return "familiar";
   }
   return "";
+}
+
+function unsupportedPair(text) {
+  return /\bmedianas?\b/.test(text) && (/\b(dos|2)\b/.test(text) || /\bpromocion\b/.test(text));
+}
+
+function sizeWord(size, plural) {
+  if (size === "familiar") {
+    return plural ? "familiares" : "familiar";
+  }
+  if (size === "grande") {
+    return plural ? "grandes" : "grande";
+  }
+  return plural ? "medianas" : "mediana";
 }
 
 function finishing(text) {
@@ -506,6 +524,14 @@ function infoReply(next, utterance, text) {
   if (asked) {
     return asked;
   }
+  if (unsupportedPair(text)) {
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: `No hay promoción de dos pizzas medianas. ${promoSay(next)} ¿Quiere dos grandes o dos familiares?`
+    };
+  }
   if (asksPromotions(text) || (looksLikeAsk(utterance, text) && /\b(oferta|combo)\b/.test(text))) {
     return { state: next, hangup: false, answered: true, say: promoSay(next) };
   }
@@ -579,7 +605,11 @@ function soundsLikeBoneless(text) {
   if (/\b(pizza|pieza)\s+de\s+(doble|bajo|borde|baul\w*)\b/.test(text)) {
     return true;
   }
-  return /^(bajo|baul|baules|borde|doble)$/.test(text.trim());
+  const compact = text.trim();
+  if (/^(de\s*)?volver$/.test(compact) && !/\b(pedido|dinero|queja)\b/.test(compact)) {
+    return true;
+  }
+  return /^(bajo|baul|baules|borde|doble)$/.test(compact);
 }
 
 export function inventedHeard(value) {
@@ -1049,7 +1079,8 @@ export function orderedTurn(state, utterance) {
       next.fulfillment = earlyPlace;
     }
     const bare = text.trim().match(/^(?:me llamo |soy )?([a-z]{3,}(?:\s+[a-z]{3,}){0,2})$/);
-    if (bare && !earlyPlace && !matchPizza(utterance) && !mentionedSize(utterance)) {
+    const blockedName = /^(claro|bueno|bien|gracias|si|esta|promocion|devolver|quiero|hola)\b/;
+    if (bare && !blockedName.test(bare[1]) && !earlyPlace && !matchPizza(utterance) && !mentionedSize(utterance)) {
       next.name = titleName(bare[1]);
       return { state: next, hangup: false, say: "¿Qué desea ordenar?" };
     }
@@ -1150,8 +1181,8 @@ export function orderedTurn(state, utterance) {
       const price = (next.pairSize || "grande") === "familiar" ? 450 : 400;
       const intro = (next.items || []).length
         ? ""
-        : `La promoción es de dos pizzas ${next.pairSize}s por ${price}. `;
-      return { state: next, hangup: false, say: `${intro}¿De qué sabor quiere la ${which}?` };
+        : `La promoción es de dos pizzas ${sizeWord(next.pairSize, true)} por ${price}. `;
+      return sameQuestion(next, `${intro}¿De qué sabor quiere la ${which}?`);
     }
     if (asksMenu(text)) {
       return { state: next, hangup: false, say: menuSay(next) };
