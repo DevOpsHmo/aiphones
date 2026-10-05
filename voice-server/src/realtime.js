@@ -7,6 +7,7 @@ import {
   humanTransferStarted,
   checkAddressTool,
   formatHeardStreet,
+  matchDrinkProduct,
   getLastOrderTool,
   orderStatusTool,
   lockStreet,
@@ -15,7 +16,7 @@ import {
 import { config } from "./config.js";
 import { interruptionDecision } from "./turn-policy.js";
 import { wantsHuman } from "./human-transfer.js";
-import { correctHeard, emptyFacts, factsInstructions, inventedHeard, isAnsweredQuestion, isVocabularyEcho, lockFacts, looksLikeQuestion, orderedTurn, strayEcho } from "./call-flow.js";
+import { correctHeard, emptyFacts, factsInstructions, inventedHeard, isAnsweredQuestion, isVocabularyEcho, lockFacts, looksLikeQuestion, orderedTurn, spokenExistingOrder, strayEcho } from "./call-flow.js";
 import { emptyPcmState, isPcmFormat, pcmToPcmuBase64 } from "./phone-audio.js";
 
 function isPromptEcho(text) {
@@ -814,12 +815,7 @@ export function createRealtimeSession({
                     return product ? { product_id: product.id, quantity: 1, size: line.size, sauce: line.sauce || "", extras: line.extras || [], note: line.half || "" } : null;
                   });
                   if (flow.drink?.volume) {
-                    const volumeKey = flow.drink.volume === "600" ? "600" : "2";
-                    const drinkName = flow.drink.kind === "fresa" ? "fresa" : "coca";
-                    const drinkProduct = (menu.products || []).find(item => {
-                      const have = foldName(item.name);
-                      return have.includes(drinkName) && (have.includes(volumeKey) || have.includes("litro"));
-                    });
+                    const drinkProduct = matchDrinkProduct(menu.products, flow.drink);
                     if (drinkProduct) {
                       items.push({ product_id: drinkProduct.id, quantity: 1 });
                     }
@@ -863,7 +859,18 @@ export function createRealtimeSession({
                 });
               } else if (turn.status) {
                 orderStatusTool({ businessId, callerPhone }).then(result => {
-                  speakExact(result?.spoken || turn.say);
+                  if (!result?.found) {
+                    speakExact(result?.spoken || "No encuentro un pedido de hoy en este teléfono.");
+                    return;
+                  }
+                  const who = turn.state?.name || result.customer_name || "";
+                  const ask = `Disculpa${who ? ` ${who}` : ""}, ¿ordenaste ${spokenExistingOrder(result.items)}?`;
+                  callState.flow = {
+                    ...(turn.state || {}),
+                    statusAsk: true,
+                    pendingStatus: result.status || "new"
+                  };
+                  speakExact(ask);
                 }).catch(error => {
                   console.error("No se pudo consultar el pedido:", error.message);
                   speakExact(turn.say);

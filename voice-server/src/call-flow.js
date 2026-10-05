@@ -391,7 +391,7 @@ function customerQuestion(next, utterance, text) {
       say: "Lamento que el pedido haya salido mal. Si quiere, lo comunico con un encargado."
     };
   }
-  if (/\b(ya esta listo|donde esta mi pedido|cuanto falta|ya salio|estado de mi pedido|ya viene el repartidor|por que esta tardando|se retraso)\b/.test(text)) {
+  if (wantsOrderStatus(text)) {
     return {
       state: next,
       hangup: false,
@@ -558,7 +558,16 @@ function infoReply(next, utterance, text) {
     return { state: next, hangup: false, answered: true, say: ownPizzasSay(next) };
   }
   if (asksIngredients(text)) {
-    const asked = matchPizza(utterance) || next.product;
+    const hinted = text.match(/\b(?:la|el|una)\s+(?!pizza\b|de\b)([a-z]{4,})\b/);
+    const asked = matchPizza(utterance) || (!hinted ? next.product : "");
+    if (!asked && hinted) {
+      return {
+        state: next,
+        hangup: false,
+        answered: true,
+        say: `No tengo la pizza ${hinted[1]}. Tenemos mexicana, peperoni, hawaiana y sinaloense. ¿De cuál quiere los ingredientes?`
+      };
+    }
     if (asked && !next.product && !next.pairNeed) {
       next.product = asked;
     }
@@ -1042,6 +1051,10 @@ function missingSlot(next) {
     return "¿Qué desea ordenar?";
   }
   if (!next.size) {
+    if (next.half) {
+      const half = next.half.charAt(0).toUpperCase() + next.half.slice(1);
+      return `${half}, ¿mediana, grande o familiar?`;
+    }
     const extra = (next.extras || []).length ? ` con extra de ${next.extras.join(" y ")}` : "";
     return `${next.product}${extra}, ¿mediana, grande o familiar?`;
   }
@@ -1341,6 +1354,47 @@ export function nextReply(state, utterance) {
   };
 }
 
+export function wantsOrderStatus(value) {
+  const text = fold(value);
+  if (/\b(quiero|quisiera)\s+(pedir|ordenar|una pizza)\b/.test(text) && !/\b(ya|hice|habia|antes|hace poco)\b/.test(text)) {
+    return false;
+  }
+  return /\b(estatus|estado de mi pedido|mi pedido|donde esta mi pedido|ya esta listo|cuanto falta|ya salio|ya viene el repartidor|tardando|se retraso|en camino|falta mucho|le falta|hice un pedido|pedido hace poco|ya habia|ya hice)\b/.test(text);
+}
+
+export function spokenExistingOrder(items) {
+  const parts = (items || []).map(item => {
+    const count = Number(item.quantity) === 1 ? "una" : String(item.quantity || 1);
+    const notes = String(item.notes || "");
+    const size = (notes.split(",")[0] || "").trim();
+    const name = String(item.name || "").replace(/^Pizza\s+/i, "").trim();
+    if (/^mitad\b/i.test(name)) {
+      return `${count} pizza${size ? ` ${size}` : ""} ${name}`;
+    }
+    if (/coca|fresa|refresco/i.test(name)) {
+      return `${count} ${name}`;
+    }
+    return `${count} pizza${size ? ` ${size} de` : ""} ${name}`;
+  }).filter(part => part.trim().length > 4);
+  return parts.join(" y ") || "un pedido";
+}
+
+export function statusSpeech(status) {
+  if (status === "delivering") {
+    return "Tu pedido se encuentra en camino. En 10 minutos aproximadamente debería de estar en tu domicilio.";
+  }
+  if (status === "ready") {
+    return "Tu pedido ya está listo. En un momento sale hacia tu domicilio.";
+  }
+  if (status === "completed") {
+    return "Tu pedido ya fue entregado.";
+  }
+  if (status === "preparing" || status === "new") {
+    return "Tu pedido se está preparando. Pronto sale hacia tu domicilio.";
+  }
+  return "Tu pedido ya está registrado.";
+}
+
 export function orderedTurn(state, utterance) {
   if (isVocabularyEcho(utterance) || strayEcho(utterance, state)) {
     return {
@@ -1362,6 +1416,34 @@ export function orderedTurn(state, utterance) {
     ...state
   };
   const text = fold(utterance).replace(/[.,!?¿¡]/g, " ").replace(/\bno la pizza\b/g, "una pizza").replace(/\s+/g, " ").trim();
+  if (next.statusAsk) {
+    const yes = /^(si|sip|simon|claro|correcto|es correcto|esta correcto|exacto|esa|ese|eso|asi es|aja|ok|okay|esta bien|si esta bien|de acuerdo|perfecto)$/.test(text);
+    const no = /^(no|nop|nel|negativo)$/.test(text);
+    if (yes) {
+      next.statusAsk = false;
+      return { state: next, hangup: false, answered: true, say: statusSpeech(next.pendingStatus) };
+    }
+    if (no) {
+      next.statusAsk = false;
+      next.pendingStatus = "";
+      return { state: next, hangup: false, answered: true, say: "De acuerdo. ¿Qué desea ordenar?" };
+    }
+  }
+  if (wantsOrderStatus(text) && !next.product) {
+    const named = text.match(/\b(?:mi nombre es|me llamo)\s+([a-z]{3,})(?:\s+([a-z]{3,}))?/);
+    const stop = /^(hice|quiero|quisiera|para|saber|pero|pedido|hace|poco)$/;
+    if (named && !next.name) {
+      const second = named[2] && !stop.test(named[2]) ? ` ${named[2]}` : "";
+      next.name = titleName(`${named[1]}${second}`);
+    }
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      status: true,
+      say: "Reviso el pedido de este teléfono."
+    };
+  }
   if (/^(mande|como dice|no entendi|no le oi|no oi|repiteme|repita|puede repetir)$/.test(text)) {
     return {
       state: next,
@@ -1395,7 +1477,7 @@ export function orderedTurn(state, utterance) {
     next.cancelAsked = false;
   }
   if (next.guess?.slot) {
-    const yes = /^(si|sip|simon|claro|correcto|exacto|esa|ese|eso|asi es|aja|ok|okay|esta bien|si esta bien|perfecto)$/.test(text);
+    const yes = /^(si|sip|simon|claro|correcto|es correcto|esta correcto|exacto|esa|ese|eso|asi es|aja|ok|okay|esta bien|si esta bien|de acuerdo|perfecto)$/.test(text);
     const no = /^(no|nop|nel|negativo)$/.test(text);
     if (yes) {
       applyGuess(next);
@@ -1418,8 +1500,11 @@ export function orderedTurn(state, utterance) {
   const info = infoReply(next, utterance, text);
   if (info) {
     const slot = missingSlot(info.state || next);
-    if (slot && info.say && !info.say.includes(slot)) {
+    if (slot && info.say && !info.say.includes(slot) && !/de cu[aá]l pizza/i.test(info.say)) {
       info.say = `${String(info.say).replace(/\.+$/, ".")} ${slot}`;
+    }
+    if (info.state) {
+      info.state.lastSay = info.say;
     }
     return info;
   }
@@ -1438,7 +1523,7 @@ export function orderedTurn(state, utterance) {
       next.fulfillment = earlyPlace;
     }
     const bare = text.trim().match(/^(?:me llamo |soy )?([a-z]{3,}(?:\s+[a-z]{3,}){0,2})$/);
-    const blockedName = /^(claro|bueno|bien|gracias|si|esta|promocion|devolver|quiero|hola)\b/;
+    const blockedName = /^(claro|bueno|buenos|buenas|bien|gracias|si|esta|promocion|devolver|quiero|hola)\b/;
     if (bare && !blockedName.test(bare[1]) && !looksLikeQuestion(utterance) && !earlyPlace && !matchPizza(utterance) && !mentionedSize(utterance)) {
       const heardName = titleName(bare[1]);
       next.nameMisses = 0;
@@ -1456,6 +1541,14 @@ export function orderedTurn(state, utterance) {
       say: next.nameMisses >= 2
         ? "Disculpe, no le oí el nombre. ¿Me lo dice despacio?"
         : "¿Cuál es su nombre?"
+    };
+  }
+  if (!next.product && /ingredientes/.test(next.lastSay || "") && !matchPizza(text) && !looksLikeQuestion(utterance) && !mentionedSize(utterance)) {
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: "No tengo esa pizza. Tenemos mexicana, peperoni, hawaiana y sinaloense. ¿De cuál quiere los ingredientes?"
     };
   }
   const pizza = matchPizza(text);

@@ -54,6 +54,32 @@ export function streetPlacement(streetName, postalCode) {
   return { known: true, here, core, postals };
 }
 
+export function matchDrinkProduct(products, drink = {}) {
+  const foldName = value => String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const volume = drink.volume === "600" ? "600" : drink.volume === "2 litros" ? "2" : "";
+  const kind = drink.kind === "fresa" ? "fresa" : "coca";
+  const light = drink.kind === "Light";
+  if (!volume) {
+    return null;
+  }
+  return (products || []).find(item => {
+    const have = foldName(item.name);
+    if (!have.includes(kind)) {
+      return false;
+    }
+    if (kind === "coca" && have.includes("light") !== light) {
+      return false;
+    }
+    if (volume === "600") {
+      return have.includes("600");
+    }
+    return have.includes("2") && have.includes("litro");
+  }) || null;
+}
+
 export async function refreshHermosilloCatalog() {
   return loadHermosilloCatalog();
 }
@@ -1585,7 +1611,7 @@ export async function getLastOrderTool({
 
 const ORDER_STATUS_SPOKEN = {
   preparing: "Tu pedido sigue preparándose, pero pronto se lo daremos al repartidor y saldrá directo a tu domicilio a entregarlo. ¿Tienes alguna duda?",
-  delivering: "El repartidor ya salió con tu pedido. En menos de 10 minutos deberá estar en tu domicilio. ¿Tienes alguna duda?"
+  delivering: "Tu pedido se encuentra en camino. En 10 minutos aproximadamente debería de estar en tu domicilio."
 };
 
 export async function orderStatusTool({ businessId, callerPhone }) {
@@ -1613,16 +1639,25 @@ export async function orderStatusTool({ businessId, callerPhone }) {
   for (const order of orders || []) {
     const { data: customer } = await supabase
       .from("customers")
-      .select("phone")
+      .select("name,phone")
       .eq("id", order.customer_id)
       .maybeSingle();
     if (normalizePhone(customer?.phone) !== phone) {
       continue;
     }
+    const { data: items, error: itemsError } = await supabase
+      .from("order_items")
+      .select("name,quantity,notes")
+      .eq("order_id", order.id);
+    if (itemsError) {
+      throw itemsError;
+    }
     const status = order.status || "new";
     return {
       found: true,
       status,
+      customer_name: customer?.name || "",
+      items: items || [],
       spoken: ORDER_STATUS_SPOKEN[status] || "Tu pedido ya está registrado. ¿Tienes alguna duda?"
     };
   }

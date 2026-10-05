@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { correctHeard, heardFulfillment, inventedHeard, looksLikeQuestion, matchPizza, orderedTurn, speakPostal } from "./call-flow.js";
-import { deliveryAddress, kitchenClosedMessage, postalFromColony } from "./tools.js";
+import { correctHeard, heardFulfillment, inventedHeard, looksLikeQuestion, matchPizza, orderedTurn, speakPostal, spokenExistingOrder } from "./call-flow.js";
+import { deliveryAddress, kitchenClosedMessage, matchDrinkProduct, postalFromColony } from "./tools.js";
 import { interruptionDecision } from "./turn-policy.js";
 
 function play(lines, start = {}) {
@@ -773,6 +773,72 @@ test("simulacion 32 la mitad se anota y el numero se oye completo", () => {
   assert.equal(yes.state.street, "Benito Juárez");
   const slow = orderedTurn(named.state, "Hello, good evening?");
   assert.match(slow.say, /despacio/);
+});
+
+test("simulacion 33 es correcto guarda la calle y la coca light no es de 2 litros", () => {
+  const ingredients = orderedTurn({ name: "Roberto" }, "Disculpa, ¿me puedes decir qué trae la pizza?");
+  assert.match(ingredients.say, /ingredientes/);
+  assert.doesNotMatch(ingredients.say, /Qué desea ordenar/);
+  const firma = orderedTurn(ingredients.state, "La firma.");
+  assert.match(firma.say, /No tengo esa pizza/);
+  assert.match(firma.say, /ingredientes/);
+  const original = orderedTurn({ name: "Roberto" }, "¿Qué ingredientes tiene la original?");
+  assert.match(original.say, /No tengo la pizza original/);
+  const priced = orderedTurn({
+    name: "Roberto",
+    product: "Mexicana",
+    half: "mitad Mexicana y mitad Sinaloense"
+  }, "¿Qué precios tienen?");
+  assert.match(priced.say, /Mitad Mexicana y mitad Sinaloense/);
+  assert.doesNotMatch(priced.say, /^Mediana 200, grande 220 y familiar 250\. Mexicana,/);
+  const street = orderedTurn({
+    name: "Roberto",
+    product: "Mexicana",
+    half: "mitad Mexicana y mitad Sinaloense",
+    size: "familiar",
+    offeredMore: true,
+    drink: { kind: "Light", volume: "600" },
+    drinkOffered: true,
+    fulfillment: "delivery",
+    postalCode: "83010",
+    colony: "5 de Mayo"
+  }, "Veracruz cincuenta y ocho");
+  assert.match(street.say, /cincuenta y ocho/);
+  const yes = orderedTurn(street.state, "Es correcto.");
+  assert.equal(yes.state.street, "Veracruz");
+  assert.equal(yes.state.house, "58");
+  const products = [
+    { id: "a", name: "Coca-Cola 2 litros" },
+    { id: "b", name: "Coca-Cola Light 600 ml" },
+    { id: "c", name: "Coca-Cola 600 ml" }
+  ];
+  assert.equal(matchDrinkProduct(products, { kind: "Light", volume: "600" }).id, "b");
+  assert.equal(matchDrinkProduct(products, { kind: "regular", volume: "600" }).id, "c");
+  assert.equal(matchDrinkProduct(products, { kind: "regular", volume: "2 litros" }).id, "a");
+});
+
+test("simulacion 34 el estatus confirma el pedido y dice en camino", () => {
+  const buenos = orderedTurn({}, "Buenos");
+  assert.equal(buenos.state.name || "", "");
+  assert.match(buenos.say, /nombre/);
+  const asked = orderedTurn({}, "Hola, mi nombre es Roberto, hice un pedido hace poco y quisiera saber si le falta mucho.");
+  assert.equal(asked.status, true);
+  assert.equal(asked.state.name, "Roberto");
+  const again = orderedTurn({ name: "Roberto" }, "Ya había hecho un pedido, pero quiero saber si le falta mucho.");
+  assert.equal(again.status, true);
+  assert.equal(spokenExistingOrder([{
+    name: "Pizza mitad Mexicana y mitad Sinaloense",
+    quantity: 1,
+    notes: "familiar"
+  }]), "una pizza familiar mitad Mexicana y mitad Sinaloense");
+  const yes = orderedTurn({
+    name: "Roberto",
+    statusAsk: true,
+    pendingStatus: "delivering"
+  }, "Sí,");
+  assert.match(yes.say, /en camino/);
+  assert.match(yes.say, /10 minutos/);
+  assert.equal(yes.state.statusAsk, false);
 });
 
 test("simulacion 10 la hawaiana apagada no se vende", () => {
