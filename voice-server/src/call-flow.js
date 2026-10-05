@@ -1417,7 +1417,7 @@ export function orderedTurn(state, utterance) {
   };
   const text = fold(utterance).replace(/[.,!?¿¡]/g, " ").replace(/\bno la pizza\b/g, "una pizza").replace(/\s+/g, " ").trim();
   if (next.statusAsk) {
-    const yes = /^(si|sip|simon|claro|correcto|es correcto|esta correcto|exacto|esa|ese|eso|asi es|aja|ok|okay|esta bien|si esta bien|de acuerdo|perfecto)$/.test(text);
+    const yes = /^(si|sip|simon|claro|correcto|es correcto|si es correcto|esta correcto|si esta correcto|exacto|esa|ese|eso|asi es|aja|ok|okay|esta bien|si esta bien|de acuerdo|perfecto)$/.test(text);
     const no = /^(no|nop|nel|negativo)$/.test(text);
     if (yes) {
       next.statusAsk = false;
@@ -1477,7 +1477,7 @@ export function orderedTurn(state, utterance) {
     next.cancelAsked = false;
   }
   if (next.guess?.slot) {
-    const yes = /^(si|sip|simon|claro|correcto|es correcto|esta correcto|exacto|esa|ese|eso|asi es|aja|ok|okay|esta bien|si esta bien|de acuerdo|perfecto)$/.test(text);
+    const yes = /^(si|sip|simon|claro|correcto|es correcto|si es correcto|esta correcto|si esta correcto|exacto|esa|ese|eso|asi es|aja|ok|okay|esta bien|si esta bien|de acuerdo|perfecto)$/.test(text);
     const no = /^(no|nop|nel|negativo)$/.test(text);
     if (yes) {
       applyGuess(next);
@@ -1554,7 +1554,23 @@ export function orderedTurn(state, utterance) {
   const pizza = matchPizza(text);
   const size = heardSize(text);
   const namedNow = listedPizzas(utterance);
-  const halves = /\bmitad\b/.test(text) && namedNow.length >= 2 ? namedNow.slice(0, 2) : null;
+  if (/\bmitad\b/.test(text) && namedNow.length > 2) {
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: "Solo se pueden combinar dos sabores. ¿Cuáles dos quiere?"
+    };
+  }
+  if (/\bmitad\b/.test(text) && namedNow.length === 1) {
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: `La mitad y mitad lleva dos sabores. ¿Cuál es el otro, además de ${namedNow[0]}?`
+    };
+  }
+  const halves = /\bmitad\b/.test(text) && namedNow.length === 2 ? namedNow : null;
   if (!halves && pizza && next.product && pizza !== next.product && next.size) {
     next.items = [...(next.items || []), {
       product: next.product,
@@ -1601,10 +1617,7 @@ export function orderedTurn(state, utterance) {
     next.product = halves[0];
     next.size = next.pairSize || next.size || size || "";
     next.extras = [];
-    next.sauce = "";
-    if (!next.drink?.volume) {
-      next.offeredMore = false;
-    }
+    next.sauce = heardSauce(text) && fold(halves[0]).includes("boneless") ? heardSauce(text) : "";
     if (!next.size) {
       return {
         state: next,
@@ -1613,13 +1626,21 @@ export function orderedTurn(state, utterance) {
         say: `Mitad ${halves[0]} y mitad ${halves[1]}. ¿Mediana, grande o familiar?`
       };
     }
-    const slot = missingSlot(next);
-    return {
-      state: next,
-      hangup: false,
-      answered: true,
-      say: slot ? `Anoté una pizza ${next.size} ${next.half}. ${slot}` : `Anoté una pizza ${next.size} ${next.half}.`
-    };
+    const firstOfPair = next.pairNeed === 2 && (next.items || []).length < 1 && !next.pendingSecond;
+    const needsSauce = fold(next.product).includes("boneless") && !next.sauce;
+    if (needsSauce || !firstOfPair) {
+      if (!needsSauce && !next.drink?.volume) {
+        next.offeredMore = false;
+      }
+      const sauceAsk = needsSauce ? " La pizza boneless, ¿salsa barbiquiú o búfalo?" : "";
+      const slot = needsSauce ? "" : missingSlot(next);
+      return {
+        state: next,
+        hangup: false,
+        answered: true,
+        say: `Anoté una pizza ${next.size} ${next.half}.${sauceAsk || (slot ? ` ${slot}` : "")}`
+      };
+    }
   } else if (namedNow.length >= 2 && (pair || next.pairNeed === 2) && (next.items || []).length < 2) {
     const chosen = next.pairSize || pair || "grande";
     const sauce = heardSauce(text);
@@ -1708,8 +1729,10 @@ export function orderedTurn(state, utterance) {
       product: next.product,
       size: next.pairSize || next.size,
       sauce: next.sauce || "",
-      extras: next.extras || []
+      extras: next.extras || [],
+      half: next.half || ""
     }];
+    next.half = "";
     next.product = next.pendingSecond;
     next.pendingSecond = "";
     next.sauce = fold(next.product).includes("boneless") ? next.sauce : "";
@@ -1717,13 +1740,17 @@ export function orderedTurn(state, utterance) {
     next.size = next.pairSize || next.size;
   }
   if (next.pairNeed === 2 && next.product && (next.items || []).length < 1 && !next.pendingSecond) {
-    const saved = spokenPizza(next.product);
+    const saved = next.half
+      ? `una pizza ${next.pairSize || next.size} ${next.half}`
+      : `una ${next.pairSize || next.size} de ${spokenPizza(next.product)}`;
     next.items = [{
       product: next.product,
       size: next.pairSize || next.size,
       sauce: next.sauce || "",
-      extras: next.extras || []
+      extras: next.extras || [],
+      half: next.half || ""
     }];
+    next.half = "";
     next.product = "";
     next.sauce = "";
     next.extras = [];
@@ -1731,7 +1758,8 @@ export function orderedTurn(state, utterance) {
     return {
       state: next,
       hangup: false,
-      say: `Anoté una ${next.pairSize || next.size} de ${saved}. ¿De qué sabor quiere la segunda?`
+      answered: true,
+      say: `Anoté ${saved}. ¿De qué sabor quiere la segunda?`
     };
   }
   if (!next.offeredMore && !/\bno\b/.test(text) && !/\b(coca|soda|fresa)\b/.test(text)) {

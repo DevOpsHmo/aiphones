@@ -841,6 +841,68 @@ test("simulacion 34 el estatus confirma el pedido y dice en camino", () => {
   assert.equal(yes.state.statusAsk, false);
 });
 
+test("simulacion 35 la promo pide la bebida hasta tener las dos pizzas", () => {
+  let turn = orderedTurn({ name: "Octavio" }, "Dame dos grandes.");
+  assert.match(turn.say, /primera/);
+  turn = orderedTurn(turn.state, "Mitad pepperoni y mitad hawaiana.");
+  assert.equal(turn.state.items[0].half, "mitad Peperoni y mitad Hawaina");
+  assert.match(turn.say, /segunda/);
+  assert.doesNotMatch(turn.say, /bebida/);
+  turn = orderedTurn(turn.state, "Mitad boneless y mitad italiana.");
+  assert.equal(turn.state.items[0].half, "mitad Peperoni y mitad Hawaina");
+  assert.match(turn.say, /barbiquiú/);
+  assert.doesNotMatch(turn.say, /bebida/);
+  turn = orderedTurn(turn.state, "Salsa búfalo.");
+  assert.match(turn.say, /bebida/);
+  assert.equal(turn.state.half, "mitad Lucco Boneless y mitad Italiana");
+  const three = orderedTurn({ name: "Octavio", pairNeed: 2, pairSize: "grande" }, "Mitad pepperoni, mitad hawaiana y mitad mexicana.");
+  assert.match(three.say, /dos sabores/);
+  assert.equal(three.state.half || "", "");
+  assert.equal((three.state.items || []).length, 0);
+  const one = orderedTurn({ name: "Octavio", pairNeed: 2, pairSize: "grande" }, "Mitad pepperoni.");
+  assert.match(one.say, /dos sabores/);
+  assert.match(one.say, /Peperoni/);
+  const close = orderedTurn({
+    name: "Octavio",
+    product: "Lucco Boneless",
+    half: "mitad Lucco Boneless y mitad Italiana",
+    size: "grande",
+    sauce: "buffalo",
+    items: [{ product: "Peperoni", size: "grande", sauce: "", extras: [], half: "mitad Peperoni y mitad Hawaina" }],
+    offeredMore: true,
+    drink: { kind: "regular", volume: "2 litros" },
+    drinkOffered: true,
+    fulfillment: "delivery",
+    postalCode: "83157",
+    colony: "ISSSTE Federal",
+    street: "Lázaro Cárdenas",
+    house: "1",
+    closingAsked: true
+  }, "Sería todo, muchas gracias.");
+  assert.equal(close.save, true);
+  assert.match(close.say, /mitad Peperoni y mitad Hawaina/);
+  assert.match(close.say, /mitad Lucco Boneless y mitad Italiana/);
+  const street = orderedTurn({
+    name: "Octavio",
+    product: "Lucco Boneless",
+    half: "mitad Lucco Boneless y mitad Italiana",
+    size: "grande",
+    sauce: "buffalo",
+    items: [{ product: "Peperoni", size: "grande", sauce: "", extras: [], half: "mitad Peperoni y mitad Hawaina" }],
+    pairNeed: 2,
+    pairSize: "grande",
+    offeredMore: true,
+    drink: { kind: "regular", volume: "2 litros" },
+    drinkOffered: true,
+    fulfillment: "delivery",
+    postalCode: "83157",
+    colony: "ISSSTE Federal"
+  }, "Lázaro Cárdenas número uno.");
+  const yes = orderedTurn(street.state, "Sí, es correcto.");
+  assert.equal(yes.state.street, "Lázaro Cárdenas");
+  assert.equal(yes.state.house, "1");
+});
+
 test("simulacion 10 la hawaiana apagada no se vende", () => {
   const call = play(["Luis", "sí", "una pizza hawaiana"], { unavailable: ["Hawaina"] });
   assert.match(call.said.at(-1), /no está disponible/);
