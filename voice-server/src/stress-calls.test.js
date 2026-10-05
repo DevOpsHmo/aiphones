@@ -207,7 +207,7 @@ test("21 si no entendio pide que repita", () => {
 
 test("22 la pizza se pregunta con mediana grande o familiar", () => {
   const reply = nextReply({ ...start }, "quiero una pizza mexicana");
-  assert.equal(reply.say, "Mexicana, ¿mediana, grande o familiar?");
+  assert.equal(reply.say, "mejicana, ¿mediana, grande o familiar?");
   assert.doesNotMatch(reply.say, /qu[eé] tama[nñ]o/i);
 });
 

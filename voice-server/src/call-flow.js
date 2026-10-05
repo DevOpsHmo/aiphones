@@ -215,38 +215,38 @@ function notAPlace(text) {
   return /^(hola|si|sip|bueno|ok|okay)$/.test(clean) || looksLikeQuestion(clean);
 }
 
-const PIZZA_PATTERNS = [
-  [/hawai\w*|saway\w*|awaina\w*|awaiana\w*/g, "Hawaina"],
-  [/boneless|bonles|boneles|bodwe|\bbaule\w*|\bbaules\b|\bbound\w*/g, "Lucco Boneless"],
-  [/\bdeluxe\b|\bde luz\b|\bluz\b/g, "Deluxe"],
-  [/tejicana\w*|mejicana\w*|mexicana\w*/g, "Mexicana"],
-  [/\bitaliana\w*/g, "Italiana"],
-  [/\bmarguerita\w*|\bmargarita\w*/g, "Marguerita"],
-  [/peperoni\w*|pepperoni\w*/g, "Peperoni"],
-  [/\bsinaloense\w*/g, "Sinaloense"],
-  [/\bspincacoli\w*/g, "Spincacoli"],
-  [/\bstromboli\w*/g, "Stromboli"],
-  [/\bveggie\w*|\bvegetariana\w*/g, "Veggie"],
-  [/\bchipotle\w*/g, "Chipotle Chicken"],
-  [/\balfredo\w*/g, "Chicken Alfredo"],
-  [/\bostion\w*/g, "Ostiones"],
-  [/\bbbq chicken\b|\bbarbecue chicken\b/g, "BBQ Chicken"]
+const PIZZA_CATALOG = [
+  { name: "BBQ Chicken", spoken: "baribiqiu chiquen", hear: /baribiqiu|barbicui|barbecue|\bbbq\b|bar b q/g, keys: ["baribiqiu", "barbecue", "bbqchicken"] },
+  { name: "Lucco Boneless", spoken: "boneles", hear: /boneless|bonles|boneles|bodwe|\bbaule\w*|\bbaules\b|\bbound\w*/g, keys: ["boneless", "boneles"] },
+  { name: "Chicken Alfredo", spoken: "chiquen alfredo", hear: /alfredo/g, keys: ["alfredo", "chiquenalfredo"] },
+  { name: "Chipotle Chicken", spoken: "chipotle chiquen", hear: /\bchipotle\w*/g, keys: ["chipotle", "chipotlechiquen"] },
+  { name: "Ostiones", spoken: "ostiones ahumados", hear: /\bostion\w*/g, keys: ["ostiones", "ostionesahumados"] },
+  { name: "Deluxe", spoken: "delucs", hear: /\bdeluxe\b|\bdelux\b|\bdelucs\b|\bde luz\b|\bluz\b/g, keys: ["deluxe", "delucs"] },
+  { name: "Hawaina", spoken: "jawayana", hear: /hawai\w*|saway\w*|awaina\w*|awaiana\w*|jawayan\w*|hawain\w*/g, keys: ["hawaina", "jawayana", "hawaiana"] },
+  { name: "Italiana", spoken: "italiana", hear: /\bitaliana\w*/g, keys: ["italiana"] },
+  { name: "Marguerita", spoken: "marguerita", hear: /\bmarguerita\w*|\bmargarita\w*/g, keys: ["marguerita", "margarita"] },
+  { name: "Mexicana", spoken: "mejicana", hear: /tejicana\w*|mejicana\w*|mexicana\w*/g, keys: ["mexicana", "mejicana"] },
+  { name: "Sinaloense", spoken: "sinaloense", hear: /\bsinaloense\w*/g, keys: ["sinaloense"] },
+  { name: "Spincacoli", spoken: "espinacoli", hear: /spincacoli\w*|spinnacoli\w*|spinacoli\w*|espinacoli\w*|espinnacoli\w*|espina\s*coli|spin\s*a\s*coli/g, keys: ["spincacoli", "espinacoli", "spinacoli"] },
+  { name: "Stromboli", spoken: "estromboli", hear: /stromboli\w*|estromboli\w*/g, keys: ["stromboli", "estromboli"] },
+  { name: "Veggie", spoken: "vegi", hear: /\bveggie\w*|\bvegi\b|\bvegetariana\w*/g, keys: ["veggie", "vegi", "vegetariana"] },
+  { name: "Peperoni", spoken: "peperoni", hear: /peperoni\w*|pepperoni\w*/g, keys: ["peperoni", "pepperoni"] }
 ];
 
 export function listedPizzas(utterance) {
   const text = fold(utterance);
   const hits = [];
-  for (const [re, name] of PIZZA_PATTERNS) {
-    const flags = new RegExp(re.source, "g");
+  for (const pizza of PIZZA_CATALOG) {
+    const flags = new RegExp(pizza.hear.source, "g");
     let match;
     while ((match = flags.exec(text))) {
-      if (name === "Peperoni") {
+      if (pizza.name === "Peperoni") {
         const before = text.slice(Math.max(0, match.index - 24), match.index);
-        if (/\b(extra|con|agrega|agregale|ponle)\b/.test(before)) {
+        if (/\b(extra|ponle|agrega|agregale)\b/.test(before)) {
           continue;
         }
       }
-      hits.push({ index: match.index, name });
+      hits.push({ index: match.index, name: pizza.name });
     }
   }
   hits.sort((left, right) => left.index - right.index);
@@ -284,7 +284,20 @@ export function strayEcho(utterance, state = {}) {
 }
 
 function spokenPizza(name) {
-  return fold(name).includes("boneless") ? "boneless" : name;
+  const found = PIZZA_CATALOG.find(item => fold(item.name) === fold(name));
+  if (found) {
+    return found.spoken;
+  }
+  return fold(name).includes("boneless") ? "boneles" : name;
+}
+
+function speakHalf(half) {
+  let said = String(half || "");
+  const ordered = [...PIZZA_CATALOG].sort((left, right) => right.name.length - left.name.length);
+  for (const pizza of ordered) {
+    said = said.replace(new RegExp(pizza.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), pizza.spoken);
+  }
+  return said;
 }
 
 function promoSay(next) {
@@ -594,7 +607,7 @@ function infoReply(next, utterance, text) {
 
 function menuSay(next) {
   const hidden = new Set((next.unavailable || []).map(item => fold(item)));
-  const names = MENU_PIZZAS.filter(name => !hidden.has(fold(name)));
+  const names = MENU_PIZZAS.filter(name => !hidden.has(fold(name))).map(name => spokenPizza(name));
   return `Tenemos ${names.join(", ")}. ¿Cuál?`;
 }
 
@@ -668,27 +681,15 @@ export function correctHeard(utterance) {
 
 export function matchPizza(utterance) {
   const text = fold(utterance);
-  if (/hawai|saway|awaina|awaiana/.test(text)) {
-    return "Hawaina";
-  }
-  if (soundsLikeBoneless(text)) {
-    return "Lucco Boneless";
+  const named = listedPizzas(utterance);
+  if (named.length) {
+    return named[0];
   }
   if (/^necesitamos?$/.test(text.replace(/[^a-z\s]/g, "").trim())) {
     return "Mexicana";
   }
-  if (/\bdeluxe\b|\bde luz\b|\bluz\b/.test(text)) {
-    return "Deluxe";
-  }
-  if (/tejicana|mejicana/.test(text)) {
-    return "Mexicana";
-  }
-  const named = MENU_PIZZAS.find(name => fold(name) !== "peperoni" && text.includes(fold(name)));
-  if (named) {
-    return named;
-  }
-  if (/peperoni|pepperoni/.test(text) && !/\b(extra|con|agrega|agregale|ponle)\b/.test(text)) {
-    return "Peperoni";
+  if (soundsLikeBoneless(text)) {
+    return "Lucco Boneless";
   }
   return "";
 }
@@ -783,9 +784,7 @@ function pizzaChoices(next) {
     slot: "pizza",
     value: name,
     phrase: `la pizza ${spokenPizza(name)}`,
-    keys: fold(name).includes("boneless")
-      ? ["boneless"]
-      : [name, spokenPizza(name)]
+    keys: PIZZA_CATALOG.find(item => item.name === name)?.keys || [spokenPizza(name)]
   }));
 }
 
@@ -1052,11 +1051,11 @@ function missingSlot(next) {
   }
   if (!next.size) {
     if (next.half) {
-      const half = next.half.charAt(0).toUpperCase() + next.half.slice(1);
-      return `${half}, ¿mediana, grande o familiar?`;
+      const half = speakHalf(next.half);
+      return `${half.charAt(0).toUpperCase()}${half.slice(1)}, ¿mediana, grande o familiar?`;
     }
     const extra = (next.extras || []).length ? ` con extra de ${next.extras.join(" y ")}` : "";
-    return `${next.product}${extra}, ¿mediana, grande o familiar?`;
+    return `${spokenPizza(next.product)}${extra}, ¿mediana, grande o familiar?`;
   }
   if (fold(next.product).includes("boneless") && !next.sauce) {
     return "La pizza boneless, ¿salsa barbiquiú o búfalo?";
@@ -1326,7 +1325,7 @@ export function nextReply(state, utterance) {
     return {
       state: next,
       hangup: false,
-      say: `${next.product}, ¿mediana, grande o familiar?`
+      say: `${spokenPizza(next.product)}, ¿mediana, grande o familiar?`
     };
   }
 
@@ -1567,7 +1566,7 @@ export function orderedTurn(state, utterance) {
       state: next,
       hangup: false,
       answered: true,
-      say: `La mitad y mitad lleva dos sabores. ¿Cuál es el otro, además de ${namedNow[0]}?`
+      say: `La mitad y mitad lleva dos sabores. ¿Cuál es el otro, además de ${spokenPizza(namedNow[0])}?`
     };
   }
   const halves = /\bmitad\b/.test(text) && namedNow.length === 2 ? namedNow : null;
@@ -1584,7 +1583,7 @@ export function orderedTurn(state, utterance) {
   }
   if (pizza) {
     if ((next.unavailable || []).some(item => fold(item) === fold(pizza))) {
-      return { state: next, hangup: false, say: `La pizza ${pizza} no está disponible. ¿Qué otra desea?` };
+      return { state: next, hangup: false, say: `La pizza ${spokenPizza(pizza)} no está disponible. ¿Qué otra desea?` };
     }
     next.product = pizza;
   }
@@ -1623,7 +1622,7 @@ export function orderedTurn(state, utterance) {
         state: next,
         hangup: false,
         answered: true,
-        say: `Mitad ${halves[0]} y mitad ${halves[1]}. ¿Mediana, grande o familiar?`
+        say: `Mitad ${spokenPizza(halves[0])} y mitad ${spokenPizza(halves[1])}. ¿Mediana, grande o familiar?`
       };
     }
     const firstOfPair = next.pairNeed === 2 && (next.items || []).length < 1 && !next.pendingSecond;
@@ -1638,7 +1637,7 @@ export function orderedTurn(state, utterance) {
         state: next,
         hangup: false,
         answered: true,
-        say: `Anoté una pizza ${next.size} ${next.half}.${sauceAsk || (slot ? ` ${slot}` : "")}`
+        say: `Anoté una pizza ${next.size} ${speakHalf(next.half)}.${sauceAsk || (slot ? ` ${slot}` : "")}`
       };
     }
   } else if (namedNow.length >= 2 && (pair || next.pairNeed === 2) && (next.items || []).length < 2) {
@@ -1675,8 +1674,8 @@ export function orderedTurn(state, utterance) {
       state: next,
       hangup: false,
       say: description
-        ? `La pizza ${next.product} trae ${description}.`
-        : `No tengo anotados los ingredientes de la pizza ${next.product}.`
+        ? `La pizza ${spokenPizza(next.product)} trae ${description}.`
+        : `No tengo anotados los ingredientes de la pizza ${spokenPizza(next.product)}.`
     };
   }
   if (asksPrice(text)) {
@@ -1719,7 +1718,27 @@ export function orderedTurn(state, utterance) {
   }
   const extraLabel = (next.extras || []).length ? ` con extra de ${(next.extras || []).join(" y ")}` : "";
   if (!next.size) {
-    return offerGuess(next, utterance, sizeChoices(), `${next.product}${extraLabel}, ¿mediana, grande o familiar?`);
+    if (/\b(no|nel|nop)\b/.test(text) && !heardSize(text) && !pizza) {
+      next.product = "";
+      next.half = "";
+      next.extras = [];
+      return { state: next, hangup: false, answered: true, say: "¿Cuál pizza desea?" };
+    }
+    if (/\bse llama\b/.test(text) && !pizza) {
+      next.product = "";
+      next.half = "";
+      next.extras = [];
+      return { state: next, hangup: false, answered: true, say: "¿Cómo se llama la pizza?" };
+    }
+    if (pizza) {
+      return {
+        state: next,
+        hangup: false,
+        answered: true,
+        say: `${spokenPizza(next.product)}${extraLabel}, ¿mediana, grande o familiar?`
+      };
+    }
+    return offerGuess(next, utterance, sizeChoices(), `${spokenPizza(next.product)}${extraLabel}, ¿mediana, grande o familiar?`);
   }
   if (fold(next.product).includes("boneless") && !next.sauce) {
     return offerGuess(next, utterance, sauceChoices(), "La pizza boneless, ¿salsa barbiquiú o búfalo?");
@@ -1741,7 +1760,7 @@ export function orderedTurn(state, utterance) {
   }
   if (next.pairNeed === 2 && next.product && (next.items || []).length < 1 && !next.pendingSecond) {
     const saved = next.half
-      ? `una pizza ${next.pairSize || next.size} ${next.half}`
+      ? `una pizza ${next.pairSize || next.size} ${speakHalf(next.half)}`
       : `una ${next.pairSize || next.size} de ${spokenPizza(next.product)}`;
     next.items = [{
       product: next.product,
@@ -1936,7 +1955,7 @@ export function orderedTurn(state, utterance) {
     const pizzas = lines.map(item => {
       const topping = (item.extras || []).length ? ` con extra de ${item.extras.join(" y ")}` : "";
       if (item.half) {
-        return `una pizza ${item.size} ${item.half}`;
+        return `una pizza ${item.size} ${speakHalf(item.half)}`;
       }
       return `una pizza ${item.size} de ${spokenPizza(item.product)}${item.sauce ? ` con ${sauceWord(item.sauce)}` : ""}${topping}`;
     }).join(" y ");

@@ -288,7 +288,7 @@ test("simulacion 18 que trae lee la pizza y el extra no la cambia", () => {
   const order = orderedTurn({ name: "Ana" }, "una pizza mexicana con extra de pepperoni");
   assert.equal(order.state.product, "Mexicana");
   assert.ok((order.state.extras || []).some(name => /pepperoni|peperoni/i.test(name)));
-  assert.match(order.say, /Mexicana con extra de pepperoni/i);
+  assert.match(order.say, /mejicana con extra de pepperoni/i);
   assert.match(order.say, /mediana, grande o familiar/);
   const drink = orderedTurn({
     name: "Ana",
@@ -369,7 +369,7 @@ test("simulacion 20 beneficio es el precio, light no es ligera y sin direccion n
     closingAsked: true
   }, "no");
   assert.equal(placed.save, true);
-  assert.match(placed.say, /Su orden es una pizza familiar de boneless con búfalo y una Coca-Cola regular de 600 mililitros/);
+  assert.match(placed.say, /Su orden es una pizza familiar de boneles con búfalo y una Coca-Cola regular de 600 mililitros/);
   assert.match(placed.say, /tu pedido quedó confirmado/);
   assert.match(placed.say, /30 minutos/);
   assert.match(placed.say, /Muchas gracias por llamar a Pizzería Hermosillo/);
@@ -389,10 +389,10 @@ test("simulacion 21 el habla de hermosillo usa las mismas frases", () => {
   assert.match(how.say, /Mediana/);
   const menu = orderedTurn({ name: "Ana" }, "¿Qué manejan?");
   assert.match(menu.say, /Tenemos/);
-  assert.match(menu.say, /Hawaina/);
+  assert.match(menu.say, /jawayana/);
   assert.equal(menu.state.product, "");
   const listed = orderedTurn({ name: "Ana" }, "¿Qué hay?");
-  assert.match(listed.say, /Peperoni/);
+  assert.match(listed.say, /peperoni/);
   const info = orderedTurn({
     name: "Ana",
     descriptions: { Hawaina: "Jamón y piña." }
@@ -462,8 +462,8 @@ test("simulacion 22 la promo de dos grandes pide cada sabor y no se traga la pre
   assert.equal(stray.state.product, "Mexicana");
   assert.equal(stray.state.colony || "", "");
   const own = orderedTurn(second.state, "¿de qué son mis pizzas?");
-  assert.match(own.say, /boneless/);
-  assert.match(own.say, /Mexicana/);
+  assert.match(own.say, /boneles/);
+  assert.match(own.say, /mejicana/);
   const more = orderedTurn({
     ...second.state,
     offeredMore: true,
@@ -481,7 +481,7 @@ test("simulacion 22 la promo de dos grandes pide cada sabor y no se traga la pre
   assert.equal(done.save, true);
   assert.match(done.say, /tu pedido quedó confirmado/);
   assert.match(done.say, /30 minutos/);
-  assert.match(done.say, /Mexicana/);
+  assert.match(done.say, /mejicana/);
 });
 
 test("simulacion 23 preguntas frecuentes no se tragan el pedido", () => {
@@ -509,7 +509,7 @@ test("simulacion 23 preguntas frecuentes no se tragan el pedido", () => {
   const drinks = orderedTurn({ name: "Ana" }, "¿Tienen Pepsi?");
   assert.match(drinks.say, /no lo manejamos/i);
   const menu = orderedTurn({ name: "Ana" }, "¿Qué pizzas tienen?");
-  assert.match(menu.say, /Hawaina/);
+  assert.match(menu.say, /jawayana/);
   assert.equal(menu.state.product, "");
   const order = orderedTurn(price.state, "Quiero una grande de pepperoni");
   assert.equal(order.state.product, "Peperoni");
@@ -604,7 +604,7 @@ test("simulacion 27 una pregunta desconocida no se guarda como nombre ni colonia
 test("simulacion 28 lo mal oido se confirma antes de anotarlo", () => {
   const pizza = orderedTurn({ name: "Ana" }, "voungles");
   assert.equal(pizza.state.product || "", "");
-  assert.match(pizza.say, /¿Acaso se refiere a la pizza boneless\?/);
+  assert.match(pizza.say, /¿Acaso se refiere a la pizza boneles\?/);
   const yes = orderedTurn(pizza.state, "Sí");
   assert.equal(yes.state.product, "Lucco Boneless");
   assert.match(yes.say, /mediana, grande o familiar/);
@@ -745,7 +745,7 @@ test("simulacion 32 la mitad se anota y el numero se oye completo", () => {
   assert.equal(half.answered, true);
   assert.equal(half.state.half, "mitad Mexicana y mitad Peperoni");
   assert.equal(half.state.product, "Mexicana");
-  assert.match(half.say, /Anoté una pizza familiar mitad Mexicana y mitad Peperoni/);
+  assert.match(half.say, /Anoté una pizza familiar mitad mejicana y mitad peperoni/);
   assert.match(half.say, /bebida/);
   assert.doesNotMatch(half.say, /no está en el menú|No armamos|domicilio/);
   const street = orderedTurn({
@@ -789,7 +789,7 @@ test("simulacion 33 es correcto guarda la calle y la coca light no es de 2 litro
     product: "Mexicana",
     half: "mitad Mexicana y mitad Sinaloense"
   }, "¿Qué precios tienen?");
-  assert.match(priced.say, /Mitad Mexicana y mitad Sinaloense/);
+  assert.match(priced.say, /Mitad mejicana y mitad sinaloense/);
   assert.doesNotMatch(priced.say, /^Mediana 200, grande 220 y familiar 250\. Mexicana,/);
   const street = orderedTurn({
     name: "Roberto",
@@ -861,7 +861,7 @@ test("simulacion 35 la promo pide la bebida hasta tener las dos pizzas", () => {
   assert.equal((three.state.items || []).length, 0);
   const one = orderedTurn({ name: "Octavio", pairNeed: 2, pairSize: "grande" }, "Mitad pepperoni.");
   assert.match(one.say, /dos sabores/);
-  assert.match(one.say, /Peperoni/);
+  assert.match(one.say, /peperoni/);
   const close = orderedTurn({
     name: "Octavio",
     product: "Lucco Boneless",
@@ -880,8 +880,8 @@ test("simulacion 35 la promo pide la bebida hasta tener las dos pizzas", () => {
     closingAsked: true
   }, "Sería todo, muchas gracias.");
   assert.equal(close.save, true);
-  assert.match(close.say, /mitad Peperoni y mitad Hawaina/);
-  assert.match(close.say, /mitad Lucco Boneless y mitad Italiana/);
+  assert.match(close.say, /mitad peperoni y mitad jawayana/);
+  assert.match(close.say, /mitad boneles y mitad italiana/);
   const street = orderedTurn({
     name: "Octavio",
     product: "Lucco Boneless",
@@ -901,6 +901,44 @@ test("simulacion 35 la promo pide la bebida hasta tener las dos pizzas", () => {
   const yes = orderedTurn(street.state, "Sí, es correcto.");
   assert.equal(yes.state.street, "Lázaro Cárdenas");
   assert.equal(yes.state.house, "1");
+});
+
+test("simulacion 36 entiende el nombre hablado de cada pizza", () => {
+  const heard = [
+    ["baribiqiu chiquen", "BBQ Chicken", "baribiqiu chiquen"],
+    ["boneles", "Lucco Boneless", "boneles"],
+    ["chiquen alfredo", "Chicken Alfredo", "chiquen alfredo"],
+    ["chipotle chiquen", "Chipotle Chicken", "chipotle chiquen"],
+    ["ostiones ahumados", "Ostiones", "ostiones ahumados"],
+    ["delucs", "Deluxe", "delucs"],
+    ["jawayana", "Hawaina", "jawayana"],
+    ["italiana", "Italiana", "italiana"],
+    ["marguerita", "Marguerita", "marguerita"],
+    ["mejicana", "Mexicana", "mejicana"],
+    ["peperoni", "Peperoni", "peperoni"],
+    ["sinaloense", "Sinaloense", "sinaloense"],
+    ["espinacoli", "Spincacoli", "espinacoli"],
+    ["estromboli", "Stromboli", "estromboli"],
+    ["vegi", "Veggie", "vegi"]
+  ];
+  for (const [said, name, spoken] of heard) {
+    const turn = orderedTurn({ name: "Fernando" }, `Una pizza ${said}.`);
+    assert.equal(turn.state.product, name, said);
+    assert.match(turn.say, new RegExp(spoken.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(turn.say, /mediana, grande o familiar/);
+  }
+  const locked = orderedTurn({ name: "Fernando", product: "Peperoni" }, "No, es cilantro.");
+  assert.equal(locked.state.product, "");
+  assert.match(locked.say, /Cuál pizza desea/);
+  assert.equal(locked.answered, true);
+  const named = orderedTurn({ name: "Fernando", product: "Peperoni" }, "Me gustaría una pizza que se llama");
+  assert.equal(named.state.product, "");
+  assert.match(named.say, /Cómo se llama/);
+  assert.equal(named.answered, true);
+  const fixed = orderedTurn({ name: "Fernando", product: "Peperoni" }, "No, es espinacoli.");
+  assert.equal(fixed.state.product, "Spincacoli");
+  assert.match(fixed.say, /espinacoli/);
+  assert.match(fixed.say, /mediana, grande o familiar/);
 });
 
 test("simulacion 10 la hawaiana apagada no se vende", () => {
