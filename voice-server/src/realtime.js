@@ -10,13 +10,15 @@ import {
   matchDrinkProduct,
   getLastOrderTool,
   orderStatusTool,
+  findOrderForCancel,
+  cancelOrderTool,
   lockStreet,
   updateLastOrderTool
 } from "./tools.js";
 import { config } from "./config.js";
 import { interruptionDecision } from "./turn-policy.js";
 import { wantsHuman } from "./human-transfer.js";
-import { correctHeard, emptyFacts, factsInstructions, inventedHeard, isAnsweredQuestion, isVocabularyEcho, lockFacts, looksLikeQuestion, orderedTurn, spokenExistingOrder, strayEcho } from "./call-flow.js";
+import { cancelRefusal, correctHeard, emptyFacts, factsInstructions, inventedHeard, isAnsweredQuestion, isVocabularyEcho, lockFacts, looksLikeQuestion, orderedTurn, spokenCancelOrder, spokenExistingOrder, strayEcho } from "./call-flow.js";
 import { emptyPcmState, isPcmFormat, pcmToPcmuBase64 } from "./phone-audio.js";
 
 function isPromptEcho(text) {
@@ -856,6 +858,55 @@ export function createRealtimeSession({
                 }).catch(error => {
                   console.error("No se pudo guardar el pedido confirmado:", error.message);
                   speakExact("No pude dejar listo el pedido. ¿Me confirma otra vez?");
+                });
+              } else if (turn.cancelFind) {
+                findOrderForCancel({
+                  businessId,
+                  orderNumber: turn.cancelFind.orderNumber || "",
+                  customerName: turn.cancelFind.customerName || ""
+                }).then(result => {
+                  if (!result?.found) {
+                    speakExact("No encuentro ese pedido. ¿Me dice el número o el nombre otra vez?");
+                    return;
+                  }
+                  if (result.ambiguous) {
+                    speakExact("Hay más de un pedido con ese nombre. ¿Me dice el número de pedido?");
+                    return;
+                  }
+                  if (result.status !== "new" && result.status !== "preparing") {
+                    callState.flow = { ...(turn.state || {}), cancelStep: "" };
+                    speakExact(cancelRefusal(result.status));
+                    return;
+                  }
+                  callState.flow = {
+                    ...(turn.state || {}),
+                    cancelStep: "confirm",
+                    cancelOrderId: result.order_id,
+                    cancelAddress: result.address || "",
+                    cancelStatus: result.status
+                  };
+                  speakExact(`Muy bien, ¿pediste ${spokenCancelOrder(result.items)}?`);
+                }).catch(error => {
+                  console.error("No se pudo buscar el pedido para cancelar:", error.message);
+                  speakExact("No pude revisar el pedido. ¿Me dice otra vez el número o el nombre?");
+                });
+              } else if (turn.cancelApply) {
+                cancelOrderTool({
+                  businessId,
+                  orderId: turn.state?.cancelOrderId || ""
+                }).then(result => {
+                  if (!result?.success) {
+                    callState.flow = { ...(turn.state || {}), cancelStep: "" };
+                    speakExact(cancelRefusal(result?.status));
+                    return;
+                  }
+                  callState.cancelled = true;
+                  callState.closeWhenSpoken = true;
+                  callState.flow = { ...(turn.state || {}), cancelStep: "" };
+                  speakExact(turn.say);
+                }).catch(error => {
+                  console.error("No se pudo cancelar el pedido:", error.message);
+                  speakExact("No pude cancelar el pedido. ¿Me confirma otra vez la dirección?");
                 });
               } else if (turn.status) {
                 orderStatusTool({ businessId, callerPhone }).then(result => {

@@ -259,6 +259,54 @@ export function listedPizzas(utterance) {
   return unique;
 }
 
+function pizzaHits(utterance) {
+  const text = fold(utterance);
+  const hits = [];
+  const seen = new Set();
+  for (const pizza of PIZZA_CATALOG) {
+    const flags = new RegExp(pizza.hear.source, "g");
+    let match;
+    while ((match = flags.exec(text))) {
+      if (pizza.name === "Peperoni") {
+        const before = text.slice(Math.max(0, match.index - 24), match.index);
+        if (/\b(extra|ponle|agrega|agregale)\b/.test(before)) {
+          continue;
+        }
+      }
+      if (seen.has(pizza.name)) {
+        continue;
+      }
+      seen.add(pizza.name);
+      hits.push({ index: match.index, name: pizza.name });
+    }
+  }
+  hits.sort((left, right) => left.index - right.index);
+  return hits;
+}
+
+function pizzaPlans(utterance) {
+  const text = fold(utterance);
+  const plans = [];
+  let pending = "";
+  for (const hit of pizzaHits(utterance)) {
+    const before = text.slice(Math.max(0, hit.index - 18), hit.index);
+    const isHalf = /\bmitad\b/.test(before);
+    if (isHalf && pending) {
+      plans.push({ product: pending, half: `mitad ${pending} y mitad ${hit.name}` });
+      pending = "";
+    } else if (isHalf) {
+      pending = hit.name;
+    } else {
+      plans.push({ product: hit.name, half: "" });
+    }
+  }
+  return { plans, pending };
+}
+
+function pizzaNeedsSauce(product, half, sauce) {
+  return fold(`${half || ""} ${product || ""}`).includes("boneless") && !sauce;
+}
+
 export function isVocabularyEcho(value) {
   const text = fold(value).replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
   if (!text) {
@@ -1378,6 +1426,92 @@ export function spokenExistingOrder(items) {
   return parts.join(" y ") || "un pedido";
 }
 
+export function spokenCancelOrder(items) {
+  const parts = (items || []).map(item => {
+    const quantity = Number(item.quantity) || 1;
+    const count = quantity === 1 ? "una" : quantity === 2 ? "dos" : String(quantity);
+    const notes = String(item.notes || "").split(",").map(part => part.trim()).filter(Boolean);
+    const size = ["mediana", "grande", "familiar"].includes(fold(notes[0] || "")) ? notes[0] : "";
+    const rest = notes.filter(part => fold(part) !== fold(size) && !/^promocion\b/.test(fold(part)));
+    const sauce = rest.find(part => /^(bbq|buffalo)$/i.test(part)) || "";
+    const extras = rest.filter(part => part !== sauce);
+    const name = String(item.name || "").replace(/^Pizza\s+/i, "").trim();
+    if (/coca|fresa|refresco/i.test(name)) {
+      return `${count} ${name}`;
+    }
+    if (/^mitad\b/i.test(name)) {
+      const extra = extras.length ? ` con extra de ${extras.join(" y ")}` : "";
+      return `${count} pizza${size ? ` ${size}` : ""} ${name}${extra}`;
+    }
+    const sauceWord = fold(sauce) === "bbq" ? " con barbiquiú" : fold(sauce) === "buffalo" ? " con búfalo" : "";
+    const extra = extras.length ? ` con extra de ${extras.join(" y ")}` : "";
+    return `${count} pizza${size ? ` ${size}` : ""} de ${name}${sauceWord}${extra}`;
+  }).filter(part => part.trim().length > 4);
+  return parts.join(" y ") || "un pedido";
+}
+
+export function cancelRefusal(status) {
+  if (status === "ready") {
+    return "Ese pedido ya está listo y no se puede cancelar.";
+  }
+  if (status === "delivering") {
+    return "Ese pedido ya va en camino y no se puede cancelar.";
+  }
+  if (status === "completed") {
+    return "Ese pedido ya fue entregado y no se puede cancelar.";
+  }
+  if (status === "cancelled") {
+    return "Ese pedido ya está cancelado.";
+  }
+  return "Ese pedido ya no se puede cancelar.";
+}
+
+function wantsSavedCancel(text) {
+  return /\bcancel/.test(text) && /\b(pedido|orden)\b/.test(text) && !/\b(bebida|soda|coca|refresco)\b/.test(text);
+}
+
+function heardCancelIdentity(utterance) {
+  const text = fold(utterance).replace(/[#.,!?¿¡]/g, " ").replace(/\s+/g, " ").trim();
+  const orderNumber = streetNumber(text);
+  const filler = /\b(hola|buenos|buenas|dias|dia|mi|nombre|es|me|llamo|soy|el|la|de|su|un|una|numero|pedido|orden)\b/g;
+  const words = text.replace(filler, " ").replace(/\s+/g, " ").trim().split(" ").filter(word => word.length >= 3 && !/^\d+$/.test(word));
+  const numberWords = /^(cero|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|doscientos|trescientos|cuatrocientos|quinientos|seiscientos|setecientos|ochocientos|novecientos)$/;
+  const nameWords = words.filter(word => !numberWords.test(word));
+  if (orderNumber && orderNumber.length <= 6 && nameWords.length === 0) {
+    return { orderNumber };
+  }
+  if (nameWords.length >= 1 && nameWords.length <= 3) {
+    const blocked = /^(quiero|cancelar|cancel|gracias|bueno|claro|bien)$/;
+    if (!nameWords.some(word => blocked.test(word))) {
+      return { customerName: titleName(nameWords.join(" ")) };
+    }
+  }
+  if (orderNumber && orderNumber.length <= 6) {
+    return { orderNumber };
+  }
+  return {};
+}
+
+function houseNearStreet(spoken, streetName) {
+  const heard = fold(spoken);
+  const at = heard.indexOf(streetName);
+  if (at < 0) {
+    return "";
+  }
+  const rest = heard.slice(at + streetName.length).split(/\b(colonia|codigo|postal)\b/)[0].split(",")[0];
+  return streetNumber(`${streetName} ${rest}`);
+}
+
+function addressMatches(spoken, stored) {
+  const storedStreet = String(stored || "").split(",")[0] || "";
+  const storedNumber = streetNumber(storedStreet);
+  const storedName = fold(storedStreet).replace(/[0-9]/g, "").replace(/\s+/g, " ").trim();
+  if (!storedNumber || storedName.length < 4) {
+    return false;
+  }
+  return houseNearStreet(spoken, storedName) === storedNumber;
+}
+
 export function statusSpeech(status) {
   if (status === "delivering") {
     return "Tu pedido se encuentra en camino. En 10 minutos aproximadamente debería de estar en tu domicilio.";
@@ -1427,6 +1561,78 @@ export function orderedTurn(state, utterance) {
       next.pendingStatus = "";
       return { state: next, hangup: false, answered: true, say: "De acuerdo. ¿Qué desea ordenar?" };
     }
+  }
+  if (next.cancelStep === "confirm") {
+    const yes = /^(si|sip|simon|claro|correcto|es correcto|si es correcto|esta correcto|si esta correcto|exacto|esa|ese|eso|asi es|aja|ok|okay|esta bien|si esta bien|de acuerdo|perfecto)$/.test(text);
+    const no = /^(no|nop|nel|negativo)$/.test(text);
+    if (yes) {
+      const storedStreet = String(next.cancelAddress || "").split(",")[0] || "";
+      if (!streetNumber(storedStreet)) {
+        next.cancelStep = "";
+        next.cancelOrderId = "";
+        next.cancelAddress = "";
+        next.cancelStatus = "";
+        return {
+          state: next,
+          hangup: false,
+          answered: true,
+          say: "Ese pedido no tiene dirección de domicilio, así que no lo puedo cancelar por teléfono."
+        };
+      }
+      next.cancelStep = "address";
+      return {
+        state: next,
+        hangup: false,
+        answered: true,
+        say: "Para cancelar el pedido, dime por favor la dirección a la cual la pediste. Si coincide con tu pedido, la puedo cancelar."
+      };
+    }
+    if (no) {
+      next.cancelStep = "";
+      next.cancelOrderId = "";
+      next.cancelAddress = "";
+      next.cancelStatus = "";
+      return { state: next, hangup: false, answered: true, say: "De acuerdo. ¿Qué desea ordenar?" };
+    }
+    return { state: next, hangup: false, answered: true, say: "¿Ese es su pedido?" };
+  }
+  if (next.cancelStep === "address") {
+    if (addressMatches(utterance, next.cancelAddress)) {
+      return {
+        state: next,
+        hangup: false,
+        answered: true,
+        cancelApply: true,
+        say: "Listo, tu pedido ha sido cancelado con éxito. Que tengas un buen día."
+      };
+    }
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: "Esa dirección no coincide con el pedido. ¿Me la dice otra vez?"
+    };
+  }
+  if (next.cancelStep === "who") {
+    const identity = heardCancelIdentity(utterance);
+    if (identity.orderNumber || identity.customerName) {
+      return { state: next, hangup: false, answered: true, cancelFind: identity, say: "Reviso ese pedido." };
+    }
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: "Muy bien, ¿cuál es su número de pedido o su nombre?"
+    };
+  }
+  if (!next.product && wantsSavedCancel(text)) {
+    next.cancelStep = "who";
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: "Muy bien, ¿cuál es su número de pedido o su nombre?"
+    };
   }
   if (wantsOrderStatus(text) && !next.product) {
     const named = text.match(/\b(?:mi nombre es|me llamo)\s+([a-z]{3,})(?:\s+([a-z]{3,}))?/);
@@ -1553,7 +1759,16 @@ export function orderedTurn(state, utterance) {
   const pizza = matchPizza(text);
   const size = heardSize(text);
   const namedNow = listedPizzas(utterance);
-  if (/\bmitad\b/.test(text) && namedNow.length > 2) {
+  const pair = pairRequest(text);
+  if (pair) {
+    next.pairNeed = 2;
+    next.pairSize = pair;
+    next.size = pair;
+  }
+  const inPair = Boolean(pair || next.pairNeed === 2);
+  const planned = pizzaPlans(utterance);
+  const twoPromoPizzas = inPair && !planned.pending && planned.plans.length === 2 && namedNow.length <= 4 && (next.items || []).length < 1;
+  if (/\bmitad\b/.test(text) && namedNow.length > 2 && !twoPromoPizzas) {
     return {
       state: next,
       hangup: false,
@@ -1561,22 +1776,25 @@ export function orderedTurn(state, utterance) {
       say: "Solo se pueden combinar dos sabores. ¿Cuáles dos quiere?"
     };
   }
-  if (/\bmitad\b/.test(text) && namedNow.length === 1) {
+  if (/\bmitad\b/.test(text) && (namedNow.length === 1 || planned.pending)) {
+    const known = planned.pending || namedNow[0];
     return {
       state: next,
       hangup: false,
       answered: true,
-      say: `La mitad y mitad lleva dos sabores. ¿Cuál es el otro, además de ${spokenPizza(namedNow[0])}?`
+      say: `La mitad y mitad lleva dos sabores. ¿Cuál es el otro, además de ${spokenPizza(known)}?`
     };
   }
-  const halves = /\bmitad\b/.test(text) && namedNow.length === 2 ? namedNow : null;
-  if (!halves && pizza && next.product && pizza !== next.product && next.size) {
+  const halfPlan = planned.plans.length === 1 && planned.plans[0].half ? planned.plans[0] : null;
+  if (!halfPlan && !twoPromoPizzas && pizza && next.product && pizza !== next.product && next.size) {
     next.items = [...(next.items || []), {
       product: next.product,
       size: next.size,
       sauce: next.sauce || "",
-      extras: next.extras || []
+      extras: next.extras || [],
+      half: next.half || ""
     }];
+    next.half = "";
     next.size = "";
     next.sauce = "";
     next.extras = [];
@@ -1602,31 +1820,76 @@ export function orderedTurn(state, utterance) {
   if (size) {
     next.size = size;
   }
-  if (heardSauce(text) && fold(next.product).includes("boneless")) {
+  if (heardSauce(text) && pizzaNeedsSauce(next.product, next.half, "")) {
     next.sauce = heardSauce(text);
   }
-  const pair = pairRequest(text);
-  if (pair) {
+  if (twoPromoPizzas) {
+    const chosen = next.pairSize || pair || "grande";
+    const sauce = heardSauce(text);
+    const first = planned.plans[0];
+    const second = planned.plans[1];
     next.pairNeed = 2;
-    next.pairSize = pair;
-    next.size = pair;
+    next.pairSize = chosen;
+    next.size = chosen;
+    next.extras = [];
+    if (pizzaNeedsSauce(first.product, first.half, sauce)) {
+      next.items = [];
+      next.product = first.product;
+      next.half = first.half || "";
+      next.sauce = "";
+      next.pendingSecond = second.product;
+      next.pendingSecondHalf = second.half || "";
+      return {
+        state: next,
+        hangup: false,
+        answered: true,
+        say: "La pizza boneless, ¿salsa barbiquiú o búfalo?"
+      };
+    }
+    next.items = [{
+      product: first.product,
+      size: chosen,
+      sauce: pizzaNeedsSauce(first.product, first.half, "") ? sauce : "",
+      extras: [],
+      half: first.half || ""
+    }];
+    next.product = second.product;
+    next.half = second.half || "";
+    next.pendingSecond = "";
+    next.pendingSecondHalf = "";
+    next.sauce = pizzaNeedsSauce(second.product, second.half, "") ? sauce : "";
+    if (pizzaNeedsSauce(second.product, second.half, next.sauce)) {
+      return {
+        state: next,
+        hangup: false,
+        answered: true,
+        say: "La pizza boneless, ¿salsa barbiquiú o búfalo?"
+      };
+    }
+    next.offeredMore = false;
+    return {
+      state: next,
+      hangup: false,
+      answered: true,
+      say: "Anoté las dos pizzas. ¿Desea agregar algo más? ¿Alguna bebida?"
+    };
   }
-  if (halves) {
-    next.half = `mitad ${halves[0]} y mitad ${halves[1]}`;
-    next.product = halves[0];
+  if (halfPlan) {
+    next.half = halfPlan.half;
+    next.product = halfPlan.product;
     next.size = next.pairSize || next.size || size || "";
     next.extras = [];
-    next.sauce = heardSauce(text) && fold(halves[0]).includes("boneless") ? heardSauce(text) : "";
+    next.sauce = heardSauce(text) && pizzaNeedsSauce(halfPlan.product, halfPlan.half, "") ? heardSauce(text) : "";
     if (!next.size) {
       return {
         state: next,
         hangup: false,
         answered: true,
-        say: `Mitad ${spokenPizza(halves[0])} y mitad ${spokenPizza(halves[1])}. ¿Mediana, grande o familiar?`
+        say: `${speakHalf(next.half)}. ¿Mediana, grande o familiar?`.replace(/^mitad/, "Mitad")
       };
     }
     const firstOfPair = next.pairNeed === 2 && (next.items || []).length < 1 && !next.pendingSecond;
-    const needsSauce = fold(next.product).includes("boneless") && !next.sauce;
+    const needsSauce = pizzaNeedsSauce(next.product, next.half, next.sauce);
     if (needsSauce || !firstOfPair) {
       if (!needsSauce && !next.drink?.volume) {
         next.offeredMore = false;
@@ -1640,28 +1903,33 @@ export function orderedTurn(state, utterance) {
         say: `Anoté una pizza ${next.size} ${speakHalf(next.half)}.${sauceAsk || (slot ? ` ${slot}` : "")}`
       };
     }
-  } else if (namedNow.length >= 2 && (pair || next.pairNeed === 2) && (next.items || []).length < 2) {
+  } else if (namedNow.length >= 2 && inPair && (next.items || []).length < 2) {
     const chosen = next.pairSize || pair || "grande";
     const sauce = heardSauce(text);
     next.pairNeed = 2;
     next.pairSize = chosen;
     next.size = chosen;
-    if (fold(namedNow[0]).includes("boneless") && !sauce) {
+    if (pizzaNeedsSauce(namedNow[0], "", sauce)) {
       next.items = [];
       next.pendingSecond = namedNow[1];
+      next.pendingSecondHalf = "";
       next.product = namedNow[0];
+      next.half = "";
       next.sauce = "";
       next.extras = [];
     } else {
       next.items = [{
         product: namedNow[0],
         size: chosen,
-        sauce: fold(namedNow[0]).includes("boneless") ? sauce : "",
-        extras: []
+        sauce: pizzaNeedsSauce(namedNow[0], "", "") ? sauce : "",
+        extras: [],
+        half: ""
       }];
       next.product = namedNow[1];
+      next.half = "";
       next.pendingSecond = "";
-      next.sauce = fold(namedNow[1]).includes("boneless") ? sauce : "";
+      next.pendingSecondHalf = "";
+      next.sauce = pizzaNeedsSauce(namedNow[1], "", "") ? sauce : "";
       next.extras = [];
     }
   }
@@ -1740,10 +2008,10 @@ export function orderedTurn(state, utterance) {
     }
     return offerGuess(next, utterance, sizeChoices(), `${spokenPizza(next.product)}${extraLabel}, ¿mediana, grande o familiar?`);
   }
-  if (fold(next.product).includes("boneless") && !next.sauce) {
+  if (pizzaNeedsSauce(next.product, next.half, next.sauce)) {
     return offerGuess(next, utterance, sauceChoices(), "La pizza boneless, ¿salsa barbiquiú o búfalo?");
   }
-  if (next.pendingSecond && next.product && (!fold(next.product).includes("boneless") || next.sauce)) {
+  if (next.pendingSecond && next.product) {
     next.items = [...(next.items || []), {
       product: next.product,
       size: next.pairSize || next.size,
@@ -1751,12 +2019,21 @@ export function orderedTurn(state, utterance) {
       extras: next.extras || [],
       half: next.half || ""
     }];
-    next.half = "";
+    next.half = next.pendingSecondHalf || "";
     next.product = next.pendingSecond;
     next.pendingSecond = "";
-    next.sauce = fold(next.product).includes("boneless") ? next.sauce : "";
+    next.pendingSecondHalf = "";
+    next.sauce = pizzaNeedsSauce(next.product, next.half, "") ? next.sauce : "";
     next.extras = [];
     next.size = next.pairSize || next.size;
+    if (pizzaNeedsSauce(next.product, next.half, next.sauce)) {
+      return {
+        state: next,
+        hangup: false,
+        answered: true,
+        say: "La pizza boneless, ¿salsa barbiquiú o búfalo?"
+      };
+    }
   }
   if (next.pairNeed === 2 && next.product && (next.items || []).length < 1 && !next.pendingSecond) {
     const saved = next.half

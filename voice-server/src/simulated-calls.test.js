@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { correctHeard, heardFulfillment, inventedHeard, looksLikeQuestion, matchPizza, orderedTurn, speakPostal, spokenExistingOrder } from "./call-flow.js";
+import { correctHeard, heardFulfillment, inventedHeard, looksLikeQuestion, matchPizza, orderedTurn, speakPostal, spokenCancelOrder, spokenExistingOrder } from "./call-flow.js";
 import { deliveryAddress, kitchenClosedMessage, matchDrinkProduct, postalFromColony } from "./tools.js";
 import { interruptionDecision } from "./turn-policy.js";
 
@@ -901,6 +901,64 @@ test("simulacion 35 la promo pide la bebida hasta tener las dos pizzas", () => {
   const yes = orderedTurn(street.state, "Sí, es correcto.");
   assert.equal(yes.state.street, "Lázaro Cárdenas");
   assert.equal(yes.state.house, "1");
+});
+
+test("simulacion 37 cancelar un pedido pide numero, confirma y exige la direccion", () => {
+  const ask = orderedTurn({}, "Hola, quiero cancelar mi pedido.");
+  assert.match(ask.say, /número de pedido o su nombre/);
+  assert.equal(ask.state.cancelStep, "who");
+  assert.notEqual(ask.status, true);
+  const byName = orderedTurn(ask.state, "Fernando.");
+  assert.equal(byName.cancelFind.customerName, "Fernando");
+  const byNumber = orderedTurn(ask.state, "Trescientos cuarenta y siete.");
+  assert.equal(byNumber.cancelFind.orderNumber, "347");
+  const confirm = orderedTurn({
+    cancelStep: "confirm",
+    cancelOrderId: "abc",
+    cancelAddress: "Veracruz 58, 5 de Mayo, C.P. 83010, Hermosillo, Sonora",
+    cancelStatus: "preparing"
+  }, "Sí.");
+  assert.equal(confirm.state.cancelStep, "address");
+  assert.match(confirm.say, /dirección a la cual la pediste/);
+  const wrong = orderedTurn(confirm.state, "Lázaro Cárdenas número uno.");
+  assert.notEqual(wrong.cancelApply, true);
+  assert.match(wrong.say, /no coincide/);
+  const right = orderedTurn(confirm.state, "Veracruz número cincuenta y ocho.");
+  assert.equal(right.cancelApply, true);
+  assert.match(right.say, /cancelado con éxito/);
+  assert.equal(spokenCancelOrder([
+    { name: "Pizza Mexicana", quantity: 1, notes: "familiar" }
+  ]), "una pizza familiar de Mexicana");
+  assert.equal(spokenCancelOrder([
+    { name: "Pizza Peperoni", quantity: 1, notes: "familiar, champiñones" },
+    { name: "Coca-Cola Light 600 ml", quantity: 1, notes: "" }
+  ]), "una pizza familiar de Peperoni con extra de champiñones y una Coca-Cola Light 600 ml");
+  const late = orderedTurn({ name: "Ana", product: "Mexicana", size: "grande" }, "Cancela todo el pedido.");
+  assert.equal(late.cancel, true);
+});
+
+test("simulacion 38 la promo acepta dos pizzas enteras o cuatro mitades", () => {
+  let turn = orderedTurn({ name: "Ana" }, "Dame dos grandes, una mexicana y una peperoni.");
+  assert.equal(turn.state.items[0].product, "Mexicana");
+  assert.equal(turn.state.items[0].half || "", "");
+  assert.equal(turn.state.product, "Peperoni");
+  assert.match(turn.say, /bebida/);
+  assert.doesNotMatch(turn.say, /segunda/);
+  turn = orderedTurn({ name: "Ana" }, "Dos grandes, mitad peperoni y mitad hawaiana y la otra mitad mexicana y mitad sinaloense.");
+  assert.equal(turn.state.items[0].half, "mitad Peperoni y mitad Hawaina");
+  assert.equal(turn.state.half, "mitad Mexicana y mitad Sinaloense");
+  assert.match(turn.say, /bebida/);
+  turn = orderedTurn({ name: "Ana" }, "Dos grandes, mitad peperoni y mitad hawaiana y una mexicana.");
+  assert.equal(turn.state.items[0].half, "mitad Peperoni y mitad Hawaina");
+  assert.equal(turn.state.product, "Mexicana");
+  assert.equal(turn.state.half || "", "");
+  assert.match(turn.say, /bebida/);
+  const sauce = orderedTurn({ name: "Ana", size: "grande" }, "Mitad italiana y mitad boneless.");
+  assert.match(sauce.say, /barbiquiú/);
+  assert.equal(sauce.state.half, "mitad Italiana y mitad Lucco Boneless");
+  const refused = orderedTurn({ name: "Ana", pairNeed: 2, pairSize: "grande" }, "Mitad pepperoni, mitad hawaiana y mitad mexicana.");
+  assert.match(refused.say, /dos sabores/);
+  assert.equal((refused.state.items || []).length, 0);
 });
 
 test("simulacion 36 entiende el nombre hablado de cada pizza", () => {

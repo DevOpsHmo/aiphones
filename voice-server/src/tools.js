@@ -1665,6 +1665,101 @@ export async function orderStatusTool({ businessId, callerPhone }) {
   return { found: false, spoken: "No encuentro un pedido de hoy en este teléfono." };
 }
 
+function sameCustomerName(stored, given) {
+  const left = foldText(stored);
+  const right = foldText(given);
+  if (!left || !right) {
+    return false;
+  }
+  return left === right || left.startsWith(`${right} `);
+}
+
+export async function findOrderForCancel({ businessId, orderNumber, customerName }) {
+  if (!businessId || (!orderNumber && !customerName)) {
+    return { found: false };
+  }
+  const since = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: orders, error } = await supabase
+    .from("orders")
+    .select("id,customer_id,address,status,order_number,created_at,deleted_at")
+    .eq("business_id", businessId)
+    .gte("created_at", since)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(40);
+  if (error) {
+    throw error;
+  }
+  const wantedNumber = String(orderNumber || "").replace(/\D/g, "");
+  const matches = [];
+  for (const order of orders || []) {
+    if (wantedNumber && String(order.order_number || "") !== wantedNumber) {
+      continue;
+    }
+    const { data: customer } = await supabase
+      .from("customers")
+      .select("name,phone")
+      .eq("id", order.customer_id)
+      .maybeSingle();
+    if (!wantedNumber && !sameCustomerName(customer?.name, customerName)) {
+      continue;
+    }
+    const { data: items, error: itemsError } = await supabase
+      .from("order_items")
+      .select("name,quantity,notes")
+      .eq("order_id", order.id);
+    if (itemsError) {
+      throw itemsError;
+    }
+    matches.push({
+      order_id: order.id,
+      status: order.status || "new",
+      address: order.address || "",
+      customer_name: customer?.name || "",
+      order_number: order.order_number || "",
+      items: items || []
+    });
+    if (wantedNumber) {
+      break;
+    }
+  }
+  if (!matches.length) {
+    return { found: false };
+  }
+  if (!wantedNumber && matches.length > 1) {
+    return { found: true, ambiguous: true };
+  }
+  return { found: true, ...matches[0] };
+}
+
+export async function cancelOrderTool({ businessId, orderId }) {
+  if (!businessId || !orderId) {
+    return { success: false, status: "" };
+  }
+  const { data, error } = await supabase
+    .from("orders")
+    .update({ status: "cancelled" })
+    .eq("id", orderId)
+    .eq("business_id", businessId)
+    .in("status", ["new", "preparing"])
+    .is("deleted_at", null)
+    .select("id,status")
+    .maybeSingle();
+  if (error) {
+    throw error;
+  }
+  if (data) {
+    return { success: true, status: "cancelled" };
+  }
+  const { data: current } = await supabase
+    .from("orders")
+    .select("status")
+    .eq("id", orderId)
+    .eq("business_id", businessId)
+    .maybeSingle();
+  return { success: false, status: current?.status || "" };
+}
+
 export async function updateLastOrderTool({
   businessId,
   callerPhone,
