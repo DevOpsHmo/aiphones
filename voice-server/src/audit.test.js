@@ -167,7 +167,7 @@ for (let index = 0; index < 100; index += 1) {
 for (let index = 0; index < 50; index += 1) {
   test(`ambiguedad ${index}`, () => {
     const reply = nextReply({ name: "Ivan", product: "Peperoni", size: "", extra: "", fulfillment: "" }, "quiero una pizza de peperoni");
-    assert.match(reply.say, /mediana, grande o familiar/);
+    assert.match(reply.say, /de qué tamaño/);
     assert.equal(reply.state.size, "");
   });
 }

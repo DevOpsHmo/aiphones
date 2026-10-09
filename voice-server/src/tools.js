@@ -333,7 +333,7 @@ export function kitchenClosedMessage({ openTime = "", closeTime = "", now = new 
   if (openNow) {
     return "";
   }
-  return `Hola, bienvenido a Pizzería Hermosillo. Por el momento estamos cerrados. Te recordamos que nuestro horario de atención es de ${speakClock(openTime)} a ${speakClock(closeTime)}. Que tengas buen día.`;
+  return `Hola, qué tal. Habla Pizzería Hermosillo. Por el momento estamos cerrados. El horario es de ${speakClock(openTime)} a ${speakClock(closeTime)}. Que tengas buen día.`;
 }
 
 function promoDayKeys(description) {

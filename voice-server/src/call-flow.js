@@ -73,7 +73,7 @@ export function drinkQuestion(utterance, drink = {}) {
   const waiting = drink.kind === "coca" || drink.kind === "regular" || drink.kind === "Light" || drink.kind === "fresa";
   const volume = drinkVolume(utterance);
   if ((/\bfresa\b/.test(text) || drink.kind === "fresa") && !volume) {
-    return { say: "Refresco de fresa, ¿600 mililitros o 2 litros?", drink: { kind: "fresa" } };
+    return { say: "El refresco de fresa, ¿lo quieres de 600 mililitros o de 2 litros?", drink: { kind: "fresa" } };
   }
   if (drink.kind === "fresa" && volume) {
     return { drink: { kind: "fresa", volume } };
@@ -81,10 +81,10 @@ export function drinkQuestion(utterance, drink = {}) {
   if (/\b(coca|soda)\b/.test(text) || waiting) {
     const kind = chosen || (drink.kind === "regular" || drink.kind === "Light" ? drink.kind : "");
     if (!kind) {
-      return { say: "Coca-Cola, ¿regular o Light?", drink: { kind: "coca" } };
+      return { say: "La Coca-Cola, ¿regular o Light?", drink: { kind: "coca" } };
     }
     if (!volume) {
-      return { say: `Coca-Cola ${kind}, ¿600 mililitros o 2 litros?`, drink: { kind } };
+      return { say: `La Coca-Cola ${kind}, ¿de 600 mililitros o de 2 litros?`, drink: { kind } };
     }
     return { drink: { kind, volume } };
   }
@@ -351,12 +351,12 @@ function speakHalf(half) {
 function promoSay(next) {
   const promos = Array.isArray(next.promotions) ? next.promotions.filter(item => item && item.name) : [];
   if (!promos.length) {
-    return "Las promociones de hoy son: dos familiares por 450 y dos grandes por 400.";
+    return "Hoy tenemos dos familiares en 450 y dos grandes en 400.";
   }
   const line = promos
     .map(item => `${item.name} por ${Math.round(Number(item.price) || 0)}`)
     .join(" y ");
-  return `Las promociones de hoy son: ${line}.`;
+  return `Hoy tenemos ${line}.`;
 }
 
 function ownPizzasSay(next) {
@@ -365,11 +365,16 @@ function ownPizzasSay(next) {
     lines.push({ product: next.product, size: next.size || next.pairSize || "" });
   }
   if (!lines.length) {
-    const which = next.pairNeed === 2 ? " ¿De qué sabor quiere la primera?" : " ¿Cuál desea?";
-    return `Todavía no me ha dicho el sabor.${which}`;
+    const which = next.pairNeed === 2 ? " ¿De qué sabor quieres la primera?" : " ¿Cuál te late?";
+    return `Todavía no me dices el sabor.${which}`;
   }
-  const spoken = lines.map(item => `una ${item.size ? `${item.size} ` : ""}de ${spokenPizza(item.product)}`).join(" y ");
-  return `Sus pizzas son ${spoken}.`;
+  const spoken = lines.map(item => {
+    if (item.half) {
+      return `una ${item.size ? `${item.size} ` : ""}${speakHalf(item.half)}`;
+    }
+    return `una ${item.size ? `${item.size} ` : ""}de ${spokenPizza(item.product)}`;
+  }).join(" y ");
+  return `Llevas ${spoken}.`;
 }
 
 function moneyOf(next) {
@@ -395,7 +400,7 @@ function totalSay(next) {
   const { prices, extra } = moneyOf(next);
   const lines = orderLines(next);
   if (!lines.length || lines.some(item => !prices[item.size])) {
-    return `Para decirle el total necesito sabor y tamaño. ${priceSay(next)}`;
+    return `Para decirte el total me falta el sabor o el tamaño. ${priceSay(next)}`;
   }
   const plainGrandes = lines.filter(item => item.size === "grande" && !(item.extras || []).length).length === 2
     && lines.length === 2;
@@ -419,14 +424,14 @@ function totalSay(next) {
   if (drink.volume === "2 litros") {
     total += 50;
   }
-  return `Su total va en ${total}. El domicilio no cobra envío aparte.`;
+  return `Tu total va en ${total}. El domicilio no cobra envío aparte.`;
 }
 
 function hoursSay(next) {
   if (next.openTime && next.closeTime) {
-    return `El horario es de ${speakClock(next.openTime)} a ${speakClock(next.closeTime)}. El domicilio se toma dentro de ese horario.`;
+    return `Abrimos de ${speakClock(next.openTime)} a ${speakClock(next.closeTime)}. El domicilio se toma en ese horario.`;
   }
-  return "El horario es el del local. Si ya cerramos, la llamada se lo dice al entrar.";
+  return "El horario es el del local. Si ya cerramos, te lo decimos al entrar.";
 }
 
 function paymentSay(next) {
@@ -437,7 +442,7 @@ function paymentSay(next) {
     card ? "tarjeta" : "",
     transfer ? "transferencia" : ""
   ].filter(Boolean).join(", ");
-  return `A domicilio el pago es en efectivo, al recibir. Para recoger puede pagar con ${pickup}. La factura se pide en la sucursal.`;
+  return `A domicilio se paga en efectivo, al recibir. Si pasas a recogerlo, puedes pagar con ${pickup}. La factura se pide en la sucursal.`;
 }
 
 function customerQuestion(next, utterance, text) {
@@ -449,7 +454,7 @@ function customerQuestion(next, utterance, text) {
       state: next,
       hangup: false,
       answered: true,
-      say: "Lamento que el pedido haya salido mal. Si quiere, lo comunico con un encargado."
+      say: "Qué pena que el pedido haya salido mal. Si quieres, te comunico con alguien de la pizzería."
     };
   }
   if (wantsOrderStatus(text)) {
@@ -483,7 +488,7 @@ function customerQuestion(next, utterance, text) {
       state: next,
       hangup: false,
       answered: true,
-      say: "El domicilio llega en unos 30 minutos. Para recoger también queda en unos 30 minutos."
+      say: "El domicilio llega en unos 30 minutos. Si pasas a recogerlo, también queda en unos 30 minutos."
     };
   }
   if (/\b(llegan|zona de entrega|cobertura|hasta donde)\b/.test(text)) {
@@ -491,7 +496,7 @@ function customerQuestion(next, utterance, text) {
       state: next,
       hangup: false,
       answered: true,
-      say: "Repartimos en Hermosillo. Dígame su código postal y le confirmo si llegamos."
+      say: "Repartimos en Hermosillo. ¿Me das tu código postal y te confirmo si llegamos?"
     };
   }
   if (/\b(donde estan|donde queda|sucursal|como llego|estacionamiento)\b/.test(text)) {
@@ -499,7 +504,7 @@ function customerQuestion(next, utterance, text) {
       state: next,
       hangup: false,
       answered: true,
-      say: "Estamos en Hermosillo. Si va a recoger, le confirmo la sucursal al cerrar el pedido."
+      say: "Estamos en Hermosillo. Si vas a recoger, te confirmo la sucursal al cerrar el pedido."
     };
   }
   if (/\bmitad\b/.test(text) && listedPizzas(utterance).length < 2) {
@@ -507,7 +512,7 @@ function customerQuestion(next, utterance, text) {
       state: next,
       hangup: false,
       answered: true,
-      say: "Sí, la puede pedir mitad y mitad. ¿De qué dos sabores la quiere?"
+      say: "Sí, la puedes pedir mitad y mitad. ¿De qué dos sabores la quieres?"
     };
   }
   if (/\b(rebanadas|para cuantas|cuanto mide|que tamanos|tamanos manejan|tamanos tienen)\b/.test(text)) {
@@ -515,7 +520,7 @@ function customerQuestion(next, utterance, text) {
       state: next,
       hangup: false,
       answered: true,
-      say: "Manejamos mediana, grande y familiar. La familiar es la más grande. No tengo las medidas en centímetros ni el número de rebanadas."
+      say: "Tenemos mediana, grande y familiar. La familiar es la más grande. No traigo las medidas ni el número de rebanadas."
     };
   }
   if (/\b(ingrediente extra|queso extra|doble queso|doble pepperoni|cuanto cuesta agregar|cuanto cuesta el extra)\b/.test(text)) {
@@ -524,7 +529,7 @@ function customerQuestion(next, utterance, text) {
       state: next,
       hangup: false,
       answered: true,
-      say: `El ingrediente extra cuesta ${extra}. Quitar un ingrediente no tiene costo.`
+      say: `El ingrediente extra está en ${extra}. Quitar uno no tiene costo.`
     };
   }
   if (/\b(vegetariana|sin carne|no come carne)\b/.test(text)) {
@@ -532,7 +537,7 @@ function customerQuestion(next, utterance, text) {
       state: next,
       hangup: false,
       answered: true,
-      say: "Sí, tenemos la pizza Veggie. También le puedo quitar la carne a otra pizza."
+      say: "Sí, tenemos la vegi. También te puedo quitar la carne a otra pizza."
     };
   }
   if (/\b(solo queso|solamente con queso|solamente de queso|pizza de queso)\b/.test(text)) {
@@ -540,7 +545,7 @@ function customerQuestion(next, utterance, text) {
       state: next,
       hangup: false,
       answered: true,
-      say: "La más sencilla de queso es la Marguerita. Si quiere, se la anoto."
+      say: "La más sencilla de queso es la marguerita. Si quieres, te la anoto."
     };
   }
   if (/\b(pepsi|agua|alitas|papas|postre|ensalada|pasta)\b/.test(text)) {
@@ -548,7 +553,7 @@ function customerQuestion(next, utterance, text) {
       state: next,
       hangup: false,
       answered: true,
-      say: "Eso no lo manejamos. De bebida tenemos Coca-Cola regular, Coca-Cola Light y refresco de fresa."
+      say: "Eso no lo manejamos. De tomar tenemos Coca-Cola regular, Coca-Cola Light y refresco de fresa."
     };
   }
   if (/\b(2x1|dos por uno|segunda pizza tiene descuento)\b/.test(text)) {
@@ -564,7 +569,7 @@ function customerQuestion(next, utterance, text) {
       state: next,
       hangup: false,
       answered: true,
-      say: "La gente pide mucho peperoni, hawaiana y mexicana. ¿Cuál desea?"
+      say: "La gente pide mucho peperoni, jawayana y mejicana. ¿Cuál te late?"
     };
   }
   if (/\b(total|cuanto voy a pagar|cuanto seria|cuanto es todo|cuanto sale mi pedido|cuanto queda)\b/.test(text)) {
@@ -576,7 +581,7 @@ function customerQuestion(next, utterance, text) {
       state: next,
       hangup: false,
       answered: true,
-      say: "Sí, con gusto le tomo el pedido por teléfono. ¿De qué sabor y de qué tamaño?"
+      say: "Sí, con gusto te lo tomo. ¿De qué sabor y de qué tamaño?"
     };
   }
   if (oneSize.length === 1 && /\b(cuesta|cuestan|precio|sale|cuanto)\b/.test(text) && !/\b(envio|total|tarda)\b/.test(text)) {
@@ -585,7 +590,7 @@ function customerQuestion(next, utterance, text) {
       state: next,
       hangup: false,
       answered: true,
-      say: `La ${oneSize[0]} cuesta ${Math.round(Number(prices[oneSize[0]]) || 0)}.`
+      say: `La ${oneSize[0]} está en ${Math.round(Number(prices[oneSize[0]]) || 0)}.`
     };
   }
   return null;
@@ -601,7 +606,7 @@ function infoReply(next, utterance, text) {
       state: next,
       hangup: false,
       answered: true,
-      say: `No hay promoción de dos pizzas medianas. ${promoSay(next)} ¿Quiere dos grandes o dos familiares?`
+      say: `No hay promoción de dos medianas. ${promoSay(next)} ¿Quieres dos grandes o dos familiares?`
     };
   }
   if (asksPromotions(text) || (looksLikeAsk(utterance, text) && /\b(oferta|combo)\b/.test(text))) {
@@ -612,7 +617,7 @@ function infoReply(next, utterance, text) {
       state: next,
       hangup: false,
       answered: true,
-      say: "Tenemos Coca-Cola regular, Coca-Cola Light y refresco de fresa. La de 600 mililitros cuesta 30 y la de 2 litros cuesta 50."
+      say: "De tomar tenemos Coca-Cola regular, Coca-Cola Light y refresco de fresa. La de 600 mililitros está en 30 y la de 2 litros en 50."
     };
   }
   if (asksOwnPizzas(text)) {
@@ -626,7 +631,7 @@ function infoReply(next, utterance, text) {
         state: next,
         hangup: false,
         answered: true,
-        say: `No tengo la pizza ${hinted[1]}. Tenemos mexicana, peperoni, hawaiana y sinaloense. ¿De cuál quiere los ingredientes?`
+        say: `No tengo la pizza ${hinted[1]}. Tenemos mejicana, peperoni, jawayana y sinaloense. ¿De cuál quieres los ingredientes?`
       };
     }
     if (asked && !next.product && !next.pairNeed) {
@@ -639,9 +644,9 @@ function infoReply(next, utterance, text) {
       answered: true,
       say: asked
         ? (description
-          ? `La pizza ${spokenPizza(asked)} trae ${description}.`
-          : `No tengo anotados los ingredientes de la pizza ${spokenPizza(asked)}.`)
-        : "¿De cuál pizza quiere saber los ingredientes?"
+          ? `La ${spokenPizza(asked)} trae ${description}.`
+          : `No tengo anotados los ingredientes de la ${spokenPizza(asked)}.`)
+        : "¿De cuál pizza quieres los ingredientes?"
     };
   }
   if (asksPrice(text)) {
@@ -656,13 +661,25 @@ function infoReply(next, utterance, text) {
 function menuSay(next) {
   const hidden = new Set((next.unavailable || []).map(item => fold(item)));
   const names = MENU_PIZZAS.filter(name => !hidden.has(fold(name))).map(name => spokenPizza(name));
-  return `Tenemos ${names.join(", ")}. ¿Cuál?`;
+  return `Tenemos ${names.join(", ")}. ¿Cuál te late?`;
 }
 
 function priceSay(next) {
   const prices = next.prices || { mediana: 200, grande: 220, familiar: 250 };
   const money = value => String(Math.round(Number(value) || 0));
-  return `Mediana ${money(prices.mediana)}, grande ${money(prices.grande)} y familiar ${money(prices.familiar)}.`;
+  const list = `La mediana está en ${money(prices.mediana)}, la grande en ${money(prices.grande)} y la familiar en ${money(prices.familiar)}.`;
+  if (next.product && !next.size) {
+    if (next.half) {
+      const half = speakHalf(next.half);
+      const label = `${half.charAt(0).toUpperCase()}${half.slice(1)}`;
+      return `${list} ${label}, ¿de qué tamaño la quieres?`;
+    }
+    return `${list} ¿De qué tamaño te gustaría?`;
+  }
+  if (!next.product) {
+    return `${list} ¿Qué vas a querer?`;
+  }
+  return list;
 }
 
 function describePizza(descriptions, name) {
@@ -886,7 +903,7 @@ function confirmGuess(next, choice) {
     extra: choice.extra || "",
     drink: choice.drink || null
   };
-  const say = choice.ask || `¿Acaso se refiere a ${choice.phrase}?`;
+  const say = choice.ask || `¿Te refieres a ${choice.phrase}?`;
   next.lastAsk = say;
   next.sameCount = 0;
   next.lastSay = say;
@@ -923,7 +940,7 @@ function postalAsk(code) {
   return {
     slot: "postal",
     value: code,
-    ask: `¿Acaso se refiere al código ${speakPostal(code)}?`
+    ask: `¿Te refieres al código ${speakPostal(code)}?`
   };
 }
 
@@ -949,7 +966,7 @@ function applyGuess(next) {
     next.house = guess.extra;
   } else if (guess.slot === "name") {
     next.name = guess.value;
-    next.lastSay = "¿Qué desea ordenar?";
+    next.lastSay = "¿Qué vas a querer?";
   } else if (guess.slot === "drink" && guess.drink) {
     next.drink = { ...(next.drink || {}), ...guess.drink };
     next.offeredMore = true;
@@ -960,7 +977,7 @@ function applyGuess(next) {
 function afterGuess(next) {
   if (next.street && next.house && !next.drinkOffered && !next.drink?.volume && next.fulfillment === "delivery") {
     next.drinkOffered = true;
-    return { state: next, hangup: false, say: "¿Desea agregar alguna bebida o soda?" };
+    return { state: next, hangup: false, say: "¿Quieres algo de tomar?" };
   }
   const slot = missingSlot(next);
   if (slot) {
@@ -975,7 +992,7 @@ function afterGuess(next) {
     });
     return { state: next, hangup: false, say: confirmation.spoken };
   }
-  return { state: next, hangup: false, say: "¿Tiene alguna duda o desea agregar algo más?" };
+  return { state: next, hangup: false, say: "¿Se te ofrece algo más?" };
 }
 
 export function speakHouse(value) {
@@ -1073,14 +1090,14 @@ export function looksLikeQuestion(value) {
 
 export function isAnsweredQuestion(say) {
   const text = String(say || "");
-  return /^(Mediana |La pizza |No tengo anotados|Tenemos |Hay más de una|No te preocupes|No manejamos|Las promociones|La promoción|Anoté|Sus pizzas|Todavía|Su orden)/.test(text)
+  return /^(La mediana |La grande |La familiar |La pizza |La boneless |No tengo anotados|Tenemos |Hay más de una|No te preocupes|No manejamos|Hoy tenemos |Anoté|Llevas |Todavía|Su orden|Hola|Sale |Perdón)/.test(text)
     || /\btrae\b/i.test(text);
 }
 
 function sameQuestion(next, say) {
   if (next.lastAsk === say) {
     next.sameCount = (next.sameCount || 0) + 1;
-    const again = `Disculpe, no le oí bien. ${say}`;
+    const again = `Perdón, no te oí bien. ${say}`;
     next.lastSay = again;
     return { state: next, hangup: false, say: again };
   }
@@ -1092,50 +1109,51 @@ function sameQuestion(next, say) {
 
 function missingSlot(next) {
   if (!next.name) {
-    return "¿Cuál es su nombre?";
+    return "¿Cómo te llamas?";
   }
   if (!next.product) {
-    return "¿Qué desea ordenar?";
+    return "¿Qué vas a querer?";
   }
   if (!next.size) {
     if (next.half) {
       const half = speakHalf(next.half);
-      return `${half.charAt(0).toUpperCase()}${half.slice(1)}, ¿mediana, grande o familiar?`;
+      const label = `${half.charAt(0).toUpperCase()}${half.slice(1)}`;
+      return `${label}, ¿de qué tamaño la quieres?`;
     }
     const extra = (next.extras || []).length ? ` con extra de ${next.extras.join(" y ")}` : "";
-    return `${spokenPizza(next.product)}${extra}, ¿mediana, grande o familiar?`;
+    return `La ${spokenPizza(next.product)}${extra}, ¿de qué tamaño la quieres?`;
   }
-  if (fold(next.product).includes("boneless") && !next.sauce) {
-    return "La pizza boneless, ¿salsa barbiquiú o búfalo?";
+  if (pizzaNeedsSauce(next.product, next.half, next.sauce)) {
+    return "La boneless, ¿la quieres de barbiquiú o de búfalo?";
   }
   if (!next.offeredMore && !next.drink?.volume) {
-    return "¿Desea agregar algo más? ¿Alguna bebida?";
+    return "¿Quieres algo de tomar?";
   }
   const drink = next.drink || {};
   if ((drink.kind === "coca" || drink.kind === "regular" || drink.kind === "Light" || drink.kind === "fresa") && !drink.volume) {
     if (drink.kind === "fresa") {
-      return "Refresco de fresa, ¿600 mililitros o 2 litros?";
+      return "El refresco de fresa, ¿lo quieres de 600 mililitros o de 2 litros?";
     }
     const kind = drink.kind === "coca" ? "" : ` ${drink.kind}`;
-    return `Coca-Cola${kind}, ¿600 mililitros o 2 litros?`;
+    return `La Coca-Cola${kind}, ¿de 600 mililitros o de 2 litros?`;
   }
   if (!next.fulfillment) {
-    return "¿A domicilio o para recoger?";
+    return "¿Te lo llevamos o pasas a recogerlo?";
   }
   if (next.fulfillment === "pickup") {
     return "";
   }
   if (!next.postalCode) {
-    return "¿Cuál es el código postal?";
+    return "¿Me das el código postal?";
   }
   if (!next.colony) {
-    return `Muy bien ${next.name}, ¿y la colonia cuál es?`;
+    return `Sale ${next.name}, ¿y la colonia cuál es?`;
   }
   if (!next.street || !next.house) {
-    return "¿Cuál es la calle y el número?";
+    return "¿Me das la calle y el número?";
   }
   if (!next.closingAsked) {
-    return "¿Tiene alguna duda o desea agregar algo más?";
+    return "¿Se te ofrece algo más?";
   }
   return "";
 }
@@ -1254,14 +1272,14 @@ export function nextReply(state, utterance) {
     return {
       state: next,
       hangup: false,
-      say: `Sin champiñones queda en ${priced.subtotal}.`
+      say: `Sin champiñones te queda en ${priced.subtotal}.`
     };
   }
   if (topping === "unclear") {
     return {
       state: next,
       hangup: false,
-      say: "¿Agrego los champiñones o se los quito?"
+      say: "¿Te los agrego o te los quito?"
     };
   }
   if (topping === "add" || matchIngredients(utterance).length) {
@@ -1282,7 +1300,7 @@ export function nextReply(state, utterance) {
     return {
       state: next,
       hangup: false,
-      say: `Muy bien, con ${next.extras.join(" y ")} subiría de ${priced.base} a ${priced.subtotal}, ¿de acuerdo?`
+      say: `Sale, con ${next.extras.join(" y ")} pasa de ${priced.base} a ${priced.subtotal}. ¿Te late?`
     };
   }
   if (pizza) {
@@ -1302,7 +1320,7 @@ export function nextReply(state, utterance) {
     return {
       state: next,
       hangup: false,
-      say: `Su pedido es ${next.product || "el que ya anoté"}, ${next.size || "sin tamaño"}, a nombre de ${next.name}.`
+      say: `Tu pedido es ${next.product || "el que ya anoté"}, ${next.size || "sin tamaño"}, a nombre de ${next.name}.`
     };
   }
 
@@ -1332,7 +1350,7 @@ export function nextReply(state, utterance) {
     return {
       state: next,
       hangup: false,
-      say: `¿Su apellido? Sigo con ${next.product || "su pedido"}.`
+      say: `¿Tu apellido? Sigo con ${next.product || "tu pedido"}.`
     };
   }
 
@@ -1340,7 +1358,7 @@ export function nextReply(state, utterance) {
     return {
       state: next,
       hangup: false,
-      say: `Tenemos ${MENU_PIZZAS.join(", ")}. ¿Cuál?`
+      say: `Tenemos ${MENU_PIZZAS.map(name => spokenPizza(name)).join(", ")}. ¿Cuál te late?`
     };
   }
 
@@ -1364,8 +1382,8 @@ export function nextReply(state, utterance) {
       state: next,
       hangup: false,
       say: named
-        ? "¿Pepperoni, hawaiana o mexicana?"
-        : "Disculpa, no entendí. ¿Puedes repetir?"
+        ? "¿Peperoni, jawayana o mejicana?"
+        : "Perdón, no te oí. ¿Me lo repites?"
     };
   }
 
@@ -1373,7 +1391,7 @@ export function nextReply(state, utterance) {
     return {
       state: next,
       hangup: false,
-      say: `${spokenPizza(next.product)}, ¿mediana, grande o familiar?`
+      say: `La ${spokenPizza(next.product)}, ¿de qué tamaño la quieres?`
     };
   }
 
@@ -1381,7 +1399,7 @@ export function nextReply(state, utterance) {
     return {
       state: next,
       hangup: false,
-      say: "¿Domicilio o recoger?"
+      say: "¿Te lo llevamos o pasas a recogerlo?"
     };
   }
 
@@ -1390,14 +1408,14 @@ export function nextReply(state, utterance) {
     return {
       state: next,
       hangup: false,
-      say: `¿La enviamos a ${state.savedAddress}?`
+      say: `¿Te lo llevamos a ${state.savedAddress}?`
     };
   }
 
   return {
     state: next,
     hangup: false,
-    say: `Sigo con ${next.name}: ${next.product || "pedido"} ${next.size || ""}.`.trim()
+    say: `Sigo con ${next.name}: ${spokenPizza(next.product) || "tu pedido"} ${next.size || ""}.`.trim()
   };
 }
 
@@ -1533,7 +1551,7 @@ export function orderedTurn(state, utterance) {
     return {
       state,
       hangup: false,
-      say: "Disculpe, no le oí bien. ¿Me lo repite?"
+      say: "Perdón, no te oí bien. ¿Me lo repites?"
     };
   }
   const next = {
@@ -1559,7 +1577,7 @@ export function orderedTurn(state, utterance) {
     if (no) {
       next.statusAsk = false;
       next.pendingStatus = "";
-      return { state: next, hangup: false, answered: true, say: "De acuerdo. ¿Qué desea ordenar?" };
+      return { state: next, hangup: false, answered: true, say: "De acuerdo. ¿Qué vas a querer?" };
     }
   }
   if (next.cancelStep === "confirm") {
@@ -1592,7 +1610,7 @@ export function orderedTurn(state, utterance) {
       next.cancelOrderId = "";
       next.cancelAddress = "";
       next.cancelStatus = "";
-      return { state: next, hangup: false, answered: true, say: "De acuerdo. ¿Qué desea ordenar?" };
+      return { state: next, hangup: false, answered: true, say: "De acuerdo. ¿Qué vas a querer?" };
     }
     return { state: next, hangup: false, answered: true, say: "¿Ese es su pedido?" };
   }
@@ -1654,7 +1672,7 @@ export function orderedTurn(state, utterance) {
       state: next,
       hangup: false,
       answered: true,
-      say: next.lastSay || missingSlot(next) || "¿Qué desea ordenar?"
+      say: next.lastSay || missingSlot(next) || "¿Qué vas a querer?"
     };
   }
   if (/\bcancel/.test(text) || next.cancelAsked) {
@@ -1665,7 +1683,7 @@ export function orderedTurn(state, utterance) {
         state: next,
         hangup: false,
         cancel: true,
-        say: "De acuerdo, su pedido quedó cancelado. Que tenga un buen día y gracias por llamar a Pizzería Hermosillo. Hasta pronto."
+        say: "Sale, tu pedido quedó cancelado. Que tengas buen día y gracias por llamar a Pizzería Hermosillo. Hasta pronto."
       };
     }
     if (onlyDrink || (next.cancelAsked && /\b(solo|nomas|nada mas|eso)\b/.test(text))) {
@@ -1673,11 +1691,11 @@ export function orderedTurn(state, utterance) {
       next.drinkOffered = true;
       next.cancelAsked = false;
       next.closingAsked = false;
-      return { state: next, hangup: false, say: "Listo, quité la bebida. Seguimos con las pizzas." };
+      return { state: next, hangup: false, say: "Sale, le quité la bebida. Seguimos con las pizzas." };
     }
     if (/\bcancel/.test(text)) {
       next.cancelAsked = true;
-      return { state: next, hangup: false, say: "¿Desea cancelar todo el pedido o solo la bebida?" };
+      return { state: next, hangup: false, say: "¿Cancelamos todo el pedido o solo la bebida?" };
     }
     next.cancelAsked = false;
   }
@@ -1692,7 +1710,7 @@ export function orderedTurn(state, utterance) {
       const wasName = next.guess.slot === "name";
       next.guess = null;
       if (wasName) {
-        return { state: next, hangup: false, answered: true, say: "¿Cuál es su nombre?" };
+        return { state: next, hangup: false, answered: true, say: "¿Cómo te llamas?" };
       }
       return sameQuestion(next, missingSlot(next) || "¿Me lo repite?");
     }
@@ -1700,14 +1718,10 @@ export function orderedTurn(state, utterance) {
   }
   if (/\b(agregar|otra pizza|pedido anterior)\b/.test(text) && !asksPromotions(text) && !asksIngredients(text) && !asksOwnPizzas(text)) {
     next.adding = true;
-    return { state: next, hangup: false, say: "¿Qué pizza desea agregar? Las que ya tenía se quedan." };
+    return { state: next, hangup: false, say: "¿Qué pizza le agregamos? Las que ya tenías se quedan." };
   }
   const info = infoReply(next, utterance, text);
   if (info) {
-    const slot = missingSlot(info.state || next);
-    if (slot && info.say && !info.say.includes(slot) && !/de cu[aá]l pizza/i.test(info.say)) {
-      info.say = `${String(info.say).replace(/\.+$/, ".")} ${slot}`;
-    }
     if (info.state) {
       info.state.lastSay = info.say;
     }
@@ -1735,7 +1749,7 @@ export function orderedTurn(state, utterance) {
       return confirmGuess(next, {
         slot: "name",
         value: heardName,
-        ask: `¿Su nombre es ${heardName}?`
+        ask: `¿Te llamas ${heardName}?`
       });
     }
     next.nameMisses = (next.nameMisses || 0) + 1;
@@ -1744,8 +1758,8 @@ export function orderedTurn(state, utterance) {
       hangup: false,
       answered: true,
       say: next.nameMisses >= 2
-        ? "Disculpe, no le oí el nombre. ¿Me lo dice despacio?"
-        : "¿Cuál es su nombre?"
+        ? "Perdón, no te oí el nombre. ¿Me lo dices despacio?"
+        : "¿Cómo te llamas?"
     };
   }
   if (!next.product && /ingredientes/.test(next.lastSay || "") && !matchPizza(text) && !looksLikeQuestion(utterance) && !mentionedSize(utterance)) {
@@ -1753,7 +1767,7 @@ export function orderedTurn(state, utterance) {
       state: next,
       hangup: false,
       answered: true,
-      say: "No tengo esa pizza. Tenemos mexicana, peperoni, hawaiana y sinaloense. ¿De cuál quiere los ingredientes?"
+      say: "No tengo esa pizza. Tenemos mejicana, peperoni, jawayana y sinaloense. ¿De cuál quieres los ingredientes?"
     };
   }
   const pizza = matchPizza(text);
@@ -1773,7 +1787,7 @@ export function orderedTurn(state, utterance) {
       state: next,
       hangup: false,
       answered: true,
-      say: "Solo se pueden combinar dos sabores. ¿Cuáles dos quiere?"
+      say: "Solo se pueden combinar dos sabores. ¿Cuáles dos quieres?"
     };
   }
   if (/\bmitad\b/.test(text) && (namedNow.length === 1 || planned.pending)) {
@@ -1801,7 +1815,7 @@ export function orderedTurn(state, utterance) {
   }
   if (pizza) {
     if ((next.unavailable || []).some(item => fold(item) === fold(pizza))) {
-      return { state: next, hangup: false, say: `La pizza ${spokenPizza(pizza)} no está disponible. ¿Qué otra desea?` };
+      return { state: next, hangup: false, say: `La ${spokenPizza(pizza)} no está disponible. ¿Cuál otra te late?` };
     }
     next.product = pizza;
   }
@@ -1843,7 +1857,7 @@ export function orderedTurn(state, utterance) {
         state: next,
         hangup: false,
         answered: true,
-        say: "La pizza boneless, ¿salsa barbiquiú o búfalo?"
+        say: "La boneless, ¿la quieres de barbiquiú o de búfalo?"
       };
     }
     next.items = [{
@@ -1863,7 +1877,7 @@ export function orderedTurn(state, utterance) {
         state: next,
         hangup: false,
         answered: true,
-        say: "La pizza boneless, ¿salsa barbiquiú o búfalo?"
+        say: "La boneless, ¿la quieres de barbiquiú o de búfalo?"
       };
     }
     next.offeredMore = false;
@@ -1871,7 +1885,7 @@ export function orderedTurn(state, utterance) {
       state: next,
       hangup: false,
       answered: true,
-      say: "Anoté las dos pizzas. ¿Desea agregar algo más? ¿Alguna bebida?"
+      say: "Anoté las dos pizzas. ¿Quieres algo de tomar?"
     };
   }
   if (halfPlan) {
@@ -1885,7 +1899,7 @@ export function orderedTurn(state, utterance) {
         state: next,
         hangup: false,
         answered: true,
-        say: `${speakHalf(next.half)}. ¿Mediana, grande o familiar?`.replace(/^mitad/, "Mitad")
+        say: `${speakHalf(next.half)}, ¿de qué tamaño la quieres?`.replace(/^mitad/, "Mitad")
       };
     }
     const firstOfPair = next.pairNeed === 2 && (next.items || []).length < 1 && !next.pendingSecond;
@@ -1894,7 +1908,7 @@ export function orderedTurn(state, utterance) {
       if (!needsSauce && !next.drink?.volume) {
         next.offeredMore = false;
       }
-      const sauceAsk = needsSauce ? " La pizza boneless, ¿salsa barbiquiú o búfalo?" : "";
+      const sauceAsk = needsSauce ? " La boneless, ¿la quieres de barbiquiú o de búfalo?" : "";
       const slot = needsSauce ? "" : missingSlot(next);
       return {
         state: next,
@@ -1935,15 +1949,15 @@ export function orderedTurn(state, utterance) {
   }
   if (asksIngredients(text)) {
     if (!next.product) {
-      return { state: next, hangup: false, say: "¿De cuál pizza quiere saber los ingredientes?" };
+      return { state: next, hangup: false, say: "¿De cuál pizza quieres los ingredientes?" };
     }
     const description = describePizza(next.descriptions, next.product);
     return {
       state: next,
       hangup: false,
       say: description
-        ? `La pizza ${spokenPizza(next.product)} trae ${description}.`
-        : `No tengo anotados los ingredientes de la pizza ${spokenPizza(next.product)}.`
+        ? `La ${spokenPizza(next.product)} trae ${description}.`
+        : `No tengo anotados los ingredientes de la ${spokenPizza(next.product)}.`
     };
   }
   if (asksPrice(text)) {
@@ -1959,8 +1973,8 @@ export function orderedTurn(state, utterance) {
       const price = (next.pairSize || "grande") === "familiar" ? 450 : 400;
       const intro = (next.items || []).length
         ? ""
-        : `La promoción es de dos pizzas ${sizeWord(next.pairSize, true)} por ${price}. `;
-      const flavorAsk = `${intro}¿De qué sabor quiere la ${which}?`;
+        : `La promoción es de dos pizzas ${sizeWord(next.pairSize, true)} en ${price}. `;
+      const flavorAsk = `${intro}¿De qué sabor quieres la ${which}?`;
       if (pair || /\bpromocion\b/.test(text)) {
         next.lastAsk = flavorAsk;
         next.sameCount = 0;
@@ -1973,16 +1987,16 @@ export function orderedTurn(state, utterance) {
       return { state: next, hangup: false, say: menuSay(next) };
     }
     if (/\bpizza\b/.test(text) && /\bredonda\b/.test(text)) {
-      return sameQuestion(next, "Tenemos mexicana, peperoni y deluxe. ¿Cuál desea?");
+      return sameQuestion(next, "Tenemos mejicana, peperoni y delucs. ¿Cuál te late?");
     }
     const guessedPizza = !looksLikeQuestion(utterance) ? closestChoice(utterance, pizzaChoices(next)) : null;
     if (guessedPizza) {
       return confirmGuess(next, guessedPizza);
     }
     if (/\bpizza\b/.test(text)) {
-      return sameQuestion(next, "No manejamos esa. Tenemos mexicana, peperoni y deluxe. ¿Cuál desea?");
+      return sameQuestion(next, "Esa no la tenemos. Tenemos mejicana, peperoni y delucs. ¿Cuál te late?");
     }
-    return sameQuestion(next, "¿Qué desea ordenar?");
+    return sameQuestion(next, "¿Qué vas a querer?");
   }
   const extraLabel = (next.extras || []).length ? ` con extra de ${(next.extras || []).join(" y ")}` : "";
   if (!next.size) {
@@ -1990,7 +2004,7 @@ export function orderedTurn(state, utterance) {
       next.product = "";
       next.half = "";
       next.extras = [];
-      return { state: next, hangup: false, answered: true, say: "¿Cuál pizza desea?" };
+      return { state: next, hangup: false, answered: true, say: "¿Cuál pizza quieres?" };
     }
     if (/\bse llama\b/.test(text) && !pizza) {
       next.product = "";
@@ -2003,13 +2017,13 @@ export function orderedTurn(state, utterance) {
         state: next,
         hangup: false,
         answered: true,
-        say: `${spokenPizza(next.product)}${extraLabel}, ¿mediana, grande o familiar?`
+        say: `La ${spokenPizza(next.product)}${extraLabel}, ¿de qué tamaño la quieres?`
       };
     }
-    return offerGuess(next, utterance, sizeChoices(), `${spokenPizza(next.product)}${extraLabel}, ¿mediana, grande o familiar?`);
+    return offerGuess(next, utterance, sizeChoices(), `La ${spokenPizza(next.product)}${extraLabel}, ¿de qué tamaño la quieres?`);
   }
   if (pizzaNeedsSauce(next.product, next.half, next.sauce)) {
-    return offerGuess(next, utterance, sauceChoices(), "La pizza boneless, ¿salsa barbiquiú o búfalo?");
+    return offerGuess(next, utterance, sauceChoices(), "La boneless, ¿la quieres de barbiquiú o de búfalo?");
   }
   if (next.pendingSecond && next.product) {
     next.items = [...(next.items || []), {
@@ -2031,7 +2045,7 @@ export function orderedTurn(state, utterance) {
         state: next,
         hangup: false,
         answered: true,
-        say: "La pizza boneless, ¿salsa barbiquiú o búfalo?"
+        say: "La boneless, ¿la quieres de barbiquiú o de búfalo?"
       };
     }
   }
@@ -2055,15 +2069,15 @@ export function orderedTurn(state, utterance) {
       state: next,
       hangup: false,
       answered: true,
-      say: `Anoté ${saved}. ¿De qué sabor quiere la segunda?`
+      say: `Anoté ${saved}. ¿De qué sabor quieres la segunda?`
     };
   }
   if (!next.offeredMore && !/\bno\b/.test(text) && !/\b(coca|soda|fresa)\b/.test(text)) {
     if (looksLikeQuestion(utterance)) {
-      return { state: next, hangup: false, say: "¿Desea agregar algo más? ¿Alguna bebida?" };
+      return { state: next, hangup: false, say: "¿Quieres algo de tomar?" };
     }
     next.offeredMore = true;
-    return { state: next, hangup: false, say: "¿Desea agregar algo más? ¿Alguna bebida?" };
+    return { state: next, hangup: false, say: "¿Quieres algo de tomar?" };
   }
   next.offeredMore = true;
   if (!fulfillment) {
@@ -2077,7 +2091,7 @@ export function orderedTurn(state, utterance) {
     }
   }
   if (!next.fulfillment) {
-    return offerGuess(next, utterance, fulfillmentChoices(), "¿A domicilio o para recoger?");
+    return offerGuess(next, utterance, fulfillmentChoices(), "¿Te lo llevamos o pasas a recogerlo?");
   }
   if (next.fulfillment === "pickup") {
     const confirmation = buildConfirmation({
@@ -2139,9 +2153,9 @@ export function orderedTurn(state, utterance) {
           return colonyFallback(next, utterance, "No encontré esa colonia en Hermosillo. ¿Me dice otra vez la colonia?");
         }
         if (triedPostal) {
-          return sameQuestion(next, "Disculpa, ¿me lo podría decir número por número?");
+          return sameQuestion(next, "Disculpa, ¿me lo podrías decir número por número?");
         }
-        return sameQuestion(next, "¿Cuál es el código postal?");
+        return sameQuestion(next, "¿Me das el código postal?");
       }
     }
   }
@@ -2183,7 +2197,7 @@ export function orderedTurn(state, utterance) {
         return colonyFallback(next, utterance, "No encontré esa colonia en Hermosillo. ¿Me dice otra vez la colonia?");
       }
     } else {
-      return sameQuestion(next, `Muy bien ${next.name}, ¿y la colonia cuál es?`);
+      return sameQuestion(next, `Sale ${next.name}, ¿y la colonia cuál es?`);
     }
   }
   if (!next.street) {
@@ -2199,7 +2213,7 @@ export function orderedTurn(state, utterance) {
           state: next,
           hangup: false,
           answered: true,
-          say: `${streetName} no está en ${next.colony}. La tengo en el código ${where}. ¿Cuál es la calle y el número?`
+          say: `${streetName} no está en ${next.colony}. La tengo en el código ${where}. ¿Me das otra calle y el número?`
         };
       }
       const other = placement.known ? { postalCode: "", options: [] } : postalFromColony(streetName);
@@ -2211,11 +2225,11 @@ export function orderedTurn(state, utterance) {
         slot: "street",
         value: streetName,
         extra: house,
-        ask: `${warning}La dirección quedó ${streetName}, número ${speakHouse(house)}, colonia ${next.colony}, código ${speakPostal(next.postalCode)}. ¿Está bien?`
+        ask: `${warning}Te quedó ${streetName}, número ${speakHouse(house)}, colonia ${next.colony}, código ${speakPostal(next.postalCode)}. ¿Está bien?`
       });
     } else {
       const known = learnedPostal ? `Colonia ${next.colony}, código ${speakPostal(next.postalCode)}. ` : "";
-      return sameQuestion(next, `${known}¿Cuál es la calle y el número?`);
+      return sameQuestion(next, `${known}¿Me das la calle y el número?`);
     }
   }
   const orderLine = () => {
@@ -2267,9 +2281,9 @@ export function orderedTurn(state, utterance) {
       next.drinkOffered = true;
       const place = next.street && next.house && !next.addressSaid
         ? `Anoté ${next.street}, número ${speakHouse(next.house)}, colonia ${next.colony}. `
-        : "Disculpe, ";
+        : "Perdón, ";
       next.addressSaid = true;
-      return { state: next, hangup: false, say: `${place}¿Desea agregar alguna bebida o soda?` };
+      return { state: next, hangup: false, say: `${place}¿Quieres algo de tomar?` };
     } else {
       next.drinkOffered = true;
     }
@@ -2279,20 +2293,20 @@ export function orderedTurn(state, utterance) {
     next.house = "";
     next.closingAsked = false;
     next.addressSaid = false;
-    return { state: next, hangup: false, answered: true, say: "¿Cuál es la calle y el número?" };
+    return { state: next, hangup: false, answered: true, say: "¿Me das la calle y el número?" };
   }
   const end = finishing(text);
   const explicitDone = end === "done" && /\b(es todo|seria todo|nada mas|eso es todo|ya es todo|con eso|muchas gracias|todo)\b/.test(text);
   if (!next.closingAsked && !explicitDone) {
     next.closingAsked = true;
     const place = next.fulfillment === "delivery" && next.street && next.house && !next.addressSaid
-      ? `La dirección quedó ${next.street}, número ${speakHouse(next.house)}, colonia ${next.colony}. `
+      ? `Te quedó ${next.street}, número ${speakHouse(next.house)}, colonia ${next.colony}. `
       : "";
     next.addressSaid = true;
     return {
       state: next,
       hangup: false,
-      say: `${place}¿Tiene alguna duda o desea agregar algo más?`
+      say: `${place}¿Se te ofrece algo más?`
     };
   }
   if (end === "more" || (listedPizzas(utterance).length && end !== "done")) {
@@ -2300,11 +2314,11 @@ export function orderedTurn(state, utterance) {
     if (listedPizzas(utterance).length) {
       return { state: next, hangup: false, say: `Anoté ${orderLine()}. ¿Desea agregar algo más?` };
     }
-    return { state: next, hangup: false, say: "Claro, dígame. ¿Qué desea agregar?" };
+    return { state: next, hangup: false, say: "Claro, dime. ¿Qué le agregamos?" };
   }
   if (end !== "done") {
     next.closingAsked = false;
-    return { state: next, hangup: false, say: "Claro, dígame." };
+    return { state: next, hangup: false, say: "Claro, dime." };
   }
   if (!orderReady(next)) {
     return { state: next, hangup: false, say: missingSlot(next) || "¿Me repite el dato que falta?" };

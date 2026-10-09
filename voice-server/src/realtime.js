@@ -213,7 +213,7 @@ export function createRealtimeSession({
   function sendGreeting() {
     if (greetingSent || twilioSocket.readyState !== WebSocket.OPEN) return;
     greetingSent = true;
-    const phrase = closedGreeting || "Hola, bienvenido a Pizzería Hermosillo. ¿Cuál es su nombre?";
+    const phrase = closedGreeting || "Hola, qué tal. Habla Pizzería Hermosillo. ¿Cómo te llamas?";
     lastSpoken = phrase;
     playExact(phrase);
   }
@@ -242,7 +242,7 @@ export function createRealtimeSession({
         voice: "marin",
         response_format: "pcm",
         input: phrase,
-        instructions: "Español de México, de usted, claro y pausado. Lee el texto tal cual, sin agregar ni cambiar palabras. Light se dice Light. Barbiquiú se dice barbiquiú."
+        instructions: "Español del norte de México, de Hermosillo, trato de tú, natural y cercano, sin sonar a grabadora. Lee el texto tal cual, sin agregar ni cambiar palabras. Light se dice Light. Barbiquiú se dice barbiquiú."
       })
     });
     if (!response.ok) {
@@ -824,7 +824,7 @@ export function createRealtimeSession({
                   }
                   if (items.some(item => !item)) {
                     callState.flow = { ...flow, agreed: false, closingAsked: true };
-                    speakExact("No pude dejar listo el pedido. ¿Me confirma otra vez?");
+                    speakExact("No pude dejar listo el pedido. ¿Me lo confirmas otra vez?");
                     return null;
                   }
                   const place = `${flow.street} ${flow.house}, ${flow.colony}, C.P. ${flow.postalCode}, Hermosillo, Sonora`
@@ -857,7 +857,7 @@ export function createRealtimeSession({
                   }
                 }).catch(error => {
                   console.error("No se pudo guardar el pedido confirmado:", error.message);
-                  speakExact("No pude dejar listo el pedido. ¿Me confirma otra vez?");
+                  speakExact("No pude dejar listo el pedido. ¿Me lo confirmas otra vez?");
                 });
               } else if (turn.cancelFind) {
                 findOrderForCancel({
@@ -866,11 +866,11 @@ export function createRealtimeSession({
                   customerName: turn.cancelFind.customerName || ""
                 }).then(result => {
                   if (!result?.found) {
-                    speakExact("No encuentro ese pedido. ¿Me dice el número o el nombre otra vez?");
+                    speakExact("No encuentro ese pedido. ¿Me das el número o el nombre otra vez?");
                     return;
                   }
                   if (result.ambiguous) {
-                    speakExact("Hay más de un pedido con ese nombre. ¿Me dice el número de pedido?");
+                    speakExact("Hay más de un pedido con ese nombre. ¿Me das el número de pedido?");
                     return;
                   }
                   if (result.status !== "new" && result.status !== "preparing") {
@@ -888,7 +888,7 @@ export function createRealtimeSession({
                   speakExact(`Muy bien, ¿pediste ${spokenCancelOrder(result.items)}?`);
                 }).catch(error => {
                   console.error("No se pudo buscar el pedido para cancelar:", error.message);
-                  speakExact("No pude revisar el pedido. ¿Me dice otra vez el número o el nombre?");
+                  speakExact("No pude revisar el pedido. ¿Me das otra vez el número o el nombre?");
                 });
               } else if (turn.cancelApply) {
                 cancelOrderTool({
@@ -906,7 +906,7 @@ export function createRealtimeSession({
                   speakExact(turn.say);
                 }).catch(error => {
                   console.error("No se pudo cancelar el pedido:", error.message);
-                  speakExact("No pude cancelar el pedido. ¿Me confirma otra vez la dirección?");
+                  speakExact("No pude cancelar el pedido. ¿Me confirmas otra vez la dirección?");
                 });
               } else if (turn.status) {
                 orderStatusTool({ businessId, callerPhone }).then(result => {

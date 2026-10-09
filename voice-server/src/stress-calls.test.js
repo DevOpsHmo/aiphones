@@ -201,21 +201,20 @@ test("19 una sola pregunta por turno", () => {
 
 test("21 si no entendio pide que repita", () => {
   const reply = nextReply({ ...start }, "eh la carne es");
-  assert.equal(reply.say, "Disculpa, no entendí. ¿Puedes repetir?");
+  assert.equal(reply.say, "Perdón, no te oí. ¿Me lo repites?");
   assert.equal(questions(reply.say), 1);
 });
 
 test("22 la pizza se pregunta con mediana grande o familiar", () => {
   const reply = nextReply({ ...start }, "quiero una pizza mexicana");
-  assert.equal(reply.say, "mejicana, ¿mediana, grande o familiar?");
-  assert.doesNotMatch(reply.say, /qu[eé] tama[nñ]o/i);
+  assert.equal(reply.say, "La mejicana, ¿de qué tamaño la quieres?");
 });
 
 test("23 la coca se pregunta regular o light y luego el volumen", () => {
   const kind = nextReply({ ...start }, "quisiera una soda de coca-cola");
-  assert.equal(kind.say, "Coca-Cola, ¿regular o Light?");
+  assert.equal(kind.say, "La Coca-Cola, ¿regular o Light?");
   const size = nextReply(kind.state, "regular");
-  assert.equal(size.say, "Coca-Cola regular, ¿600 mililitros o 2 litros?");
+  assert.equal(size.say, "La Coca-Cola regular, ¿de 600 mililitros o de 2 litros?");
   assert.doesNotMatch(kind.say, /presentaci[oó]n/i);
   assert.doesNotMatch(kind.say, /voy a revisar/i);
 });
