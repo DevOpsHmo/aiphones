@@ -588,7 +588,7 @@ test("simulacion 26 una duda se contesta y hola no es pregunta", () => {
 test("simulacion 27 una pregunta desconocida no se guarda como nombre ni colonia", () => {
   const named = orderedTurn({}, "¿Tienen mesas afuera?");
   assert.equal(named.state.name || "", "");
-  assert.match(named.say, /llamas/);
+  assert.match(named.say, /tu nombre/);
   const colony = orderedTurn({
     name: "Ana",
     product: "Mexicana",
@@ -735,7 +735,7 @@ test("simulacion 32 la mitad se anota y el numero se oye completo", () => {
   const named = orderedTurn({}, "Hola, ¿de Divo?");
   assert.equal(named.state.name || "", "");
   assert.equal(named.answered, true);
-  assert.match(named.say, /llamas/);
+  assert.match(named.say, /tu nombre/);
   assert.doesNotMatch(named.say, /no está en el menú/);
   const half = orderedTurn({
     name: "Francisco",
@@ -821,7 +821,7 @@ test("simulacion 33 es correcto guarda la calle y la coca light no es de 2 litro
 test("simulacion 34 el estatus confirma el pedido y dice en camino", () => {
   const buenos = orderedTurn({}, "Buenos");
   assert.equal(buenos.state.name || "", "");
-  assert.match(buenos.say, /llamas/);
+  assert.match(buenos.say, /tu nombre/);
   const asked = orderedTurn({}, "Hola, mi nombre es Roberto, hice un pedido hace poco y quisiera saber si le falta mucho.");
   assert.equal(asked.status, true);
   assert.equal(asked.state.name, "Roberto");

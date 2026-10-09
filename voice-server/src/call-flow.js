@@ -1109,7 +1109,7 @@ function sameQuestion(next, say) {
 
 function missingSlot(next) {
   if (!next.name) {
-    return "¿Cómo te llamas?";
+    return "¿Cuál es tu nombre?";
   }
   if (!next.product) {
     return "¿Qué vas a querer?";
@@ -1710,7 +1710,7 @@ export function orderedTurn(state, utterance) {
       const wasName = next.guess.slot === "name";
       next.guess = null;
       if (wasName) {
-        return { state: next, hangup: false, answered: true, say: "¿Cómo te llamas?" };
+        return { state: next, hangup: false, answered: true, say: "¿Cuál es tu nombre?" };
       }
       return sameQuestion(next, missingSlot(next) || "¿Me lo repite?");
     }
@@ -1759,7 +1759,7 @@ export function orderedTurn(state, utterance) {
       answered: true,
       say: next.nameMisses >= 2
         ? "Perdón, no te oí el nombre. ¿Me lo dices despacio?"
-        : "¿Cómo te llamas?"
+        : "¿Cuál es tu nombre?"
     };
   }
   if (!next.product && /ingredientes/.test(next.lastSay || "") && !matchPizza(text) && !looksLikeQuestion(utterance) && !mentionedSize(utterance)) {

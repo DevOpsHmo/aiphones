@@ -213,7 +213,7 @@ export function createRealtimeSession({
   function sendGreeting() {
     if (greetingSent || twilioSocket.readyState !== WebSocket.OPEN) return;
     greetingSent = true;
-    const phrase = closedGreeting || "Hola, qué tal. Habla Pizzería Hermosillo. ¿Cómo te llamas?";
+    const phrase = closedGreeting || "Hola, qué tal. Habla Pizzería Hermosillo. ¿Cuál es tu nombre?";
     lastSpoken = phrase;
     playExact(phrase);
   }
@@ -242,7 +242,8 @@ export function createRealtimeSession({
         voice: "marin",
         response_format: "pcm",
         input: phrase,
-        instructions: "Español del norte de México, de Hermosillo, trato de tú, natural y cercano, sin sonar a grabadora. Lee el texto tal cual, sin agregar ni cambiar palabras. Light se dice Light. Barbiquiú se dice barbiquiú."
+        speed: 0.96,
+        instructions: "Habla como una persona de Hermosillo contestando el teléfono de una pizzería: trato de tú, relajada, con el ritmo de una plática y no de un anuncio ni de una lectura. Las preguntas suben un poco al final. Haz una pausa breve en las comas y en los puntos; lo demás dilo de corrido. No agregues, no quites y no cambies ninguna palabra. Light se pronuncia Light. Barbiquiú se pronuncia barbiquiú."
       })
     });
     if (!response.ok) {
@@ -265,6 +266,7 @@ export function createRealtimeSession({
       const encoded = pcmToPcmuBase64(samples.toString("base64"), emptyPcmState(), 24000);
       const audio = Buffer.from(encoded, "base64");
       const frame = 160;
+      let nextAt = Date.now();
       for (let offset = 0; offset < audio.length; offset += frame) {
         if (generation !== speechGeneration || twilioSocket.readyState !== WebSocket.OPEN) {
           return;
@@ -274,7 +276,11 @@ export function createRealtimeSession({
           streamSid,
           media: { payload: audio.subarray(offset, offset + frame).toString("base64") }
         }));
-        await new Promise(resolve => setTimeout(resolve, 20));
+        nextAt += 20;
+        const wait = nextAt - Date.now();
+        if (wait > 0) {
+          await new Promise(resolve => setTimeout(resolve, wait));
+        }
       }
       if (generation === speechGeneration && /que tenga buen d[ií]a/i.test(phrase)) {
         callState.closeWhenSpoken = true;
@@ -412,7 +418,7 @@ export function createRealtimeSession({
           }
         },
 
-        instructions: `Eres la voz de Pizzería Hermosillo. No converses y no contestes por tu cuenta. Solo pronuncias, palabra por palabra, la frase que viene entre comillas triples en la instrucción de cada respuesta. Después guardas silencio. No saludes, no preguntes, no confirmes y no agregues palabras. Si la frase dice Light, di Light. Si dice barbiquiú, di barbiquiú.`,
+        instructions: `Eres la voz de Pizzería Hermosillo. No converses y no contestes por tu cuenta. Pronuncias solo la frase entre comillas triples, con el ritmo de alguien contestando el teléfono en Hermosillo: trato de tú, relajada, sin sonar a anuncio. Después guardas silencio. No saludes, no preguntes, no confirmes y no agregues palabras. Si la frase dice Light, di Light. Si dice barbiquiú, di barbiquiú.`,
 
         tools: [
           {
@@ -1243,7 +1249,7 @@ async function handleToolCall(
           tool_choice: "none",
           conversation: "none",
           metadata: { source: "script" },
-          instructions: `Pronuncia únicamente el texto entre comillas triples, palabra por palabra, y después guarda silencio.\n"""${result.spoken}"""`
+          instructions: `Di únicamente el texto entre comillas triples, como en una plática por teléfono, y después guarda silencio. No agregues palabras.\n"""${result.spoken}"""`
         }
       })
     );
@@ -1259,7 +1265,7 @@ async function handleToolCall(
           tool_choice: "none",
           conversation: "none",
           metadata: { source: "script" },
-          instructions: `Pronuncia únicamente el texto entre comillas triples, palabra por palabra, y después guarda silencio.\n"""${result.spoken}"""`
+          instructions: `Di únicamente el texto entre comillas triples, como en una plática por teléfono, y después guarda silencio. No agregues palabras.\n"""${result.spoken}"""`
         }
       })
     );
