@@ -1,6 +1,6 @@
 import { mushroomIntent, mentionedQuantity } from "./turn-policy.js";
 import { buildConfirmation, paymentForOrder, priceLine } from "./confirmation.js";
-import { matchIngredients } from "./menu-ingredients.js";
+import { matchIngredient, matchIngredients } from "./menu-ingredients.js";
 import { acceptedPostal, formatHeardStreet, parseSpokenPostalCode, postalFromColony, speakClock, streetNumber, streetPlacement, suggestColony, suggestPostal } from "./tools.js";
 
 export const MENU_PIZZAS = [
@@ -301,6 +301,44 @@ function pizzaPlans(utterance) {
     }
   }
   return { plans, pending };
+}
+
+function speakTopping(name) {
+  return fold(name)
+    .replace(/\bchampinones\b/g, "champiñones")
+    .replace(/\bjamon\b/g, "jamón")
+    .replace(/\bpina\b/g, "piña")
+    .replace(/\bjalapenos\b/g, "jalapeños");
+}
+
+function toppingHalf(utterance) {
+  const text = fold(utterance);
+  if (!/\bmitad\b/.test(text)) {
+    return null;
+  }
+  const chunks = text.split(/\bmitad\b/).slice(1).map(part => part
+    .replace(/\b(y|de|la|el|una|pizza|por|favor)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+  ).filter(Boolean);
+  const sides = [];
+  for (const chunk of chunks) {
+    const pizza = matchPizza(chunk);
+    if (pizza) {
+      sides.push({ kind: "pizza", name: pizza });
+      continue;
+    }
+    const ingredient = matchIngredient(chunk);
+    if (ingredient) {
+      sides.push({ kind: "extra", name: ingredient });
+    }
+  }
+  const pizzas = sides.filter(side => side.kind === "pizza");
+  const extras = sides.filter(side => side.kind === "extra");
+  if (pizzas.length !== 1 || extras.length !== 1) {
+    return null;
+  }
+  return { product: pizzas[0].name, extra: extras[0].name };
 }
 
 function pizzaNeedsSauce(product, half, sauce) {
@@ -1702,6 +1740,42 @@ export function orderedTurn(state, utterance) {
   if (next.guess?.slot) {
     const yes = /^(si|sip|simon|claro|correcto|es correcto|si es correcto|esta correcto|si esta correcto|exacto|esa|ese|eso|asi es|aja|ok|okay|esta bien|si esta bien|de acuerdo|perfecto)$/.test(text);
     const no = /^(no|nop|nel|negativo)$/.test(text);
+    if (yes && next.guess.slot === "toppingHalf") {
+      const product = next.guess.value;
+      const half = next.guess.extra;
+      next.guess = null;
+      if (next.pairNeed === 2 && (next.items || []).length < 1) {
+        next.items = [...(next.items || []), {
+          product,
+          size: next.pairSize || next.size || "grande",
+          sauce: "",
+          extras: [],
+          half
+        }];
+        next.product = "";
+        next.half = "";
+        next.size = next.pairSize || next.size || "";
+        return {
+          state: next,
+          hangup: false,
+          answered: true,
+          say: "¿Y la otra pizza de qué sabores la quieres?"
+        };
+      }
+      next.product = product;
+      next.half = half;
+      next.extras = [];
+      if (!next.size) {
+        const label = speakHalf(half);
+        return {
+          state: next,
+          hangup: false,
+          answered: true,
+          say: `${label.charAt(0).toUpperCase()}${label.slice(1)}, ¿de qué tamaño la quieres?`
+        };
+      }
+      return afterGuess(next);
+    }
     if (yes) {
       applyGuess(next);
       return afterGuess(next);
@@ -1789,6 +1863,19 @@ export function orderedTurn(state, utterance) {
       answered: true,
       say: "Solo se pueden combinar dos sabores. ¿Cuáles dos quieres?"
     };
+  }
+  const topped = toppingHalf(utterance);
+  if (topped) {
+    const said = `mitad ${spokenPizza(topped.product)} y mitad ${speakTopping(topped.extra)}`;
+    const ask = next.pairNeed === 2
+      ? `Una de las dos pizzas, ¿la quieres ${said}?`
+      : `¿La quieres ${said}?`;
+    return confirmGuess(next, {
+      slot: "toppingHalf",
+      value: topped.product,
+      extra: `mitad ${topped.product} y mitad ${topped.extra}`,
+      ask
+    });
   }
   if (/\bmitad\b/.test(text) && (namedNow.length === 1 || planned.pending)) {
     const known = planned.pending || namedNow[0];
@@ -2328,6 +2415,6 @@ export function orderedTurn(state, utterance) {
     state: next,
     hangup: false,
     save: true,
-    say: `Su orden es ${orderLine()}. Muy bien, tu pedido quedó confirmado. Llegará a tu domicilio en aproximadamente 30 minutos. Muchas gracias por llamar a Pizzería Hermosillo. Que tenga buen día.`
+    say: `Su orden es ${orderLine()}. Tu pedido quedó registrado con éxito. Gracias por llamar a Pizzería Hermosillo, que tengas buen día.`
   };
 }

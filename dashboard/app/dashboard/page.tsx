@@ -100,6 +100,7 @@ type CallRow = {
   started_at: string;
   duration_seconds: number | null;
   status: string;
+  transcript?: string | null;
 };
 
 function supabaseErrorText(error: unknown) {
@@ -1095,7 +1096,7 @@ export default function DashboardPage() {
     const business = await loadSessionBusiness(supabase);
     let callsQuery = supabase
       .from("calls")
-      .select("id,started_at,duration_seconds,status")
+      .select("id,started_at,duration_seconds,status,transcript")
       .neq("status", "overflow")
       .order("started_at", { ascending: false });
     if (business?.id) {

@@ -23,7 +23,23 @@ type StatsCall = {
   started_at: string;
   duration_seconds: number | null;
   status: string;
+  transcript?: string | null;
 };
+
+function confirmedCallName(transcript: string | null | undefined) {
+  const lines = String(transcript || "").split(/\n+/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const asked = lines[index].match(/¿Te llamas ([^?\n]+)\?/i);
+    if (!asked) {
+      continue;
+    }
+    const answer = lines[index + 1]?.replace(/^Cliente:\s*/i, "").trim() || "";
+    if (/^(s[ií]|sip|simon|claro|correcto)\b/i.test(answer)) {
+      return asked[1].trim();
+    }
+  }
+  return "";
+}
 
 type Period = "day" | "week" | "month";
 
@@ -278,7 +294,7 @@ export default function StatsBoard({
     const order = activeOrders.find(item => item.call_id === call.id);
     return {
       ...call,
-      name: order?.customers?.name || "Sin nombre",
+      name: order?.customers?.name || confirmedCallName(call.transcript) || "Sin nombre",
       address: order?.address?.trim() || "Sin dirección"
     };
   });

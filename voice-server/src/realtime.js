@@ -108,8 +108,6 @@ export function createRealtimeSession({
     }, 400);
   }
   let timeWarned = false;
-  let silenceTimer = null;
-  let askedIfThere = false;
   const callState = {
     orderPlaced: false,
     hangupScheduled: false,
@@ -282,10 +280,9 @@ export function createRealtimeSession({
           await new Promise(resolve => setTimeout(resolve, wait));
         }
       }
-      if (generation === speechGeneration && /que tenga buen d[ií]a/i.test(phrase)) {
-        callState.closeWhenSpoken = true;
-      }
-      if (generation === speechGeneration && callState.closeWhenSpoken && !callState.hangupScheduled) {
+      const orderFarewell = /qued[oó] registrado con [eé]xito/i.test(phrase) && /que tengas buen d[ií]a/i.test(phrase);
+      const closedBye = callState.closed && /que tengas buen d[ií]a/i.test(phrase);
+      if (generation === speechGeneration && (orderFarewell || closedBye) && !callState.hangupScheduled) {
         callState.hangupScheduled = true;
         endCallTool(callSid, 600).catch(error => {
           console.error("No se pudo colgar:", error.message);
@@ -348,21 +345,6 @@ export function createRealtimeSession({
       heardById.add(id);
     }
     scheduleSave();
-    armSilence();
-  }
-
-  function armSilence() {
-    clearTimeout(silenceTimer);
-    silenceTimer = setTimeout(() => {
-      if (callState.orderPlaced || callState.hangupScheduled || callState.cancelled || humanTransferStarted(callSid)) {
-        return;
-      }
-      if (!askedIfThere) {
-        askedIfThere = true;
-        speakExact("Hola, ¿sigues ahí?");
-        armSilence();
-      }
-    }, 30000);
   }
 
   function redirectToHuman() {
@@ -691,12 +673,6 @@ export function createRealtimeSession({
             rememberAssistant(expectedById.get(doneId));
             heardById.add(doneId);
           }
-          if (event.type === "response.done" && callState.closeWhenSpoken && !callState.hangupScheduled) {
-            callState.hangupScheduled = true;
-            endCallTool(callSid).catch(error => {
-              console.error("No se pudo colgar:", error.message);
-            });
-          }
         }
 
         if (
@@ -743,13 +719,11 @@ export function createRealtimeSession({
               event: "transcript",
               transcript: event.transcript
             });
-            askedIfThere = false;
             const heardStreet = formatHeardStreet(heard);
             facts = lockFacts(facts, heard);
             if (heardStreet) {
               callState.heardStreet = heardStreet;
             }
-            armSilence();
             if (callState.closed) {
               return;
             }
@@ -977,20 +951,7 @@ export function createRealtimeSession({
               transcript +=
                 `IA: ${event.transcript}\n`;
             }
-            armSilence();
             scheduleSave();
-            if (
-              (callState.orderPlaced || callState.cancelled) &&
-              /hasta luego|hasta pronto|tu pedido quedó confirmado/i.test(event.transcript) &&
-              !callState.hangupScheduled &&
-              !humanTransferStarted(callSid) &&
-              !wantsHuman(event.transcript)
-            ) {
-              callState.hangupScheduled = true;
-              endCallTool(callSid).catch(error => {
-                console.error("No se pudo colgar:", error.message);
-              });
-            }
           }
           }
         }
@@ -1174,23 +1135,10 @@ async function handleToolCall(
     }
 
     else if (event.name === "end_call") {
-      if (!callState.orderPlaced && !callState.cancelled) {
-        result = {
-          success: false,
-          error: "El pedido no está guardado. No cuelgues. Sigue con la toma."
-        };
-      } else if (!humanTransferStarted(callSid) && !callState.hangupScheduled && !callState.transferAsked) {
-        callState.hangupScheduled = true;
-        endCallTool(callSid).catch(error => {
-          console.error(
-            "No se pudo colgar:",
-            error.message
-          );
-        });
-        result = { success: true };
-      } else {
-        result = { success: true };
-      }
+      result = {
+        success: false,
+        error: "No cuelgues. Solo se cuelga después de decir que el pedido quedó registrado con éxito."
+      };
     }
 
     else {
