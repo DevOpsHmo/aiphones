@@ -240,14 +240,14 @@ export function createRealtimeSession({
         voice: "marin",
         response_format: "pcm",
         input: phrase,
-        speed: 0.96,
-        instructions: "Habla como una persona de Hermosillo contestando el teléfono de una pizzería: trato de tú, relajada, con el ritmo de una plática y no de un anuncio ni de una lectura. Las preguntas suben un poco al final. Haz una pausa breve en las comas y en los puntos; lo demás dilo de corrido. No agregues, no quites y no cambies ninguna palabra. Light se pronuncia Light. Barbiquiú se pronuncia barbiquiú."
+        speed: 1.12,
+        instructions: "Habla como una persona de Hermosillo contestando el teléfono de una pizzería: trato de tú, ágil, con el ritmo de una plática y no de un anuncio ni de una lectura. Las preguntas suben un poco al final. No alargues las pausas. No agregues, no quites y no cambies ninguna palabra. Light se pronuncia Light. Barbiquiú se pronuncia barbiquiú."
       })
     });
-    if (!response.ok) {
+    if (!response.ok || !response.body) {
       throw new Error(`Voz ${response.status}`);
     }
-    return Buffer.from(await response.arrayBuffer());
+    return response;
   }
 
   async function playExact(phrase) {
@@ -256,28 +256,72 @@ export function createRealtimeSession({
     assistantSpeaking = true;
     speakingSince = Date.now();
     try {
-      const pcm = await fetchSpeechPcm(phrase);
+      const response = await fetchSpeechPcm(phrase);
       if (generation !== speechGeneration || twilioSocket.readyState !== WebSocket.OPEN) {
         return;
       }
-      const samples = pcm.subarray(0, 4).toString("ascii") === "RIFF" ? pcm.subarray(44) : pcm;
-      const encoded = pcmToPcmuBase64(samples.toString("base64"), emptyPcmState(), 24000);
-      const audio = Buffer.from(encoded, "base64");
+      const reader = response.body.getReader();
+      const state = emptyPcmState();
+      let pending = Buffer.alloc(0);
+      let checkedHeader = false;
+      let phone = Buffer.alloc(0);
       const frame = 160;
-      let nextAt = Date.now();
-      for (let offset = 0; offset < audio.length; offset += frame) {
+      let nextAt = 0;
+      const sendFrames = async () => {
+        while (phone.length >= frame) {
+          if (generation !== speechGeneration || twilioSocket.readyState !== WebSocket.OPEN) {
+            return false;
+          }
+          const payload = phone.subarray(0, frame);
+          phone = phone.subarray(frame);
+          twilioSocket.send(JSON.stringify({
+            event: "media",
+            streamSid,
+            media: { payload: payload.toString("base64") }
+          }));
+          if (!nextAt) {
+            nextAt = Date.now();
+          }
+          nextAt += 20;
+          const wait = nextAt - Date.now();
+          if (wait > 0) {
+            await new Promise(resolve => setTimeout(resolve, wait));
+          }
+        }
+        return true;
+      };
+      while (true) {
         if (generation !== speechGeneration || twilioSocket.readyState !== WebSocket.OPEN) {
+          await reader.cancel().catch(() => {});
           return;
         }
-        twilioSocket.send(JSON.stringify({
-          event: "media",
-          streamSid,
-          media: { payload: audio.subarray(offset, offset + frame).toString("base64") }
-        }));
-        nextAt += 20;
-        const wait = nextAt - Date.now();
-        if (wait > 0) {
-          await new Promise(resolve => setTimeout(resolve, wait));
+        const chunk = await reader.read();
+        if (chunk.value) {
+          pending = pending.length ? Buffer.concat([pending, Buffer.from(chunk.value)]) : Buffer.from(chunk.value);
+        }
+        if (!checkedHeader) {
+          if (!chunk.done && pending.length < 12) {
+            continue;
+          }
+          checkedHeader = true;
+          if (pending.subarray(0, 4).toString("ascii") === "RIFF") {
+            pending = pending.subarray(Math.min(44, pending.length));
+          }
+        }
+        if (pending.length) {
+          const encoded = pcmToPcmuBase64(pending.toString("base64"), state, 24000);
+          pending = Buffer.alloc(0);
+          if (encoded) {
+            const piece = Buffer.from(encoded, "base64");
+            phone = phone.length ? Buffer.concat([phone, piece]) : piece;
+          }
+        }
+        if (!await sendFrames()) {
+          await reader.cancel().catch(() => {});
+          return;
+        }
+        if (chunk.done) {
+          break;
         }
       }
       const orderFarewell = /qued[oó] registrado con [eé]xito/i.test(phrase) && /que tengas buen d[ií]a/i.test(phrase);
@@ -386,7 +430,7 @@ export function createRealtimeSession({
               type: "server_vad",
               threshold: 0.9,
               prefix_padding_ms: 300,
-              silence_duration_ms: 700,
+              silence_duration_ms: 400,
               create_response: false,
               interrupt_response: false
             }
