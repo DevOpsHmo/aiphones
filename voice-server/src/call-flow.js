@@ -2332,10 +2332,12 @@ export function orderedTurn(state, utterance) {
     }
     const pizzas = lines.map(item => {
       const topping = (item.extras || []).length ? ` con extra de ${item.extras.join(" y ")}` : "";
+      const size = item.size ? `${item.size.charAt(0).toUpperCase()}${item.size.slice(1)}` : "";
       if (item.half) {
-        return `una pizza ${item.size} ${speakHalf(item.half)}`;
+        const half = speakHalf(item.half).replace(/^mitad /i, "");
+        return `Tu pizza ${size} mitad ${half}`.replace(/\s+/g, " ").trim();
       }
-      return `una pizza ${item.size} de ${spokenPizza(item.product)}${item.sauce ? ` con ${sauceWord(item.sauce)}` : ""}${topping}`;
+      return `Tu pizza ${size} de ${spokenPizza(item.product)}${item.sauce ? ` con ${sauceWord(item.sauce)}` : ""}${topping}`.replace(/\s+/g, " ").trim();
     }).join(" y ");
     const drink = next.drink || {};
     if (!drink.volume) {
@@ -2415,6 +2417,6 @@ export function orderedTurn(state, utterance) {
     state: next,
     hangup: false,
     save: true,
-    say: `Su orden es ${orderLine()}. Tu pedido quedó registrado con éxito. Gracias por llamar a Pizzería Hermosillo, que tengas buen día.`
+    say: `${orderLine()} ya se está preparando, tu pedido debería llegar a tu domicilio en 30 minutos. Gracias por llamar a Pizzería Hermosillo, que tengas buen día. Hasta luego.`
   };
 }

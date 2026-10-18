@@ -75,9 +75,11 @@ test("simulacion 6 el cierre pide un si antes de confirmar", () => {
   assert.match(call.said.at(-2), /algo de tomar/i);
   const yes = play(["no"], call.state);
   assert.equal(yes.state.agreed, true);
-  assert.match(yes.said.at(-1), /quedó registrado con éxito/);
+  assert.match(yes.said.at(-1), /ya se está preparando/);
   assert.match(yes.said.at(-1), /que tengas buen día/);
   assert.match(yes.said.at(-1), /Gracias por llamar a Pizzería Hermosillo/);
+  assert.match(yes.said.at(-1), /30 minutos/);
+  assert.match(yes.said.at(-1), /Hasta luego/);
 });
 
 test("simulacion 15 dos pizzas se confirman juntas y la calle queda sin puntos", () => {
@@ -210,7 +212,7 @@ test("simulacion 15 boneless mal oido, soda que no se repite y cancelar solo la 
   assert.match(sized.say, /se te ofrece algo más/i);
   const again = orderedTurn(sized.state, "no");
   assert.equal(again.save, true);
-  assert.match(again.say, /quedó registrado con éxito/);
+  assert.match(again.say, /ya se está preparando/);
   assert.match(again.say, /que tengas buen día/);
   const stuck = orderedTurn(ready, "cancelala");
   assert.match(stuck.say, /todo el pedido o solo la bebida/);
@@ -370,8 +372,8 @@ test("simulacion 20 beneficio es el precio, light no es ligera y sin direccion n
     closingAsked: true
   }, "no");
   assert.equal(placed.save, true);
-  assert.match(placed.say, /Su orden es una pizza familiar de boneles con búfalo y una Coca-Cola regular de 600 mililitros/);
-  assert.match(placed.say, /quedó registrado con éxito/);
+  assert.match(placed.say, /Tu pizza Familiar de boneles con búfalo y una Coca-Cola regular de 600 mililitros/);
+  assert.match(placed.say, /ya se está preparando/);
   assert.match(placed.say, /que tengas buen día/);
   assert.match(placed.say, /Gracias por llamar a Pizzería Hermosillo/);
 });
@@ -480,7 +482,7 @@ test("simulacion 22 la promo de dos grandes pide cada sabor y no se traga la pre
   assert.match(more.say, /agregamos/);
   const done = orderedTurn(more.state, "Es todo, muchas gracias.");
   assert.equal(done.save, true);
-  assert.match(done.say, /quedó registrado con éxito/);
+  assert.match(done.say, /ya se está preparando/);
   assert.match(done.say, /que tengas buen día/);
   assert.match(done.say, /mejicana/);
 });
@@ -566,8 +568,8 @@ test("simulacion 25 alfonso no guarda seria todo como colonia y todo cierra", ()
   assert.equal(hola.state.product, "Lucco Boneless");
   assert.equal(hola.state.colony, "ISSSTE Federal");
   assert.equal(hola.state.street, "Lázaro Cárdenas");
-  assert.match(hola.say, /Su orden es/);
-  assert.match(hola.say, /quedó registrado con éxito/);
+  assert.match(hola.say, /Tu pizza/);
+  assert.match(hola.say, /ya se está preparando/);
   assert.match(hola.say, /que tengas buen día/);
   const yes = orderedTurn(placed, "Sí, es todo.");
   assert.equal(yes.save, true);

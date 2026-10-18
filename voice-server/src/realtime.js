@@ -324,11 +324,11 @@ export function createRealtimeSession({
           break;
         }
       }
-      const orderFarewell = /qued[oó] registrado con [eé]xito/i.test(phrase) && /que tengas buen d[ií]a/i.test(phrase);
+      const orderFarewell = /ya se est[aá] preparando/i.test(phrase) && /hasta luego/i.test(phrase);
       const closedBye = callState.closed && /que tengas buen d[ií]a/i.test(phrase);
       if (generation === speechGeneration && (orderFarewell || closedBye) && !callState.hangupScheduled) {
         callState.hangupScheduled = true;
-        endCallTool(callSid, 600).catch(error => {
+        endCallTool(callSid, 0).catch(error => {
           console.error("No se pudo colgar:", error.message);
         });
       }
@@ -876,8 +876,7 @@ export function createRealtimeSession({
                   if (result?.success) {
                     callState.orderPlaced = true;
                     callState.closeWhenSpoken = true;
-                    const number = result.order_number ? `Su pedido quedó guardado con el número ${result.order_number}. ` : "";
-                    speakExact(`${number}${turn.say}`);
+                    speakExact(turn.say);
                   }
                 }).catch(error => {
                   console.error("No se pudo guardar el pedido confirmado:", error.message);
