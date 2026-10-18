@@ -1,0 +1,15 @@
+# Ai-Phones
+
+> Panel de pedidos por teléfono para pizzerías. La voz toma el pedido y la cocina lo ve en el tablero.
+
+Sitio: https://www.ai-phones.online/
+
+## Páginas
+
+- [Inicio](https://www.ai-phones.online/): marca Ai-Phones
+- [Ingreso](https://www.ai-phones.online/login): acceso al tablero de cocina
+- [Tablero](https://www.ai-phones.online/dashboard): pedidos, menú y llamadas (requiere sesión)
+
+## Contacto
+
+- Sitio: https://www.ai-phones.online/

@@ -97,6 +97,10 @@ export async function proxy(request: NextRequest) {
     const isPublic =
       pathname === "/" ||
       pathname === "/manifest.webmanifest" ||
+      pathname === "/robots.txt" ||
+      pathname === "/sitemap.xml" ||
+      pathname === "/llms.txt" ||
+      pathname === "/ai-catalog.json" ||
       pathname === "/icon" ||
       pathname === "/apple-icon" ||
       pathname.startsWith("/login") ||
@@ -124,6 +128,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|webmanifest)$).*)"
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|robots.txt|sitemap.xml|llms.txt|ai-catalog.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp|webmanifest)$).*)"
   ]
 };

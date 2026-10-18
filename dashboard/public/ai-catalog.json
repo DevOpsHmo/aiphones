@@ -1,0 +1,21 @@
+{
+  "version": "1.0",
+  "name": "Ai-Phones",
+  "description": "Panel de pedidos por teléfono para pizzerías.",
+  "url": "https://www.ai-phones.online/",
+  "contact": {
+    "url": "https://www.ai-phones.online/"
+  },
+  "pages": [
+    {
+      "url": "https://www.ai-phones.online/",
+      "title": "Ai-Phones",
+      "description": "Marca y acceso al tablero."
+    },
+    {
+      "url": "https://www.ai-phones.online/login",
+      "title": "Ingreso",
+      "description": "Acceso al tablero de cocina."
+    }
+  ]
+}
